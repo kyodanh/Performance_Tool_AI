@@ -15,6 +15,7 @@ import { AllowlistDialog } from '../Allowlist/AllowlistDialog'
 import { TestData } from '../TestData'
 import { TestOptions } from '../TestOptions'
 
+import { ExportPreview } from './ExportPreview'
 import { RequestList } from './RequestList'
 import { ScriptPreview } from './ScriptPreview'
 
@@ -63,7 +64,13 @@ export function GeneratorTabs({
                       color="var(--red-9)"
                     />
                   )}
-                  Script
+                  Script (k6)
+                </Tabs.Trigger>
+                <Tabs.Trigger value="jmeter" disabled={!hasRecording}>
+                  JMeter
+                </Tabs.Trigger>
+                <Tabs.Trigger value="vugen" disabled={!hasRecording}>
+                  LoadRunner
                 </Tabs.Trigger>
               </Flex>
               <Flex pr="2" pl="4" gap="4">
@@ -96,6 +103,24 @@ export function GeneratorTabs({
           `}
         >
           <ScriptPreview script={script} />
+        </Tabs.Content>
+        <Tabs.Content
+          value="jmeter"
+          css={css`
+            flex-grow: 1;
+            min-height: 0;
+          `}
+        >
+          <ExportPreview format="jmeter" />
+        </Tabs.Content>
+        <Tabs.Content
+          value="vugen"
+          css={css`
+            flex-grow: 1;
+            min-height: 0;
+          `}
+        >
+          <ExportPreview format="vugen" />
         </Tabs.Content>
       </Tabs.Root>
     </Flex>
