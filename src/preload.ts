@@ -11,6 +11,7 @@ import * as data from './handlers/dataFiles/preload'
 import * as fs from './handlers/fs/preload'
 import * as generator from './handlers/generator/preload'
 import * as har from './handlers/har/preload'
+import * as httpRequest from './handlers/httpRequest/preload'
 import * as log from './handlers/log/preload'
 import * as proxy from './handlers/proxy/preload'
 import * as script from './handlers/script/preload'
@@ -25,6 +26,7 @@ const studio = {
   script,
   data,
   har,
+  httpRequest,
   ui,
   generator,
   browserTest,

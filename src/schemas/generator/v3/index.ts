@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { ManualRequestSchema } from './manualRequests'
 import { TestRuleSchema } from './rules'
 import { TestDataSchema } from './testData'
 import { TestOptionsSchema } from './testOptions'
@@ -11,6 +12,7 @@ export const GeneratorFileDataSchema = z.object({
   testData: TestDataSchema,
   rules: TestRuleSchema.array(),
   allowlist: z.string().array(),
+  manualRequests: ManualRequestSchema.array().default([]),
   includeStaticAssets: z.boolean(),
   scriptName: z.string().default('my-script.js'),
   // True when the test setup wizard configured this generator, either at

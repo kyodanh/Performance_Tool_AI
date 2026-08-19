@@ -9,6 +9,9 @@ import {
 
 interface State {
   requests: ProxyData[]
+  // Requests added by hand instead of coming from the recording. Kept apart
+  // from `requests` because loading a recording replaces that list wholesale.
+  manualRequests: ProxyData[]
   recordingPath: string
   recordingError: unknown
   allowlist: string[]
@@ -20,6 +23,8 @@ interface Actions {
   setRecordingPath: (path: string) => void
   setRecording: (recording: ProxyData[]) => void
   setRecordingError: (error: unknown) => void
+  addManualRequest: (request: ProxyData) => void
+  removeManualRequest: (id: string) => void
   resetRecording: () => void
   setAllowlist: (value: string[]) => void
   setIncludeStaticAssets: (value: boolean) => void
@@ -43,6 +48,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
     responseJsonPaths: [],
   },
   requests: [],
+  manualRequests: [],
   recordingPath: '',
   recordingError: null,
   allowlist: [],
@@ -81,6 +87,16 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   setRecordingError: (error: unknown) =>
     set((state) => {
       state.recordingError = error
+    }),
+  addManualRequest: (request: ProxyData) =>
+    set((state) => {
+      state.manualRequests.push(request)
+    }),
+  removeManualRequest: (id: string) =>
+    set((state) => {
+      state.manualRequests = state.manualRequests.filter(
+        (request) => request.id !== id
+      )
     }),
   resetRecording: () =>
     set((state) => {

@@ -44,6 +44,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
       recordingPath,
       rules,
       allowlist,
+      manualRequests,
       includeStaticAssets,
       scriptName,
       wizardUsed,
@@ -73,6 +74,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         // recording
         state.recordingPath = recordingPath
         state.allowlist = allowlist
+        state.manualRequests = manualRequests
 
         state.includeStaticAssets = includeStaticAssets
         state.scriptName = scriptName

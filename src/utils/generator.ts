@@ -8,6 +8,7 @@ export function createNewGeneratorFile(recordingPath = ''): GeneratorFileData {
   return {
     version: '3.0',
     recordingPath,
+    manualRequests: [],
     options: {
       loadProfile: {
         executor: 'ramping-vus',

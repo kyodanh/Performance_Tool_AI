@@ -9,6 +9,7 @@ import * as dataFiles from './dataFiles'
 import * as fs from './fs'
 import * as generator from './generator'
 import * as har from './har'
+import * as httpRequest from './httpRequest'
 import * as log from './log'
 import * as proxy from './proxy'
 import * as script from './script'
@@ -20,6 +21,7 @@ export function initialize() {
   auth.initialize()
   cloud.initialize()
   har.initialize()
+  httpRequest.initialize()
   browser.initialize()
   script.initialize()
   settings.initialize()

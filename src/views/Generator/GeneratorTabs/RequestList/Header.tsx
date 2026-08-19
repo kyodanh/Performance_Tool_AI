@@ -3,6 +3,7 @@ import { Flex, Switch, Text } from '@radix-ui/themes'
 import { Filter } from '@/components/WebLogView/Filter'
 import { useGeneratorStore } from '@/store/generator'
 
+import { AddRequestButton } from '../../ApiRequest'
 import { RecordingSelector } from '../../RecordingSelector'
 
 interface HeaderProps {
@@ -38,6 +39,7 @@ export function Header({
           id="recording-selector"
           onChangeRecording={onChangeRecording}
         />
+        <AddRequestButton variant="ghost" size="1" />
       </Flex>
 
       <Flex justify="end" align="center" gap="4">

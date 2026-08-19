@@ -8,6 +8,7 @@ export function createGeneratorData(
 ): GeneratorFileData {
   return {
     allowlist: [],
+    manualRequests: [],
     includeStaticAssets: false,
     options: {
       loadProfile: {
@@ -94,6 +95,9 @@ export function createGeneratorState(
     setIterations: vi.fn(),
 
     requests: [],
+    manualRequests: [],
+    addManualRequest: vi.fn(),
+    removeManualRequest: vi.fn(),
 
     sleepType: 'groups',
     setSleepType: vi.fn(),

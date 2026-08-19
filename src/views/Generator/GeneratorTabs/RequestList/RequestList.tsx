@@ -10,6 +10,7 @@ import { useApplyRules } from '@/store/generator/hooks/useApplyRules'
 import { useHighlightRequestChanges } from '@/store/generator/hooks/useHighlightRequestChanges'
 import { ProxyData } from '@/types'
 
+import { AddRequestButton } from '../../ApiRequest'
 import { RecordingSelector } from '../../RecordingSelector'
 
 import { Header } from './Header'
@@ -44,6 +45,9 @@ export function RequestList({
     proxyData: previewOriginalRequests ? requests : requestsWithRulesApplied,
   })
   const allRequests = useGeneratorStore((state) => state.requests)
+  const hasManualRequests = useGeneratorStore(
+    (state) => state.manualRequests.length > 0
+  )
 
   const groups = useProxyDataGroups(requests)
 
@@ -57,7 +61,7 @@ export function RequestList({
 
   const requestWithHighlights = useHighlightRequestChanges(filteredRequests)
 
-  if (recordingError !== null) {
+  if (recordingError !== null && !hasManualRequests) {
     return (
       <EmptyMessage
         px="4"
@@ -69,17 +73,22 @@ export function RequestList({
     )
   }
 
-  if (allRequests.length === 0) {
+  if (allRequests.length === 0 && !hasManualRequests) {
     return (
       <EmptyMessage
         px="4"
-        message="The selected recording is empty, select another one from the dropdown"
-        action={<RecordingSelector onChangeRecording={onChangeRecording} />}
+        message="Select a recording from the dropdown, or add a request by hand"
+        action={
+          <Flex gap="2" align="center">
+            <RecordingSelector onChangeRecording={onChangeRecording} />
+            <AddRequestButton variant="soft" />
+          </Flex>
+        }
       />
     )
   }
 
-  if (allowlist.length === 0) {
+  if (allowlist.length === 0 && !hasManualRequests) {
     return (
       <EmptyMessage
         px="4"

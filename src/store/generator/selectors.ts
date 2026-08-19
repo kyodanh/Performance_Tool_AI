@@ -30,15 +30,22 @@ export function selectHasRecording(state: GeneratorStore) {
 }
 
 export function selectFilteredRequests(
-  state: Pick<GeneratorStore, 'requests' | 'allowlist' | 'includeStaticAssets'>
+  state: Pick<
+    GeneratorStore,
+    'requests' | 'manualRequests' | 'allowlist' | 'includeStaticAssets'
+  >
 ) {
   const allowedRequests = state.requests.filter((request) => {
     return state.allowlist.includes(request.request.host)
   })
 
-  return state.includeStaticAssets
+  const recordedRequests = state.includeStaticAssets
     ? allowedRequests
     : allowedRequests.filter(isNonStaticAssetResponse)
+
+  // Manual requests skip the allowlist and static asset filters, they were
+  // added on purpose so they always belong in the script.
+  return [...recordedRequests, ...state.manualRequests]
 }
 
 export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
@@ -53,6 +60,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     recordingPath,
     rules,
     allowlist,
+    manualRequests,
     includeStaticAssets,
     scriptName,
     wizardUsed,
@@ -73,6 +81,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     testData: { variables, files },
     rules,
     allowlist,
+    manualRequests,
     includeStaticAssets,
     scriptName,
     wizardUsed,

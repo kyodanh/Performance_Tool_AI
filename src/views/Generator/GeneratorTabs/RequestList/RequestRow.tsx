@@ -1,4 +1,5 @@
-import { Flex } from '@radix-ui/themes'
+import { Flex, IconButton } from '@radix-ui/themes'
+import { Trash2Icon } from 'lucide-react'
 
 import { HighlightedText } from '@/components/HighlightedText'
 import { Table } from '@/components/Table'
@@ -12,6 +13,7 @@ import {
   TableRow,
 } from '@/components/WebLogView'
 import { SearchResults } from '@/components/WebLogView/SearchResults'
+import { useGeneratorStore } from '@/store/generator'
 import { RuleInstance } from '@/types/rules'
 
 import { RuleBadges } from './RuleBadges'
@@ -23,6 +25,13 @@ export function RequestRow({
   filter,
   selectedRuleInstance,
 }: RowProps & { selectedRuleInstance?: RuleInstance }) {
+  const isManual = useGeneratorStore((state) =>
+    state.manualRequests.some((request) => request.id === data.id)
+  )
+  const removeManualRequest = useGeneratorStore(
+    (store) => store.removeManualRequest
+  )
+
   return (
     <>
       <TableRow
@@ -48,6 +57,21 @@ export function RequestRow({
               selectedRuleInstance={selectedRuleInstance}
               data={data}
             />
+            {isManual && (
+              <IconButton
+                aria-label="Remove request"
+                variant="ghost"
+                color="gray"
+                size="1"
+                mr="1"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  removeManualRequest(data.id)
+                }}
+              >
+                <Trash2Icon />
+              </IconButton>
+            )}
           </Flex>
         </Table.Cell>
       </TableRow>
