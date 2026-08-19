@@ -31,7 +31,7 @@ export function ResponseDetails({ data }: ResponseDetailsProps) {
     <Tabs.Root value={tab} onValueChange={setTab}>
       <Tabs.List>
         <Tabs.Trigger value="headers">Headers</Tabs.Trigger>
-        <Tabs.Trigger value="content">Content</Tabs.Trigger>
+        <Tabs.Trigger value="content">Response</Tabs.Trigger>
         <Tabs.Trigger value="cookies">Cookies</Tabs.Trigger>
       </Tabs.List>
 
