@@ -1,4 +1,4 @@
-name: "Create Patch Branch"
+name: 'Create Patch Branch'
 
 # Creates a release/<major>.<minor>.x maintenance branch from an existing
 # release tag, so patch releases follow a consistent, enforced naming scheme.
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       base_tag:
-        description: "Release tag to branch from (e.g. v1.13.0)"
+        description: 'Release tag to branch from (e.g. v1.13.0)'
         required: true
         type: string
 
