@@ -1,17 +1,30 @@
 import { Button, IconButton, TextField } from '@radix-ui/themes'
 import { Trash2Icon } from 'lucide-react'
-import { Control, UseFormRegister, useFieldArray } from 'react-hook-form'
+import {
+  Control,
+  UseFormRegister,
+  UseFormSetValue,
+  useFieldArray,
+} from 'react-hook-form'
 
 import { Table } from '@/components/Table'
 
 import { ApiRequestFormData } from './ApiRequest.utils'
+import { VariableSuggestField } from './VariableSuggestField'
 
 interface HeadersEditorProps {
   control: Control<ApiRequestFormData>
   register: UseFormRegister<ApiRequestFormData>
+  setValue: UseFormSetValue<ApiRequestFormData>
+  variableNames: string[]
 }
 
-export function HeadersEditor({ control, register }: HeadersEditorProps) {
+export function HeadersEditor({
+  control,
+  register,
+  setValue,
+  variableNames,
+}: HeadersEditorProps) {
   const { fields, append, remove } = useFieldArray({
     control,
     name: 'headers',
@@ -37,9 +50,15 @@ export function HeadersEditor({ control, register }: HeadersEditorProps) {
               />
             </Table.Cell>
             <Table.Cell>
-              <TextField.Root
+              <VariableSuggestField
                 placeholder="application/json"
                 aria-label={`Header value ${index + 1}`}
+                names={variableNames}
+                onInsert={(value) =>
+                  setValue(`headers.${index}.value`, value, {
+                    shouldDirty: true,
+                  })
+                }
                 {...register(`headers.${index}.value`)}
               />
             </Table.Cell>

@@ -1,6 +1,7 @@
 import { BrowserDebuggerEvent, BrowserReplayEvent } from '@/main/runner/schema'
 import { Check, LogEntry } from '@/schemas/k6'
 import { ProxyData } from '@/types'
+import { RunStats } from '@/utils/k6/stats'
 
 export type DebuggerState = 'pending' | 'running' | 'stopped'
 
@@ -14,4 +15,5 @@ export interface DebugSession {
   }
   logs: LogEntry[]
   checks: Check[]
+  stats: RunStats | null
 }

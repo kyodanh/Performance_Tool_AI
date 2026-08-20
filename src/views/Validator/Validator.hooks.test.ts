@@ -10,6 +10,7 @@ const noop = () => () => {}
 const onScriptStopped = vi.fn<(cb: Callback) => () => void>()
 const onScriptLog = vi.fn().mockImplementation(noop)
 const onScriptCheck = vi.fn().mockImplementation(noop)
+const onScriptStats = vi.fn().mockImplementation(noop)
 const onBrowserAction = vi.fn().mockImplementation(noop)
 const onBrowserReplay = vi.fn().mockImplementation(noop)
 const onProxyData = vi.fn().mockImplementation(noop)
@@ -23,6 +24,7 @@ describe('useDebugSession', () => {
         onScriptStopped,
         onScriptLog,
         onScriptCheck,
+        onScriptStats,
         onBrowserAction,
         onBrowserReplay,
         runScript,

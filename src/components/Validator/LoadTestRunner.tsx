@@ -1,0 +1,242 @@
+import { css } from '@emotion/react'
+import {
+  Button,
+  Callout,
+  Checkbox,
+  Flex,
+  ScrollArea,
+  Text,
+} from '@radix-ui/themes'
+import { InfoIcon, PlayIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
+import { LoadProfile } from '@/components/TestOptions/LoadProfile'
+import TextSpinner from '@/components/TextSpinner/TextSpinner'
+import { useRunStats } from '@/hooks/useRunStats'
+import { LoadProfileExecutorOptions } from '@/types/testOptions'
+import {
+  describeProfile,
+  isRunnableProfile,
+  toLoadProfile,
+  toProfileOverrides,
+} from '@/utils/k6/loadProfile'
+import { K6TestOptions } from '@/utils/k6/schema'
+
+import { MetricsSection } from './MetricsSection'
+import { ScheduleBuilder } from './ScheduleBuilder'
+
+interface LoadTestRunnerProps {
+  scriptPath: string | null
+  options: K6TestOptions
+  /** Source to write before running, for scripts generated on the fly. */
+  content?: string
+  /** Profile to seed the form with, when the caller knows it (a generator). */
+  profile?: LoadProfileExecutorOptions
+}
+
+/**
+ * Load profile controls plus the live metrics for the run they start. Used both
+ * as a dialog body from the validator and as the standalone Controller view.
+ */
+export function LoadTestRunner({
+  scriptPath,
+  options,
+  content,
+  profile: initialProfile,
+}: LoadTestRunnerProps) {
+  const [isRunning, setIsRunning] = useState(false)
+  const [errors, setErrors] = useState<string[]>([])
+
+  // A script that declares `scenarios` was scheduled deliberately — possibly
+  // several scenarios at once, which a single profile would collapse into one —
+  // so leave it alone unless the user opts into overriding it.
+  const declaresScenarios = Object.keys(options.scenarios ?? {}).length > 0
+  const [override, setOverride] = useState(!declaresScenarios)
+
+  const seed = useMemo(
+    () => initialProfile ?? toLoadProfile(options),
+    [initialProfile, options]
+  )
+  const [profile, setProfile] = useState(seed)
+
+  // Reset when a different test is selected, so the form never shows the
+  // previous test's schedule.
+  useEffect(() => {
+    setProfile(seed)
+    setOverride(!declaresScenarios)
+  }, [declaresScenarios, seed])
+
+  // Guards the case where every stage was deleted by hand: without flags k6
+  // would fall back to the script's own profile while this panel claims
+  // otherwise.
+  const canRun = isRunnableProfile(profile)
+
+  const { stats, resetStats } = useRunStats()
+
+  // A run can fail before it produces a single metric — archiving, a syntax
+  // error, an invalid option — and k6 reports those as error log entries.
+  useEffect(() => {
+    return window.studio.script.onScriptLog((entry) => {
+      if (entry.level !== 'error') {
+        return
+      }
+
+      setErrors((previous) => [...previous, entry.error ?? entry.msg])
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.studio.script.onScriptStopped(() => {
+      setIsRunning(false)
+    })
+  }, [])
+
+  const handleStart = useCallback(async () => {
+    if (scriptPath === null) {
+      return
+    }
+
+    resetStats()
+    setErrors([])
+    setIsRunning(true)
+
+    await window.studio.script
+      .runLoadTest({
+        path: scriptPath,
+        content,
+        ...(override ? toProfileOverrides(profile) : {}),
+      })
+      .catch((error: Error) => {
+        setIsRunning(false)
+        setErrors((previous) => [...previous, error.message])
+      })
+  }, [content, override, profile, resetStats, scriptPath])
+
+  const handleStop = useCallback(() => {
+    window.studio.script.stopScript()
+    setIsRunning(false)
+  }, [])
+
+  return (
+    <Flex direction="column" height="100%" minHeight="0">
+      <Flex gap="3" align="center" mb="3">
+        {isRunning ? (
+          <Flex gap="3" align="center">
+            <TextSpinner text="Running" />
+            <Button variant="outline" onClick={handleStop}>
+              <SquareIcon /> Stop
+            </Button>
+          </Flex>
+        ) : (
+          <Button
+            onClick={handleStart}
+            disabled={scriptPath === null || (override && !canRun)}
+          >
+            <PlayIcon /> Start
+          </Button>
+        )}
+        {declaresScenarios && (
+          <Text as="label" size="2">
+            <Flex gap="2" align="center">
+              <Checkbox
+                checked={override}
+                disabled={isRunning}
+                onCheckedChange={(checked) => setOverride(checked === true)}
+              />
+              Override the test&apos;s own scenarios
+            </Flex>
+          </Text>
+        )}
+      </Flex>
+
+      {errors.length > 0 && (
+        <Callout.Root size="1" color="red" mb="3">
+          <Callout.Icon>
+            <TriangleAlertIcon />
+          </Callout.Icon>
+          <Callout.Text>
+            <Flex direction="column" gap="1">
+              {errors.slice(0, 3).map((message, index) => (
+                <span key={index}>{message}</span>
+              ))}
+            </Flex>
+          </Callout.Text>
+        </Callout.Root>
+      )}
+      {!override && (
+        <Callout.Root size="1" mb="3">
+          <Callout.Icon>
+            <InfoIcon />
+          </Callout.Icon>
+          <Callout.Text>
+            The test declares its own <code>scenarios</code>, so that load
+            profile is used as-is.
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      {override && !canRun && (
+        <Callout.Root size="1" color="amber" mb="3">
+          <Callout.Icon>
+            <InfoIcon />
+          </Callout.Icon>
+          <Callout.Text>
+            The load profile schedules nothing — add a stage, or set VUs and
+            iterations, before starting.
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      <Flex flexGrow="1" minHeight="0" gap="3">
+        {override && (
+          <ScrollArea
+            scrollbars="vertical"
+            css={css`
+              flex: 0 0 320px;
+              border-right: 1px solid var(--gray-5);
+              padding-right: var(--space-3);
+            `}
+          >
+            <ScheduleBuilder onChange={setProfile} disabled={isRunning} />
+            <Text as="p" size="1" color="gray" mt="3">
+              k6 runs: {describeProfile(profile)}
+            </Text>
+            <details
+              css={css`
+                margin-top: var(--space-3);
+                border-top: 1px solid var(--gray-5);
+                padding-top: var(--space-3);
+
+                summary {
+                  cursor: pointer;
+                  font-size: var(--font-size-1);
+                  color: var(--gray-11);
+                }
+              `}
+            >
+              <summary>Edit the k6 load profile</summary>
+              <fieldset
+                disabled={isRunning}
+                css={css`
+                  border: 0;
+                  margin: var(--space-2) 0 0;
+                  padding: 0;
+                  min-width: 0;
+                `}
+              >
+                <LoadProfile
+                  value={profile}
+                  onChange={setProfile}
+                  executors={['ramping-vus', 'shared-iterations']}
+                />
+              </fieldset>
+            </details>
+          </ScrollArea>
+        )}
+        <Flex direction="column" flexGrow="1" minHeight="0" minWidth="0">
+          <MetricsSection stats={stats} />
+        </Flex>
+      </Flex>
+    </Flex>
+  )
+}

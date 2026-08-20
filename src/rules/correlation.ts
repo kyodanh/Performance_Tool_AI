@@ -17,9 +17,12 @@ import {
 } from '@/types/rules'
 import { exhaustive } from '@/utils/typescript'
 
-import { replaceCorrelatedValues } from './correlation.utils'
+import {
+  correlationVariableName,
+  replaceCorrelatedValues,
+} from './correlation.utils'
 import { matchBeginEnd } from './selectors/beginEnd'
-import { getJsonObjectFromPath } from './selectors/json'
+import { getJsonObjectFromPath, stripJsonPathPrefix } from './selectors/json'
 import { matchRegex } from './selectors/regex'
 import {
   canonicalHeaderKey,
@@ -148,12 +151,34 @@ function applyRule({
 
     return {
       ...snippetSchemaReturnValue,
-      after: [...requestSnippetSchema['after'], correlationExtractionSnippet],
+      after: [
+        ...requestSnippetSchema['after'],
+        // The extractors emit the generated id; rename it once here so every
+        // snippet honours the rule's own variable name.
+        wrapExtractionSnippet(
+          correlationExtractionSnippet.replaceAll(
+            `correlation_vars['correlation_${generatedUniqueId}']`,
+            `correlation_vars['${correlationVariableName(rule, generatedUniqueId)}']`
+          ),
+          correlationVariableName(rule, generatedUniqueId)
+        ),
+      ],
     }
   }
 
   return snippetSchemaReturnValue
 }
+
+// ponytail: extraction runs against live responses, which may differ from the
+// recording (empty body, non-JSON, missing header). Without this the extractor
+// throws and aborts the whole group/iteration, e.g. `resp.json()` on an empty
+// body raises "cannot parse json ... unexpected end of JSON input". Swallow it
+// so the correlation variable stays unset and the failure is visible as a log.
+const wrapExtractionSnippet = (snippet: string, variableName: string) => `
+    try {${snippet}
+    } catch (error) {
+      console.warn(${JSON.stringify(`Failed to extract correlation variable '${variableName}': `)} + error)
+    }`
 
 const noCorrelationResult = {
   extractedValue: undefined,
@@ -569,9 +594,8 @@ const extractCorrelationJsonBody = (
   const generatedUniqueId = uniqueId ?? sequentialIdGenerator.next().value
 
   // array indexing doesn't start with a dot so we add it only in the other cases
-  const json_path = selector.path.startsWith('[')
-    ? selector.path
-    : `.${selector.path}`
+  const lodashPath = stripJsonPathPrefix(selector.path)
+  const json_path = lodashPath.startsWith('[') ? lodashPath : `.${lodashPath}`
 
   const correlationExtractionSnippet = `
 correlation_vars['correlation_${generatedUniqueId}'] = resp.json()${json_path}`
@@ -900,10 +924,46 @@ correlation_vars['correlation_1'] = resp.json().user_id`
     )
 
     expect(requestSnippets[0]?.after[0]?.replace(/\s/g, '')).toBe(
-      `correlation_vars['correlation_0']=resp.json().user_id`
+      `try{correlation_vars['correlation_0']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'correlation_0':"+error)}`
     )
     expect(ruleInstance.state.extractedValue).toBe('444')
     expect(requestSnippets[1]?.after).toEqual([])
+  })
+
+  it('uses the rule variable name in the extraction snippet', () => {
+    const data = createProxyData({
+      response: createResponse({
+        content: JSON.stringify({ user_id: '444' }),
+      }),
+    })
+
+    const rule: CorrelationRule = {
+      type: 'correlation',
+      id: '1',
+      enabled: true,
+      extractor: {
+        filter: { path: '' },
+        selector: { type: 'json', from: 'body', path: 'user_id' },
+        variableName: 'user id',
+        extractionMode: 'single',
+      },
+    }
+
+    const ruleInstance = createCorrelationRuleInstance(
+      rule,
+      generateSequentialInt()
+    )
+
+    const snippet = ruleInstance.apply({
+      data,
+      before: [],
+      after: [],
+      checks: [],
+    })
+
+    expect(snippet.after[0]?.replace(/\s/g, '')).toBe(
+      `try{correlation_vars['user_id']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'user_id':"+error)}`
+    )
   })
 
   it('extracts multiple correlation match in multiple mode', () => {
@@ -949,10 +1009,10 @@ correlation_vars['correlation_1'] = resp.json().user_id`
     )
 
     expect(requestSnippets[0]?.after[0]?.replace(/\s/g, '')).toBe(
-      `correlation_vars['correlation_0']=resp.json().user_id`
+      `try{correlation_vars['correlation_0']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'correlation_0':"+error)}`
     )
     expect(requestSnippets[1]?.after[0]?.replace(/\s/g, '')).toBe(
-      `correlation_vars['correlation_0']=resp.json().user_id`
+      `try{correlation_vars['correlation_0']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'correlation_0':"+error)}`
     )
     expect(ruleInstance.state.extractedValue).toBe('777')
   })

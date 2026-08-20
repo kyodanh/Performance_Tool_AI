@@ -6,6 +6,7 @@ import { HttpRequestDetails } from '@/components/WebLogView/HttpRequestDetails'
 import { useProxyDataGroups } from '@/hooks/useProxyDataGroups'
 import { Check, LogEntry } from '@/schemas/k6'
 import { ProxyData } from '@/types'
+import { RunStats } from '@/utils/k6/stats'
 import { RequestsSection } from '@/views/Recorder/RequestsSection'
 
 interface ValidatorResult {
@@ -15,6 +16,7 @@ interface ValidatorResult {
   isRunning: boolean
   logs: LogEntry[]
   checks: Check[]
+  stats: RunStats | null
 }
 
 export function ValidatorResult({
@@ -23,6 +25,7 @@ export function ValidatorResult({
   isRunning,
   logs,
   checks,
+  stats,
   noDataElement,
 }: ValidatorResult) {
   const [selectedRequest, setSelectedRequest] = useState<ProxyData | null>(null)
@@ -60,6 +63,7 @@ export function ValidatorResult({
               script={script}
               logs={logs}
               checks={checks}
+              stats={stats}
             />
           </Panel>
         </Group>

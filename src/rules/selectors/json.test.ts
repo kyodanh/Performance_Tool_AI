@@ -3,7 +3,11 @@ import { describe, it, expect } from 'vitest'
 import { createRequest } from '@/test/factories/proxyData'
 import { Selector } from '@/types/rules'
 
-import { getJsonObjectFromPath, replaceJsonBody } from './json'
+import {
+  getJsonObjectFromPath,
+  replaceJsonBody,
+  stripJsonPathPrefix,
+} from './json'
 
 describe('JSON selector', () => {
   describe('Replacer', () => {
@@ -47,5 +51,15 @@ describe('JSON selector', () => {
       )
       expect(getJsonObjectFromPath('hello', '[0]')).toBeUndefined()
     })
+  })
+})
+
+describe('stripJsonPathPrefix', () => {
+  it('strips a JSONPath prefix', () => {
+    expect(stripJsonPathPrefix('$.token')).toBe('token')
+    expect(stripJsonPathPrefix("$['token']")).toBe("['token']")
+    expect(stripJsonPathPrefix('token')).toBe('token')
+    expect(stripJsonPathPrefix('user.hobbies[1]')).toBe('user.hobbies[1]')
+    expect(stripJsonPathPrefix('["$"]["token"]')).toBe('["$"]["token"]')
   })
 })

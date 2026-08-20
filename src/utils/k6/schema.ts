@@ -13,6 +13,11 @@ const ScenarioOptionsSchema = z.object({
   browser: BrowserOptionsSchema.nullish(),
 })
 
+const StageSchema = z.object({
+  duration: z.string(),
+  target: z.number(),
+})
+
 const ScenarioBaseSchema = z.object({
   executor: z.string(),
   exec: z.string().nullish(),
@@ -23,6 +28,10 @@ export const TestOptionsSchema = z
   .object({
     cloud: CloudOptionsSchema.nullish(),
     scenarios: z.record(z.string(), ScenarioBaseSchema).nullish(),
+    stages: z.array(StageSchema).nullish(),
+    vus: z.number().nullish(),
+    duration: z.string().nullish(),
+    iterations: z.number().nullish(),
   })
   .passthrough()
 

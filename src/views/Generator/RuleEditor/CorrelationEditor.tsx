@@ -7,6 +7,7 @@ import {
   Separator,
   Switch,
   Text,
+  TextField,
 } from '@radix-ui/themes'
 import { InfoIcon } from 'lucide-react'
 import { useFormContext } from 'react-hook-form'
@@ -30,6 +31,7 @@ export function CorrelationEditor() {
   const { selectedRuleInstance } = useApplyRules()
 
   const {
+    register,
     setValue,
     watch,
     control,
@@ -62,6 +64,19 @@ export function CorrelationEditor() {
         <Text size="2" as="p" mb="2" color="gray">
           Extraction value for correlation.
         </Text>
+        <FieldGroup
+          name="extractor.variableName"
+          label="Variable name"
+          hint="Name of the extracted value in the generated script and in JMeter / LoadRunner exports. Reference it in other requests as {name}. Defaults to correlation_<n>."
+          errors={errors}
+        >
+          <TextField.Root
+            placeholder="e.g. auth_token"
+            css={{ marginBottom: 'var(--space-2)' }}
+            id="extractor.variableName"
+            {...register('extractor.variableName')}
+          />
+        </FieldGroup>
         <FilterField field="extractor.filter" />
         <SelectorField field="extractor.selector" />
         <FieldGroup

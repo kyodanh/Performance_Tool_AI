@@ -8,6 +8,7 @@ import { useListenProxyData } from '@/hooks/useListenProxyData'
 import { useProxyHealthCheck } from '@/hooks/useProxyHealthCheck'
 import { useRunChecks } from '@/hooks/useRunChecks'
 import { useRunLogs } from '@/hooks/useRunLogs'
+import { useRunStats } from '@/hooks/useRunStats'
 import {
   selectFilteredRequests,
   selectGeneratorData,
@@ -32,12 +33,14 @@ export function ValidatorDialog({
   const { proxyData, resetProxyData } = useListenProxyData()
   const { logs, resetLogs } = useRunLogs()
   const { checks, resetChecks } = useRunChecks()
+  const { stats, resetStats } = useRunStats()
 
   const resetState = useCallback(() => {
     resetLogs()
     resetProxyData()
     resetChecks()
-  }, [resetChecks, resetLogs, resetProxyData])
+    resetStats()
+  }, [resetChecks, resetLogs, resetStats, resetProxyData])
 
   const { isProxyHealthy } = useProxyHealthCheck()
 
@@ -134,6 +137,7 @@ export function ValidatorDialog({
               proxyData={proxyData}
               logs={logs}
               checks={checks}
+              stats={stats}
               noDataElement={
                 <EmptyMessage message="Requests will appear here" />
               }

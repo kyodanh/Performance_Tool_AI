@@ -3,7 +3,12 @@ import log from 'electron-log/main'
 
 import { SCRIPTS_PATH } from '@/constants/workspace'
 import { waitForProxy } from '@/main/proxy'
-import { analyzeScript, showScriptSelectDialog, runScript } from '@/main/script'
+import {
+  analyzeScript,
+  showScriptSelectDialog,
+  runScript,
+  runLoadTest,
+} from '@/main/script'
 import { trackEvent } from '@/services/usageTracking'
 import { UsageEventName } from '@/services/usageTracking/types'
 import { browserWindowFromEvent } from '@/utils/electron'
@@ -14,6 +19,7 @@ import * as path from '@/utils/path'
 import { isExternalScript } from '@/utils/workspace'
 
 import {
+  RunLoadTestOptions,
   RunScriptFromGeneratorOptions,
   RunScriptOptions,
   ScriptHandler,
@@ -86,6 +92,55 @@ export function initialize() {
   )
 
   ipcMain.handle(
+    ScriptHandler.RunLoad,
+    async (
+      event,
+      { path: scriptPath, content, vus, iterations, stages }: RunLoadTestOptions
+    ) => {
+      console.info(`${ScriptHandler.RunLoad} event received`)
+
+      const browserWindow = browserWindowFromEvent(event)
+
+      try {
+        const absolute = path.isAbsolute(scriptPath)
+        const resolvedScriptPath = absolute
+          ? scriptPath
+          : path.join(SCRIPTS_PATH, scriptPath)
+
+        if (content !== undefined) {
+          await writeFile(resolvedScriptPath, content)
+        }
+
+        currentTestRun = await runLoadTest({
+          browserWindow,
+          scriptPath: resolvedScriptPath,
+          usageReport: k6StudioState.appSettings.telemetry.usageReport,
+          vus,
+          iterations,
+          stages,
+        })
+      } catch (error) {
+        browserWindow.webContents.send(ScriptHandler.Failed)
+
+        if (error instanceof ArchiveError) {
+          for (const logEntry of error.stderr) {
+            browserWindow.webContents.send(ScriptHandler.Log, logEntry)
+          }
+        }
+
+        throw error
+      } finally {
+        if (content !== undefined) {
+          // The archive is self-contained by the time `runLoadTest` resolves.
+          await unlink(scriptPath).catch(() => {
+            // Best case effort cleanup.
+          })
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
     ScriptHandler.RunFromGenerator,
     async (
       event,
@@ -101,6 +156,12 @@ export function initialize() {
       const browserWindow = browserWindowFromEvent(event)
 
       try {
+        // The run is proxied through the studio proxy (`HTTP_PROXY` in
+        // `runScript`), so starting before it is online sends every request to
+        // a dead port: `resp.body` is null and `resp.json()` throws a GoError
+        // that names no request.
+        await waitForProxy()
+
         await writeFile(path, content)
 
         currentTestRun = await runScript({

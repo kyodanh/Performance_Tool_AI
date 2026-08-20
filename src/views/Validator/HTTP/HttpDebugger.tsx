@@ -106,6 +106,7 @@ export function HttpDebugger({
                 isRunning={isRunning}
                 logs={session.logs}
                 checks={session.checks}
+                stats={session.stats}
               />
             </Box>
           </Panel>

@@ -3,10 +3,12 @@ import { ipcRenderer } from 'electron'
 import { BrowserActionEvent, BrowserReplayEvent } from '@/main/runner/schema'
 import { Check, LogEntry } from '@/schemas/k6'
 import { K6TestOptions } from '@/utils/k6/schema'
+import { RunStats } from '@/utils/k6/stats'
 
 import { createListener } from '../utils'
 
 import {
+  RunLoadTestOptions,
   RunScriptFromGeneratorOptions,
   RunScriptOptions,
   ScriptHandler,
@@ -18,6 +20,10 @@ export function showScriptSelectDialog() {
 
 export function runScript(options: RunScriptOptions) {
   return ipcRenderer.invoke(ScriptHandler.Run, options) as Promise<void>
+}
+
+export function runLoadTest(options: RunLoadTestOptions) {
+  return ipcRenderer.invoke(ScriptHandler.RunLoad, options) as Promise<void>
 }
 
 export function analyzeScript(scriptPath: string) {
@@ -66,6 +72,10 @@ export function onScriptFailed(callback: () => void) {
 
 export function onScriptCheck(callback: (data: Check[]) => void) {
   return createListener(ScriptHandler.Check, callback)
+}
+
+export function onScriptStats(callback: (data: RunStats) => void) {
+  return createListener(ScriptHandler.Stats, callback)
 }
 
 export function onBrowserAction(callback: (data: BrowserActionEvent) => void) {

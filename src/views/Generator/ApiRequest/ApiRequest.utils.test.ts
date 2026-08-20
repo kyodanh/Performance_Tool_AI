@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { Response } from '@/types'
 
-import { toProxyData, toRequest } from './ApiRequest.utils'
+import {
+  ApiRequestFormData,
+  fromProxyData,
+  toProxyData,
+  toRequest,
+  toSendOptions,
+} from './ApiRequest.utils'
 
 const response: Response = {
   headers: [['content-type', 'application/json']],
@@ -110,5 +116,55 @@ describe('toProxyData', () => {
     expect(proxyData.response).toBe(response)
     expect(proxyData.request.timestampStart).toBe(10)
     expect(proxyData.request.timestampEnd).toBe(11)
+  })
+})
+
+describe('fromProxyData', () => {
+  it('round-trips a request back into form values', () => {
+    const data = {
+      method: 'POST' as const,
+      url: 'https://example.com/api/users?page=2',
+      headers: [{ name: 'authorization', value: 'Bearer 123' }],
+      content: '{"name":"k6"}',
+    }
+
+    const proxyData = toProxyData(data, response, 'request-1')
+
+    expect(fromProxyData(proxyData)).toEqual({
+      ...data,
+      headers: [
+        { name: 'authorization', value: 'Bearer 123' },
+        { name: 'content-type', value: 'application/json' },
+      ],
+    })
+    expect(proxyData.id).toBe('request-1')
+  })
+})
+
+describe('toSendOptions', () => {
+  const data: ApiRequestFormData = {
+    method: 'GET',
+    url: 'https://app.test/contacts?t={token}',
+    headers: [{ name: 'Authorization', value: 'Bearer {token}' }],
+    content: '',
+  }
+
+  it('resolves placeholders with the recorded value', () => {
+    const options = toSendOptions(data, { token: 'eyJhbGciOi' })
+
+    expect(options.url).toBe('https://app.test/contacts?t=eyJhbGciOi')
+    expect(options.headers).toEqual([['Authorization', 'Bearer eyJhbGciOi']])
+  })
+
+  it('leaves the placeholder alone when nothing was extracted yet', () => {
+    const options = toSendOptions(data, { token: undefined })
+
+    expect(options.headers).toEqual([['Authorization', 'Bearer {token}']])
+  })
+
+  it('never rewrites the form itself, so the script keeps the variable', () => {
+    toSendOptions(data, { token: 'eyJhbGciOi' })
+
+    expect(data.headers[0]?.value).toBe('Bearer {token}')
   })
 })

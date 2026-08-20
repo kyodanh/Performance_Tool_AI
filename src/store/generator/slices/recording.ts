@@ -24,6 +24,7 @@ interface Actions {
   setRecording: (recording: ProxyData[]) => void
   setRecordingError: (error: unknown) => void
   addManualRequest: (request: ProxyData) => void
+  updateManualRequest: (id: string, request: ProxyData) => void
   removeManualRequest: (id: string) => void
   resetRecording: () => void
   setAllowlist: (value: string[]) => void
@@ -91,6 +92,16 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   addManualRequest: (request: ProxyData) =>
     set((state) => {
       state.manualRequests.push(request)
+    }),
+  updateManualRequest: (id: string, request: ProxyData) =>
+    set((state) => {
+      const index = state.manualRequests.findIndex(
+        (manualRequest) => manualRequest.id === id
+      )
+
+      if (index !== -1) {
+        state.manualRequests[index] = request
+      }
     }),
   removeManualRequest: (id: string) =>
     set((state) => {

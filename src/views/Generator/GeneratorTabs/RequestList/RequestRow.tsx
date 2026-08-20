@@ -1,5 +1,6 @@
 import { Flex, IconButton } from '@radix-ui/themes'
-import { Trash2Icon } from 'lucide-react'
+import { PencilIcon, Trash2Icon } from 'lucide-react'
+import { useState } from 'react'
 
 import { HighlightedText } from '@/components/HighlightedText'
 import { Table } from '@/components/Table'
@@ -16,6 +17,8 @@ import { SearchResults } from '@/components/WebLogView/SearchResults'
 import { useGeneratorStore } from '@/store/generator'
 import { RuleInstance } from '@/types/rules'
 
+import { ApiRequestDialog } from '../../ApiRequest'
+
 import { RuleBadges } from './RuleBadges'
 
 export function RequestRow({
@@ -25,12 +28,15 @@ export function RequestRow({
   filter,
   selectedRuleInstance,
 }: RowProps & { selectedRuleInstance?: RuleInstance }) {
-  const isManual = useGeneratorStore((state) =>
-    state.manualRequests.some((request) => request.id === data.id)
+  // `data` has rules applied, so edit the stored request instead of the row.
+  const manualRequest = useGeneratorStore((state) =>
+    state.manualRequests.find((request) => request.id === data.id)
   )
+  const isManual = manualRequest !== undefined
   const removeManualRequest = useGeneratorStore(
     (store) => store.removeManualRequest
   )
+  const [isEditing, setIsEditing] = useState(false)
 
   return (
     <>
@@ -59,6 +65,20 @@ export function RequestRow({
             />
             {isManual && (
               <IconButton
+                aria-label="Edit request"
+                variant="ghost"
+                color="gray"
+                size="1"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setIsEditing(true)
+                }}
+              >
+                <PencilIcon />
+              </IconButton>
+            )}
+            {isManual && (
+              <IconButton
                 aria-label="Remove request"
                 variant="ghost"
                 color="gray"
@@ -75,6 +95,15 @@ export function RequestRow({
           </Flex>
         </Table.Cell>
       </TableRow>
+
+      {/* Mounted only while editing so the form picks up the current request. */}
+      {isEditing && (
+        <ApiRequestDialog
+          open
+          request={manualRequest}
+          onOpenChange={setIsEditing}
+        />
+      )}
 
       <SearchResults
         data={data}

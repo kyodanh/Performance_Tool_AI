@@ -6,7 +6,12 @@ import {
   IconButton,
   Tooltip,
 } from '@radix-ui/themes'
-import { BugIcon, EllipsisVerticalIcon, SaveIcon } from 'lucide-react'
+import {
+  BugIcon,
+  EllipsisVerticalIcon,
+  GaugeIcon,
+  SaveIcon,
+} from 'lucide-react'
 
 import { GrafanaIcon } from '@/components/icons/GrafanaIcon'
 import { RichDropdownMenuItem } from '@/components/RichDropdownMenuItem'
@@ -22,6 +27,7 @@ interface ValidatorControlsProps {
   isDirty: boolean
   scenarios: string[]
   onRunScript: (scenarioName?: string) => void
+  onRunLoadTest: () => void
   onRunInCloud: () => void
   onSelectScript: () => void
   onStopScript: () => void
@@ -35,6 +41,7 @@ export function ValidatorControls({
   isDirty,
   scenarios,
   onRunScript,
+  onRunLoadTest,
   onRunInCloud,
   onSelectScript,
   onStopScript,
@@ -111,6 +118,11 @@ export function ValidatorControls({
                 </Button>
               )
             )}
+          </Tooltip>
+          <Tooltip content="Run the script with its own options, without the proxy">
+            <Button variant="ghost" onClick={onRunLoadTest}>
+              <GaugeIcon /> Load test
+            </Button>
           </Tooltip>
           <Button onClick={onRunInCloud}>
             <GrafanaIcon /> Run in Grafana Cloud

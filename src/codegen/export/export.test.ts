@@ -72,9 +72,32 @@ describe('buildExportPlan', () => {
       {
         variable: 'correlation_0',
         selector: { type: 'json', from: 'body', path: 'hello' },
+        filterPath: '/login',
       },
     ])
     expect(group?.requests[1]?.extractions).toEqual([])
+  })
+
+  it('names the extraction after the rule variable name', () => {
+    const plan = buildExportPlan({
+      recording,
+      generator: createGeneratorData({
+        rules: [
+          {
+            ...correlationRule,
+            extractor: {
+              ...correlationRule.extractor,
+              variableName: 'auth token!',
+            },
+          },
+        ],
+      }),
+    })
+
+    // Unsafe characters are replaced, not rejected.
+    expect(plan.groups[0]?.requests[0]?.extractions[0]?.variable).toBe(
+      'auth_token_'
+    )
   })
 
   it('carries verification rules as assertions', () => {
@@ -193,6 +216,11 @@ describe('generateVUGenScript', () => {
 
     expect(extraction).toBeGreaterThan(-1)
     expect(extraction).toBeLessThan(request)
+  })
+
+  it('scopes the json extraction with SEARCH_FILTERS', () => {
+    expect(script).toContain('"Scope=Body"')
+    expect(script).toContain('"RequestUrl=*/login*"')
   })
 
   it('verifies the status code after the request', () => {

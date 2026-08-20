@@ -7,6 +7,7 @@ import { useBrowserSession } from '@/hooks/useBrowserSession'
 import { useListenProxyData } from '@/hooks/useListenProxyData'
 import { useRunChecks } from '@/hooks/useRunChecks'
 import { useRunLogs } from '@/hooks/useRunLogs'
+import { useRunStats } from '@/hooks/useRunStats'
 
 import { DebuggerState } from './types'
 
@@ -37,6 +38,7 @@ export function useDebugSession(script: Script) {
   const { proxyData, resetProxyData } = useListenProxyData()
   const { logs, resetLogs } = useRunLogs()
   const { checks, resetChecks } = useRunChecks()
+  const { stats, resetStats } = useRunStats()
 
   const { browserSession, resetBrowserSession } = useBrowserSession()
 
@@ -49,7 +51,8 @@ export function useDebugSession(script: Script) {
     resetBrowserSession()
     resetLogs()
     resetChecks()
-  }, [resetChecks, resetLogs, resetProxyData, resetBrowserSession])
+    resetStats()
+  }, [resetChecks, resetLogs, resetStats, resetProxyData, resetBrowserSession])
 
   const startDebugging = useCallback(
     async (scenarioName?: string) => {
@@ -104,8 +107,9 @@ export function useDebugSession(script: Script) {
       browser: browserSession,
       logs,
       checks,
+      stats,
     }
-  }, [sessionId, state, checks, logs, proxyData, browserSession])
+  }, [sessionId, state, checks, logs, stats, proxyData, browserSession])
 
   return {
     session,

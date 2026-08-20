@@ -6,6 +6,8 @@ import { EventEmitter } from '@/utils/events'
 
 import { parseJsonAsSchema } from '../json'
 
+import { RunStats, RunStatsCollector } from './stats'
+
 // Copied from https://github.com/grafana/k6/blob/master/errext/exitcodes/codes.go
 enum ExitCode {
   Success = 0,
@@ -87,6 +89,10 @@ export interface TestRunLogEvent {
   entry: LogEntry
 }
 
+export interface TestRunStatsEvent {
+  stats: RunStats
+}
+
 interface TestRunEventMap {
   /**
    * Fired when the k6 process has started and
@@ -121,12 +127,23 @@ interface TestRunEventMap {
    * Fired when a log entry is emitted by the test run.
    */
   log: TestRunLogEvent
+
+  /**
+   * Fired once per second while metrics are streaming, and a final time
+   * when the run stops.
+   */
+  stats: TestRunStatsEvent
 }
+
+const STATS_INTERVAL = 1_000
 
 export class TestRun extends EventEmitter<TestRunEventMap> {
   #process: ChildProcessWithoutNullStreams
 
   #checks: Check[] = []
+
+  #stats = new RunStatsCollector()
+  #statsInterval: NodeJS.Timeout | null = null
 
   constructor(process: ChildProcessWithoutNullStreams) {
     super()
@@ -138,6 +155,16 @@ export class TestRun extends EventEmitter<TestRunEventMap> {
     process.on('close', this.#handleClose)
 
     readline.createInterface(process.stdout).on('line', (line) => {
+      // Metric samples (`--out csv=-`) share stdout with the checks summary and
+      // the end-of-test report, so consume them before parsing any JSON.
+      if (this.#stats.push(line)) {
+        return
+      }
+
+      if (line[0] !== '[' && line[0] !== '{') {
+        return
+      }
+
       const checks = parseJsonAsSchema(line, CheckArraySchema)
 
       if (checks.success) {
@@ -189,7 +216,17 @@ export class TestRun extends EventEmitter<TestRunEventMap> {
   }
 
   #handleStart = () => {
+    this.#statsInterval = setInterval(this.#emitStats, STATS_INTERVAL)
+
     this.emit('start', {})
+  }
+
+  #emitStats = () => {
+    if (!this.#stats.hasData) {
+      return
+    }
+
+    this.emit('stats', { stats: this.#stats.snapshot() })
   }
 
   #handleError = (error: Error) => {
@@ -235,6 +272,14 @@ export class TestRun extends EventEmitter<TestRunEventMap> {
   }
 
   #emitStop = () => {
+    if (this.#statsInterval !== null) {
+      clearInterval(this.#statsInterval)
+
+      this.#statsInterval = null
+    }
+
+    this.#emitStats()
+
     this.emit('stop', undefined)
   }
 }

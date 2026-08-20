@@ -4,17 +4,24 @@ import { useEffect, useState } from 'react'
 
 import { useTrackScriptCopy } from '@/hooks/useTrackScriptCopy'
 import { Check, LogEntry } from '@/schemas/k6'
+import { RunStats } from '@/utils/k6/stats'
 
 import { ReadOnlyEditor } from '../Monaco/ReadOnlyEditor'
 
 import { ChecksSection } from './ChecksSection'
 import { LogsSection, useConsoleFilter } from './LogsSection'
+import { MetricsSection } from './MetricsSection'
+
+type Tab = 'logs' | 'checks' | 'metrics' | 'script'
+
+const TABS: Tab[] = ['logs', 'checks', 'metrics', 'script']
 
 interface ExecutionDetailsProps {
   isRunning: boolean
   script?: string
   logs: LogEntry[]
   checks: Check[]
+  stats?: RunStats | null
 }
 
 export function ExecutionDetails({
@@ -22,8 +29,9 @@ export function ExecutionDetails({
   script,
   logs,
   checks,
+  stats = null,
 }: ExecutionDetailsProps) {
-  const [selectedTab, setSelectedTab] = useState<'logs' | 'checks' | 'script'>(
+  const [selectedTab, setSelectedTab] = useState<Tab>(
     script !== undefined ? 'script' : 'logs'
   )
 
@@ -32,11 +40,13 @@ export function ExecutionDetails({
   })
 
   const handleTabChange = (value: string) => {
-    if (value !== 'logs' && value !== 'checks' && value !== 'script') {
+    const tab = TABS.find((candidate) => candidate === value)
+
+    if (tab === undefined) {
       return
     }
 
-    setSelectedTab(value)
+    setSelectedTab(tab)
   }
 
   useEffect(() => {
@@ -66,6 +76,7 @@ export function ExecutionDetails({
         <Tabs.Trigger value="checks" disabled={checks.length === 0}>
           Checks ({checks.length})
         </Tabs.Trigger>
+        <Tabs.Trigger value="metrics">Metrics</Tabs.Trigger>
         {script !== undefined && (
           <Tabs.Trigger value="script">Script</Tabs.Trigger>
         )}
@@ -102,6 +113,15 @@ export function ExecutionDetails({
         `}
       >
         <ChecksSection checks={checks} isRunning={isRunning} />
+      </Tabs.Content>
+      <Tabs.Content
+        value="metrics"
+        css={css`
+          flex: 1;
+          min-height: 0;
+        `}
+      >
+        <MetricsSection stats={stats} />
       </Tabs.Content>
     </Tabs.Root>
   )

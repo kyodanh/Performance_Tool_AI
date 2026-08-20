@@ -1,4 +1,6 @@
+import { correlationVariableName } from '@/rules/correlation.utils'
 import { applyRules } from '@/rules/rules'
+import { stripJsonPathPrefix } from '@/rules/selectors/json'
 import { matchFilter } from '@/rules/utils'
 import { Header, Method, ProxyData, Response } from '@/types'
 import { GeneratorFileData } from '@/types/generator'
@@ -18,6 +20,8 @@ import {
 export interface Extraction {
   variable: string
   selector: ExtractorSelector
+  /** Extractor filter, emitted as the VuGen `RequestUrl` search filter. */
+  filterPath: string
 }
 
 export interface Assertion {
@@ -155,8 +159,9 @@ function collectExtractions(ruleInstances: RuleInstances) {
     }
 
     const extraction: Extraction = {
-      variable: `correlation_${generatedUniqueId}`,
+      variable: correlationVariableName(instance.rule, generatedUniqueId),
       selector: instance.rule.extractor.selector,
+      filterPath: instance.rule.extractor.filter.path,
     }
 
     for (const { id } of responsesExtracted) {
@@ -266,6 +271,8 @@ export function parseDurationSeconds(duration: string): number {
   )
 }
 
-export function jsonPathFromLodashPath(lodashPath: string) {
+export function jsonPathFromLodashPath(selectorPath: string) {
+  const lodashPath = stripJsonPathPrefix(selectorPath)
+
   return lodashPath.startsWith('[') ? `$${lodashPath}` : `$.${lodashPath}`
 }

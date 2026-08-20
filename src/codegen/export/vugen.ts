@@ -173,40 +173,52 @@ function customRequest(
   ].join('\n')
 }
 
-function saveParam({ variable, selector }: Extraction) {
+function saveParam(extraction: Extraction) {
+  const { variable, selector } = extraction
+
   switch (selector.type) {
     case 'begin-end':
       return regFunction('web_reg_save_param_ex', [
         `"ParamName=${variable}"`,
         `"LB=${escapeC(selector.begin)}"`,
         `"RB=${escapeC(selector.end)}"`,
-        'SEARCH_FILTERS',
-        `"Scope=${vugenScope(selector.from)}"`,
+        ...searchFilters(extraction, vugenScope(selector.from)),
       ])
     case 'header-name':
       return regFunction('web_reg_save_param_ex', [
         `"ParamName=${variable}"`,
         `"LB=${escapeC(selector.name)}: "`,
         '"RB=\\r\\n"',
-        'SEARCH_FILTERS',
-        '"Scope=Headers"',
+        ...searchFilters(extraction, 'Headers'),
       ])
     case 'regex':
       return regFunction('web_reg_save_param_regexp', [
         `"ParamName=${variable}"`,
         `"RegExp=${escapeC(selector.regex)}"`,
-        'SEARCH_FILTERS',
-        `"Scope=${vugenScope(selector.from)}"`,
+        ...searchFilters(extraction, vugenScope(selector.from)),
       ])
     case 'json':
       return regFunction('web_reg_save_param_json', [
         `"ParamName=${variable}"`,
         `"QueryString=${escapeC(jsonPathFromLodashPath(selector.path))}"`,
-        'SEARCH_FILTERS',
+        ...searchFilters(extraction, 'Body'),
       ])
     default:
       return exhaustive(selector)
   }
+}
+
+/**
+ * `SEARCH_FILTERS` must be followed by at least one filter. The extractor's URL
+ * filter becomes `RequestUrl`, wrapped in wildcards because k6 Studio matches
+ * the filter as a substring (`matchFilter` escapes it before testing).
+ */
+function searchFilters({ filterPath }: Extraction, scope: string) {
+  return [
+    'SEARCH_FILTERS',
+    `"Scope=${scope}"`,
+    ...(filterPath !== '' ? [`"RequestUrl=*${escapeC(filterPath)}*"`] : []),
+  ]
 }
 
 function registerFind(item: Assertion, rewrite: (value: string) => string) {

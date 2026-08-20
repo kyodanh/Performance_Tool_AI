@@ -15,6 +15,7 @@ interface SidebarFileListProps {
   noFilesMessage: string
   emptyMessage: string
   emptyAction: ReactNode
+  getPath?: (filePath: string) => string
   onSearchChange: (value: string) => void
 }
 
@@ -26,6 +27,7 @@ export function SidebarFileList({
   noFilesMessage,
   emptyMessage,
   emptyAction,
+  getPath,
   onSearchChange,
 }: SidebarFileListProps) {
   if (isEmpty) {
@@ -41,7 +43,11 @@ export function SidebarFileList({
       />
       <ScrollArea scrollbars="vertical">
         <Flex direction="column" gap="2" py="2">
-          <FileList files={files} noFilesMessage={noFilesMessage} />
+          <FileList
+            files={files}
+            noFilesMessage={noFilesMessage}
+            getPath={getPath}
+          />
         </Flex>
       </ScrollArea>
     </>

@@ -53,6 +53,19 @@ interface RunArgs {
   quiet?: boolean
   insecureSkipTLSVerify?: boolean
   noUsageReport?: boolean
+  /**
+   * Stream metric samples as CSV on stdout so the run can be charted live.
+   * Parsed by `RunStatsCollector`.
+   */
+  metrics?: boolean
+  /** Overrides the script's own VU count. Rejected by k6 if the script declares `scenarios`. */
+  vus?: number
+  /** Overrides the script's own duration, e.g. `30s`. Same restriction as `vus`. */
+  duration?: string
+  /** Overrides the script's own iteration count. */
+  iterations?: number
+  /** `<duration>:<target>` pairs replacing the script's own ramp. */
+  stages?: string[]
   env?: Record<string, string>
 }
 
@@ -162,6 +175,11 @@ export class K6Client {
     quiet,
     insecureSkipTLSVerify,
     noUsageReport,
+    metrics,
+    vus,
+    duration,
+    iterations,
+    stages,
     env = {},
   }: RunArgs): TestRun {
     const args = [
@@ -169,6 +187,11 @@ export class K6Client {
       quiet && '--quiet',
       insecureSkipTLSVerify && '--insecure-skip-tls-verify',
       noUsageReport && '--no-usage-report',
+      metrics && ['--out', 'csv=-'],
+      vus !== undefined && ['--vus', String(vus)],
+      duration !== undefined && ['--duration', duration],
+      iterations !== undefined && ['--iterations', String(iterations)],
+      stages?.flatMap((stage) => ['--stage', stage]),
       toNativePath(path),
     ]
 
@@ -222,6 +245,10 @@ export class K6Client {
     const flattenedArgs = args
       .filter((arg) => arg !== null && arg !== undefined && arg !== false)
       .flat()
+
+    // The exact argv is the only reliable answer to "why did the test run with
+    // a different load profile than the one I set?".
+    log.info(`k6 ${command} ${flattenedArgs.join(' ')}`)
 
     return spawn(
       toNativePath(this.#executablePath),

@@ -20,6 +20,11 @@ const Home = lazy(() =>
 const Recorder = lazy(() =>
   import('@/views/Recorder').then((module) => ({ default: module.Recorder }))
 )
+const Controller = lazy(() =>
+  import('@/views/Controller').then((module) => ({
+    default: module.Controller,
+  }))
+)
 const FileViewer = lazy(() =>
   import('@/views/FileViewer').then((module) => ({
     default: module.FileViewer,
@@ -35,6 +40,8 @@ const router = createHashRouter(
     >
       <Route index element={<Home />} />
       <Route path={routeMap.recorder} element={<Recorder />} />
+      <Route path={routeMap.controller} element={<Controller />} />
+      <Route path={routeMap.controllerFile} element={<Controller />} />
       <Route path={routeMap.file} element={<FileViewer />} />
       <Route path="*" element={<NoRouteFound />} />
     </Route>

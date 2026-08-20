@@ -16,6 +16,7 @@ import { StudioFile } from '@/types'
 import { queryClient } from '@/utils/query'
 
 import { Debugger } from './Debugger'
+import { LoadTestDialog } from './LoadTestDialog'
 import { useDebugSession } from './Validator.hooks'
 import { ValidatorControls } from './ValidatorControls'
 
@@ -26,6 +27,7 @@ interface ValidatorProps {
 
 export function Validator({ file, content }: ValidatorProps) {
   const [showRunInCloudDialog, setShowRunInCloudDialog] = useState(false)
+  const [showLoadTestDialog, setShowLoadTestDialog] = useState(false)
 
   const [savedScript, setSavedScript] = useState(content.data)
   const [scriptContent, setScriptContent] = useState(content.data)
@@ -107,6 +109,14 @@ export function Validator({ file, content }: ValidatorProps) {
     }
   }
 
+  async function handleRunLoadTest() {
+    if (isDirty) {
+      await saveFile({ saveAs: false })
+    }
+
+    setShowLoadTestDialog(true)
+  }
+
   async function handleRunInCloud() {
     if (isDirty) {
       await saveFile({ saveAs: false })
@@ -155,6 +165,7 @@ export function Validator({ file, content }: ValidatorProps) {
           canDelete={!content.isExternal}
           scenarios={scenarios}
           onRunScript={handleDebugScript}
+          onRunLoadTest={handleRunLoadTest}
           onRunInCloud={handleRunInCloud}
           onSelectScript={handleSelectExternalScript}
           onStopScript={handleStopScript}
@@ -172,6 +183,12 @@ export function Validator({ file, content }: ValidatorProps) {
           onScriptChange={setScriptContent}
         />
       </Flex>
+      <LoadTestDialog
+        scriptPath={file.path}
+        options={options}
+        open={showLoadTestDialog}
+        onOpenChange={setShowLoadTestDialog}
+      />
       <RunInCloudDialog
         open={showRunInCloudDialog}
         script={{ type: 'file', path: file.path }}

@@ -3,6 +3,8 @@ import { generatePath } from 'react-router-dom'
 const routes = {
   home: '/',
   recorder: '/recorder',
+  controller: '/controller',
+  controllerFile: '/controller/:filePath',
   file: '/file/:filePath',
 }
 
@@ -22,6 +24,8 @@ export function getRoutePath(
 export const routeMap = {
   home: getRoutePath('home'),
   recorder: getRoutePath('recorder'),
+  controller: getRoutePath('controller'),
+  controllerFile: getRoutePath('controllerFile'),
   file: getRoutePath('file'),
 }
 
@@ -29,4 +33,10 @@ export function getViewPath(filePath: string) {
   const encodedFilePath = encodeURIComponent(filePath)
 
   return getRoutePath('file', { filePath: encodedFilePath })
+}
+
+export function getControllerPath(filePath: string) {
+  const encodedFilePath = encodeURIComponent(filePath)
+
+  return getRoutePath('controllerFile', { filePath: encodedFilePath })
 }

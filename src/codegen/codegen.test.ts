@@ -3,7 +3,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createParameterizationRuleInstance } from '@/rules/parameterization'
 import { generateSequentialInt } from '@/rules/utils'
 import { createGeneratorData } from '@/test/factories/generator'
-import { createProxyData, createRequest } from '@/test/factories/proxyData'
+import {
+  createProxyData,
+  createRequest,
+  createResponse,
+} from '@/test/factories/proxyData'
 import { checksRecording } from '@/test/fixtures/checksRecording'
 import { correlationRecording } from '@/test/fixtures/correlationRecording'
 import {
@@ -355,13 +359,21 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/foo\`
           resp = http.request('POST', url, null, params)
 
-          regex = new RegExp("project_id=(.*)$");
-          match = resp.headers["Project"].match(regex);
-          if (match) {
-            correlation_vars["correlation_0"] = match[1];
+          try {
+            regex = new RegExp("project_id=(.*)$");
+            match = resp.headers["Project"].match(regex);
+            if (match) {
+              correlation_vars["correlation_0"] = match[1];
+            }
+          } catch (error) {
+            console.warn("Failed to extract correlation variable 'correlation_0': " + error)
           }
 
-          correlation_vars['correlation_1'] = resp.json().is_admin
+          try {
+            correlation_vars['correlation_1'] = resp.json().is_admin
+          } catch (error) {
+            console.warn("Failed to extract correlation variable 'correlation_1': " + error)
+          }
 
           params = {
             headers: {}, cookies: {}
@@ -370,7 +382,11 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/login?project_id=\${correlation_vars['correlation_0']}\`
           resp = http.request('POST', url, null, params)
 
-          correlation_vars['correlation_2'] = resp.json().user_id
+          try {
+            correlation_vars['correlation_2'] = resp.json().user_id
+          } catch (error) {
+            console.warn("Failed to extract correlation variable 'correlation_2': " + error)
+          }
         })
 
         group('two', function () {
@@ -1008,5 +1024,58 @@ describe('Code generation', () => {
 
       expect(result).toContain("'status equals 200'")
     })
+  })
+})
+
+describe('correlation placeholders', () => {
+  const login = createProxyData({
+    id: '1',
+    request: createRequest({
+      method: 'POST',
+      url: 'https://app.test/users/login',
+      path: '/users/login',
+    }),
+    response: createResponse({
+      headers: [['content-type', 'application/json']],
+      content: JSON.stringify({ token: 'eyJhbGciOi' }),
+    }),
+  })
+
+  const contacts = createProxyData({
+    id: '2',
+    request: createRequest({
+      method: 'GET',
+      url: 'https://app.test/contacts',
+      path: '/contacts',
+      headers: [
+        ['Authorization', 'Bearer {token}'],
+        ['content-type', 'application/json'],
+      ],
+    }),
+  })
+
+  const rule: TestRule = {
+    id: 'c1',
+    type: 'correlation',
+    enabled: true,
+    extractor: {
+      filter: { path: '/users/login' },
+      selector: { type: 'json', from: 'body', path: 'token' },
+      variableName: 'token',
+      extractionMode: 'single',
+    },
+  }
+
+  it('interpolates a hand-written {name} reference into the script', () => {
+    const script = generateScript({
+      recording: [login, contacts],
+      scriptPath: '/project/Scripts/my-script.js',
+      generator: createGeneratorData({ rules: [rule] }),
+    })
+
+    expect(script).toContain("correlation_vars['token'] = resp.json().token")
+    expect(script).toContain(
+      "'Authorization': `Bearer ${correlation_vars['token']}`"
+    )
   })
 })

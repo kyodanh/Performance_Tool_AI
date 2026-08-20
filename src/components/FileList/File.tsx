@@ -26,6 +26,7 @@ import { FileItem } from './types'
 interface FileProps {
   file: FileItem
   isSelected: boolean
+  getPath?: (filePath: string) => string
 }
 
 const fileStyle = css`
@@ -36,7 +37,7 @@ const fileStyle = css`
   color: var(--gray-11);
 `
 
-export function File({ file, isSelected }: FileProps) {
+export function File({ file, isSelected, getPath = getViewPath }: FileProps) {
   const [editMode, setEditMode] = useBoolean(false)
 
   return (
@@ -77,6 +78,7 @@ export function File({ file, isSelected }: FileProps) {
         <FileIcon file={file} />
         <EditableFile
           file={file}
+          getPath={getPath}
           isSelected={isSelected}
           editMode={editMode}
           setEditMode={setEditMode}
@@ -94,6 +96,7 @@ export function File({ file, isSelected }: FileProps) {
 function EditableFile({
   file,
   isSelected,
+  getPath = getViewPath,
   editMode,
   setEditMode,
 }: FileProps & { editMode: boolean; setEditMode: (value: boolean) => void }) {
@@ -150,7 +153,7 @@ function EditableFile({
             }
           `,
         ]}
-        to={getViewPath(file.path)}
+        to={getPath(file.path)}
       >
         <HighlightedText text={file.displayName} matches={file.matches} />
       </NavLink>

@@ -97,6 +97,7 @@ export function createGeneratorState(
     requests: [],
     manualRequests: [],
     addManualRequest: vi.fn(),
+    updateManualRequest: vi.fn(),
     removeManualRequest: vi.fn(),
 
     sleepType: 'groups',

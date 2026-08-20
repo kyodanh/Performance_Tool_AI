@@ -1,7 +1,7 @@
 import { css } from '@emotion/react'
 import { Flex, Separator } from '@radix-ui/themes'
-import { BugPlay, HammerIcon, VideoIcon } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { BugPlay, GaugeIcon, HammerIcon, VideoIcon } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 
 import k6LogoDark from '@/assets/logo-dark.svg'
 import k6Logo from '@/assets/logo.svg'
@@ -26,6 +26,7 @@ interface ActivityBarProps {
 
 export function ActivityBar({ activeTab, onTabChange }: ActivityBarProps) {
   const theme = useTheme()
+  const navigate = useNavigate()
 
   return (
     <Flex
@@ -71,6 +72,15 @@ export function ActivityBar({ activeTab, onTabChange }: ActivityBarProps) {
           tooltip="Debug"
           active={activeTab === 'debug'}
           onClick={() => onTabChange('debug')}
+        />
+        <VerticalTabButton
+          icon={<GaugeIcon />}
+          tooltip="Controller"
+          active={activeTab === 'controller'}
+          onClick={() => {
+            onTabChange('controller')
+            navigate(getRoutePath('controller'))
+          }}
         />
       </Flex>
 

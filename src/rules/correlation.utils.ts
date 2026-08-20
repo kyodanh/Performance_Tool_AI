@@ -11,6 +11,31 @@ import {
   replaceAllUrl,
 } from './selectors/text'
 
+/**
+ * Name the extracted value is stored under: `correlation_vars['<name>']` in k6,
+ * the VuGen `ParamName` and the JMeter reference name. Falls back to the
+ * generated id when the rule has no name of its own.
+ *
+ * ponytail: unsafe characters are replaced rather than rejected, so loading an
+ * older generator file (or an AI-suggested name like `pizza.id`) never fails.
+ * Duplicate names across rules collide — same as a duplicate VuGen ParamName.
+ */
+export function correlationVariableName(
+  rule: CorrelationRule,
+  uniqueId: number
+) {
+  const custom = rule.extractor.variableName
+
+  return (
+    (custom === undefined ? '' : sanitizeVariableName(custom)) ||
+    `correlation_${uniqueId}`
+  )
+}
+
+export function sanitizeVariableName(name: string) {
+  return name.trim().replace(/[^A-Za-z0-9_]/g, '_')
+}
+
 export function replaceCorrelatedValues({
   rule,
   extractedValue,
@@ -22,15 +47,23 @@ export function replaceCorrelatedValues({
   uniqueId: number
   request: Request
 }): Request {
-  const varName = `\${correlation_vars['correlation_${uniqueId}']}`
+  const name = correlationVariableName(rule, uniqueId)
+  const varName = `\${correlation_vars['${name}']}`
+
+  // `{name}` placeholders typed by hand (VuGen habit) address the same value.
+  // Only the rule's own name is substituted, so JSON braces in a body are left
+  // alone. Requests sent before the extraction keep the literal placeholder,
+  // which is how the preview shows that the reference came too early.
+  const withPlaceholders = replaceAllTextMatches(request, `{${name}}`, varName)
+
   // Default behavior replaces all occurrences of the string
   if (!rule.replacer?.selector) {
-    return replaceAllTextMatches(request, extractedValue, varName)
+    return replaceAllTextMatches(withPlaceholders, extractedValue, varName)
   }
 
   return replaceRequestValues({
     selector: rule.replacer.selector,
-    request,
+    request: withPlaceholders,
     value: varName,
   })
 }

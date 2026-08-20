@@ -6,13 +6,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as tar from 'tar-stream'
 import { z } from 'zod'
 
-import { TEMP_K6_ARCHIVE_PATH, TEMP_SCRIPT_SUFFIX } from '@/constants/workspace'
+import {
+  TEMP_K6_ARCHIVE_PATH,
+  TEMP_K6_LOAD_ARCHIVE_PATH,
+  TEMP_SCRIPT_SUFFIX,
+} from '@/constants/workspace'
 import { ScriptHandler } from '@/handlers/script/types'
 import { getProxyArguments } from '@/main/proxy'
 import { ProxySettings } from '@/types/settings'
 import { showOpenDialog } from '@/utils/dialog'
 import { createWriteStream } from '@/utils/fs'
 import { K6Client } from '@/utils/k6/client'
+import { LoadProfileOverrides } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
 import { createTrackingServer } from '@/utils/k6/tracking'
 import * as path from '@/utils/path'
@@ -141,6 +146,7 @@ export const runScript = async ({
     quiet: true,
     insecureSkipTLSVerify: true,
     noUsageReport: !usageReport,
+    metrics: true,
     env: {
       HTTP_PROXY: `http://localhost:${proxySettings.port}`,
       HTTPS_PROXY: `http://localhost:${proxySettings.port}`,
@@ -154,6 +160,10 @@ export const runScript = async ({
 
   testRun.on('log', ({ entry }) => {
     browserWindow.webContents.send(ScriptHandler.Log, entry)
+  })
+
+  testRun.on('stats', ({ stats }) => {
+    browserWindow.webContents.send(ScriptHandler.Stats, stats)
   })
 
   testRun.on('start', () => {
@@ -175,6 +185,78 @@ export const runScript = async ({
     browserWindow.webContents.send(ScriptHandler.Stopped)
 
     trackingServer?.dispose()
+  })
+
+  return testRun
+}
+
+interface RunLoadTestOptions extends LoadProfileOverrides {
+  scriptPath: string
+  usageReport: boolean
+  browserWindow: BrowserWindow
+}
+
+/**
+ * Runs a script as an actual load test: the k6 archive is left untouched, so
+ * the script keeps its own `options` instead of being pinned to 1 VU / 1
+ * iteration by the debug entrypoint (see `configureOptions`).
+ *
+ * Traffic does not go through the studio proxy — at load the proxy is a
+ * bottleneck and the request list would be useless — so the Metrics panel is
+ * the only view of the run.
+ */
+export const runLoadTest = async ({
+  scriptPath,
+  usageReport,
+  browserWindow,
+  vus,
+  iterations,
+  stages,
+}: RunLoadTestOptions) => {
+  const client = new K6Client()
+
+  await client.archive({
+    scriptPath,
+    outputPath: TEMP_K6_LOAD_ARCHIVE_PATH,
+    cwd: path.dirname(scriptPath),
+  })
+
+  const testRun = client.run({
+    path: TEMP_K6_LOAD_ARCHIVE_PATH,
+    quiet: true,
+    insecureSkipTLSVerify: true,
+    noUsageReport: !usageReport,
+    metrics: true,
+    vus,
+    iterations,
+    stages,
+  })
+
+  testRun.on('log', ({ entry }) => {
+    browserWindow.webContents.send(ScriptHandler.Log, entry)
+  })
+
+  testRun.on('stats', ({ stats }) => {
+    browserWindow.webContents.send(ScriptHandler.Stats, stats)
+  })
+
+  testRun.on('start', () => {
+    browserWindow.webContents.send(ScriptHandler.Started, {})
+  })
+
+  testRun.on('done', ({ result, checks }) => {
+    browserWindow.webContents.send(ScriptHandler.Check, checks)
+    browserWindow.webContents.send(ScriptHandler.Finished, result)
+  })
+
+  testRun.on('error', (error) => {
+    log.error(error)
+
+    browserWindow.webContents.send(ScriptHandler.Failed)
+  })
+
+  testRun.on('stop', () => {
+    browserWindow.webContents.send(ScriptHandler.Stopped)
   })
 
   return testRun
