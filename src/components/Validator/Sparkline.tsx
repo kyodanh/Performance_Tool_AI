@@ -5,6 +5,9 @@ interface SparklineProps {
   label: string
   values: number[]
   value: string
+  /** Elapsed-time labels for the x axis, as a controller chart shows them. */
+  from?: string
+  to?: string
   color?: string
   height?: number
 }
@@ -18,6 +21,8 @@ export function Sparkline({
   label,
   values,
   value,
+  from,
+  to,
   color = 'var(--accent-9)',
   height = 56,
 }: SparklineProps) {
@@ -65,6 +70,16 @@ export function Sparkline({
           />
         )}
       </svg>
+      {from !== undefined && to !== undefined && (
+        <Flex justify="between" gap="2">
+          <Text size="1" color="gray">
+            {from}
+          </Text>
+          <Text size="1" color="gray">
+            {to}
+          </Text>
+        </Flex>
+      )}
     </Flex>
   )
 }

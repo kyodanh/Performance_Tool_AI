@@ -13,10 +13,13 @@ const COLUMN = {
   metric: 0,
   timestamp: 1,
   value: 2,
+  check: 3,
   error: 4,
   errorCode: 5,
   group: 7,
+  method: 8,
   name: 9,
+  status: 13,
   url: 16,
 } as const
 
@@ -27,10 +30,15 @@ const MAX_BUCKETS = 300
 // ponytail: guards against a script that generates unbounded distinct errors.
 const MAX_ERRORS = 100
 
+// ponytail: same guard for scripts hitting URLs with unbounded path segments.
+const MAX_REQUESTS = 200
+
 export interface RunErrorGroup {
   code: string
   message: string
   url: string
+  /** The `group()` the failing request ran in, empty outside any group. */
+  group: string
   count: number
 }
 
@@ -46,15 +54,59 @@ export interface StatsBucket {
   throughput: number
 }
 
-export interface GroupStats {
+export interface RequestStats {
+  method: string
+  /** The request name — the URL, or the `name` tag when the script sets one. */
   name: string
+  status: string
+  /** The `group()` the request ran in, empty outside any group. */
+  group: string
   count: number
+  failed: number
   avg: number
   max: number
 }
 
+export interface CheckStats {
+  name: string
+  /** The `group()` the check ran in, empty outside any group. */
+  group: string
+  passes: number
+  fails: number
+}
+
+export interface GroupSample {
+  /** Unix timestamp in seconds. */
+  time: number
+  /** Average `group_duration` during that second, in milliseconds. */
+  value: number
+}
+
+export interface GroupStats {
+  name: string
+  /** Completed executions of the group — `group_duration` samples. */
+  count: number
+  /**
+   * Failed requests and checks tagged with this group. k6 has no per-execution
+   * verdict for a group, so this is an attribution, not an exact failure count:
+   * one execution failing three requests counts as three.
+   */
+  failed: number
+  avg: number
+  max: number
+  min: number
+  /** Population standard deviation of `group_duration`, in milliseconds. */
+  std: number
+  /** The most recent `group_duration` sample, as a controller reports "Last". */
+  last: number
+  /** Per-second averages, for the response-time-over-time chart. */
+  series: GroupSample[]
+}
+
 export interface RunStats {
   buckets: StatsBucket[]
+  /** Seconds between the first and the newest sample seen. */
+  elapsed: number
   vus: number
   vusMax: number
   requests: number
@@ -66,6 +118,9 @@ export interface RunStats {
   avgDuration: number
   maxDuration: number
   groups: GroupStats[]
+  /** Per-request breakdown, one row per method + name + status. */
+  requestStats: RequestStats[]
+  checks: CheckStats[]
   errors: RunErrorGroup[]
 }
 
@@ -128,17 +183,43 @@ interface MutableBucket {
   throughput: number
 }
 
+interface MutableRequest {
+  method: string
+  name: string
+  status: string
+  group: string
+  count: number
+  failed: number
+  sum: number
+  max: number
+}
+
 interface MutableGroup {
   count: number
   sum: number
+  /** Sum of squares, so the standard deviation needs no sample history. */
+  squares: number
   max: number
+  min: number
+  last: number
+  failed: number
+  series: Map<number, { sum: number; count: number }>
+}
+
+/** k6 reports groups as a `::`-delimited path, e.g. `::checkout::login`. */
+function groupName(raw: string) {
+  return raw.replace(/^::/, '').replaceAll('::', ' / ')
 }
 
 export class RunStatsCollector {
   #buckets = new Map<number, MutableBucket>()
   #groups = new Map<string, MutableGroup>()
+  #requestStats = new Map<string, MutableRequest>()
+  #checkResults = new Map<string, CheckStats>()
   #errors = new Map<string, RunErrorGroup>()
 
+  #firstTime: number | null = null
+  #lastTime = 0
   #vus = 0
   #vusMax = 0
   #requests = 0
@@ -182,6 +263,9 @@ export class RunStatsCollector {
       return false
     }
 
+    this.#firstTime ??= time
+    this.#lastTime = Math.max(this.#lastTime, time)
+
     const bucket = this.#bucket(time)
 
     switch (metric) {
@@ -199,12 +283,19 @@ export class RunStatsCollector {
         bucket.requests += value
         this.#requests += value
         this.#collectError(columns)
+        this.#request(columns, (request) => {
+          request.count += 1
+        })
         break
 
       case 'http_req_failed':
         if (value === 1) {
           bucket.failed += 1
           this.#failedRequests += 1
+          this.#failGroup(columns[COLUMN.group] ?? '')
+          this.#request(columns, (request) => {
+            request.failed += 1
+          })
         }
         break
 
@@ -214,6 +305,10 @@ export class RunStatsCollector {
         this.#durationSum += value
         this.#durationCount += 1
         this.#maxDuration = Math.max(this.#maxDuration, value)
+        this.#request(columns, (request) => {
+          request.sum += value
+          request.max = Math.max(request.max, value)
+        })
         break
 
       case 'data_received':
@@ -230,11 +325,14 @@ export class RunStatsCollector {
           this.#checksPassed += 1
         } else {
           this.#checksFailed += 1
+          this.#failGroup(columns[COLUMN.group] ?? '')
         }
+
+        this.#collectCheck(columns, value === 1)
         break
 
       case 'group_duration':
-        this.#collectGroup(columns[COLUMN.group] ?? '', value)
+        this.#collectGroup(columns[COLUMN.group] ?? '', value, time)
         break
     }
 
@@ -256,17 +354,58 @@ export class RunStatsCollector {
       }))
 
     const groups = [...this.#groups.entries()]
-      .map<GroupStats>(([name, group]) => ({
-        name,
-        count: group.count,
-        avg: group.sum / group.count,
-        max: group.max,
-      }))
+      .map<GroupStats>(([name, group]) => {
+        const avg = group.count ? group.sum / group.count : 0
+
+        return {
+          name,
+          count: group.count,
+          failed: group.failed,
+          avg,
+          max: group.max,
+          min: group.count ? group.min : 0,
+          // Rounding can push the variance a hair below zero on a constant
+          // series, and `sqrt` of that is NaN.
+          std: group.count
+            ? Math.sqrt(Math.max(0, group.squares / group.count - avg * avg))
+            : 0,
+          last: group.last,
+          series: [...group.series.entries()]
+            .sort(([a], [b]) => a - b)
+            .map<GroupSample>(([time, bucket]) => ({
+              time,
+              value: bucket.sum / bucket.count,
+            })),
+        }
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
+
+    const requestStats = [...this.#requestStats.values()]
+      .map<RequestStats>((request) => ({
+        method: request.method,
+        name: request.name,
+        status: request.status,
+        group: request.group,
+        count: request.count,
+        failed: request.failed,
+        // `http_reqs` and `http_req_duration` are emitted per request, so the
+        // duration sample count matches `count` — except for a request still in
+        // flight when the snapshot is taken.
+        avg: request.count ? request.sum / request.count : 0,
+        max: request.max,
+      }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+    const checks = [...this.#checkResults.values()].sort(
+      (a, b) => b.fails - a.fails || a.name.localeCompare(b.name)
+    )
 
     return {
       buckets,
       groups,
+      requestStats,
+      checks,
+      elapsed: this.#firstTime === null ? 0 : this.#lastTime - this.#firstTime,
       vus: this.#vus,
       vusMax: this.#vusMax,
       requests: this.#requests,
@@ -325,7 +464,8 @@ export class RunStatsCollector {
     }
 
     const url = columns[COLUMN.name] || columns[COLUMN.url] || ''
-    const key = `${code}|${message}|${url}`
+    const group = groupName(columns[COLUMN.group] ?? '')
+    const key = `${code}|${message}|${url}|${group}`
     const existing = this.#errors.get(key)
 
     if (existing) {
@@ -338,28 +478,146 @@ export class RunStatsCollector {
       return
     }
 
-    this.#errors.set(key, { code, message, url, count: 1 })
+    this.#errors.set(key, { code, message, url, group, count: 1 })
   }
 
-  #collectGroup(rawName: string, value: number) {
-    // k6 reports groups as a `::`-delimited path, e.g. `::checkout::login`.
-    const name = rawName.replace(/^::/, '').replaceAll('::', ' / ')
+  #collectGroup(rawName: string, value: number, time: number) {
+    const name = groupName(rawName)
 
     if (name === '') {
       return
     }
 
-    const existing = this.#groups.get(name)
+    const group = this.#group(name)
 
-    if (!existing) {
-      this.#groups.set(name, { count: 1, sum: value, max: value })
+    group.count += 1
+    group.sum += value
+    group.squares += value * value
+    group.max = Math.max(group.max, value)
+    group.min = Math.min(group.min, value)
+    group.last = value
+
+    const sample = group.series.get(time)
+
+    if (sample) {
+      sample.sum += value
+      sample.count += 1
+    } else {
+      group.series.set(time, { sum: value, count: 1 })
+    }
+
+    // Same window the buckets keep, so the chart's x axis stays aligned.
+    while (group.series.size > MAX_BUCKETS) {
+      const [oldest] = group.series.keys()
+
+      if (oldest === undefined) {
+        break
+      }
+
+      group.series.delete(oldest)
+    }
+  }
+
+  /**
+   * Applies `update` to the per-request row the sample belongs to. Rows are keyed
+   * by status too, so the same endpoint answering 200 and 401 shows as two rows.
+   */
+  #request(columns: string[], update: (request: MutableRequest) => void) {
+    const name = columns[COLUMN.name] || columns[COLUMN.url] || ''
+
+    if (name === '') {
+      return
+    }
+
+    const method = columns[COLUMN.method] ?? ''
+    const status = columns[COLUMN.status] ?? ''
+    const group = groupName(columns[COLUMN.group] ?? '')
+    const key = `${group}|${method}|${name}|${status}`
+    const existing = this.#requestStats.get(key)
+
+    if (existing) {
+      update(existing)
 
       return
     }
 
-    existing.count += 1
-    existing.sum += value
-    existing.max = Math.max(existing.max, value)
+    if (this.#requestStats.size >= MAX_REQUESTS) {
+      return
+    }
+
+    const request: MutableRequest = {
+      method,
+      name,
+      status,
+      group,
+      count: 0,
+      failed: 0,
+      sum: 0,
+      max: 0,
+    }
+
+    update(request)
+
+    this.#requestStats.set(key, request)
+  }
+
+  #collectCheck(columns: string[], passed: boolean) {
+    const name = columns[COLUMN.check] ?? ''
+
+    if (name === '') {
+      return
+    }
+
+    const group = groupName(columns[COLUMN.group] ?? '')
+    const key = `${group}|${name}`
+    const existing = this.#checkResults.get(key)
+
+    if (existing) {
+      existing.passes += passed ? 1 : 0
+      existing.fails += passed ? 0 : 1
+
+      return
+    }
+
+    this.#checkResults.set(key, {
+      name,
+      group,
+      passes: passed ? 1 : 0,
+      fails: passed ? 0 : 1,
+    })
+  }
+
+  #failGroup(rawName: string) {
+    const name = groupName(rawName)
+
+    if (name === '') {
+      return
+    }
+
+    this.#group(name).failed += 1
+  }
+
+  #group(name: string): MutableGroup {
+    const existing = this.#groups.get(name)
+
+    if (existing) {
+      return existing
+    }
+
+    const group: MutableGroup = {
+      count: 0,
+      sum: 0,
+      squares: 0,
+      max: 0,
+      min: Infinity,
+      last: 0,
+      failed: 0,
+      series: new Map(),
+    }
+
+    this.#groups.set(name, group)
+
+    return group
   }
 }
 

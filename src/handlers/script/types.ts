@@ -33,4 +33,8 @@ export interface RunLoadTestOptions extends LoadProfileOverrides {
   path: string
   /** Script source to write to `path` first, for tests generated on the fly. */
   content?: string
+  /** Streams k6's debug log instead of only warnings and errors. */
+  verbose?: boolean
+  /** Logs every request and response, bodies included. */
+  httpDebug?: boolean
 }

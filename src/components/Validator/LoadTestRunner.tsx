@@ -12,6 +12,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { LoadProfile } from '@/components/TestOptions/LoadProfile'
 import TextSpinner from '@/components/TextSpinner/TextSpinner'
+import { useRunChecks } from '@/hooks/useRunChecks'
+import { useRunLogs } from '@/hooks/useRunLogs'
 import { useRunStats } from '@/hooks/useRunStats'
 import { LoadProfileExecutorOptions } from '@/types/testOptions'
 import {
@@ -22,7 +24,7 @@ import {
 } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
 
-import { MetricsSection } from './MetricsSection'
+import { ExecutionDetails } from './ExecutionDetails'
 import { ScheduleBuilder } from './ScheduleBuilder'
 
 interface LoadTestRunnerProps {
@@ -45,6 +47,8 @@ export function LoadTestRunner({
   profile: initialProfile,
 }: LoadTestRunnerProps) {
   const [isRunning, setIsRunning] = useState(false)
+  const [verbose, setVerbose] = useState(false)
+  const [httpDebug, setHttpDebug] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
 
   // A script that declares `scenarios` was scheduled deliberately — possibly
@@ -72,6 +76,8 @@ export function LoadTestRunner({
   const canRun = isRunnableProfile(profile)
 
   const { stats, resetStats } = useRunStats()
+  const { logs, resetLogs } = useRunLogs()
+  const { checks, resetChecks } = useRunChecks()
 
   // A run can fail before it produces a single metric — archiving, a syntax
   // error, an invalid option — and k6 reports those as error log entries.
@@ -97,6 +103,8 @@ export function LoadTestRunner({
     }
 
     resetStats()
+    resetLogs()
+    resetChecks()
     setErrors([])
     setIsRunning(true)
 
@@ -104,13 +112,25 @@ export function LoadTestRunner({
       .runLoadTest({
         path: scriptPath,
         content,
+        verbose,
+        httpDebug,
         ...(override ? toProfileOverrides(profile) : {}),
       })
       .catch((error: Error) => {
         setIsRunning(false)
         setErrors((previous) => [...previous, error.message])
       })
-  }, [content, override, profile, resetStats, scriptPath])
+  }, [
+    content,
+    override,
+    profile,
+    verbose,
+    httpDebug,
+    resetChecks,
+    resetLogs,
+    resetStats,
+    scriptPath,
+  ])
 
   const handleStop = useCallback(() => {
     window.studio.script.stopScript()
@@ -135,6 +155,26 @@ export function LoadTestRunner({
             <PlayIcon /> Start
           </Button>
         )}
+        <Text as="label" size="2" color="gray">
+          <Flex gap="2" align="center">
+            <Checkbox
+              checked={verbose}
+              disabled={isRunning}
+              onCheckedChange={(checked) => setVerbose(checked === true)}
+            />
+            Verbose logs
+          </Flex>
+        </Text>
+        <Text as="label" size="2" color="gray">
+          <Flex gap="2" align="center">
+            <Checkbox
+              checked={httpDebug}
+              disabled={isRunning}
+              onCheckedChange={(checked) => setHttpDebug(checked === true)}
+            />
+            Log requests
+          </Flex>
+        </Text>
         {declaresScenarios && (
           <Text as="label" size="2">
             <Flex gap="2" align="center">
@@ -234,7 +274,13 @@ export function LoadTestRunner({
           </ScrollArea>
         )}
         <Flex direction="column" flexGrow="1" minHeight="0" minWidth="0">
-          <MetricsSection stats={stats} />
+          <ExecutionDetails
+            isRunning={isRunning}
+            logs={logs}
+            checks={checks}
+            stats={stats}
+            defaultTab="metrics"
+          />
         </Flex>
       </Flex>
     </Flex>

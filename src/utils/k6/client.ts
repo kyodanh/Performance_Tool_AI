@@ -51,6 +51,10 @@ interface InspectArgs {
 interface RunArgs {
   path: string
   quiet?: boolean
+  /** Raises k6's log level to debug, so the run streams its own diagnostics. */
+  verbose?: boolean
+  /** Logs every request and response, bodies included (k6 `--http-debug`). */
+  httpDebug?: boolean
   insecureSkipTLSVerify?: boolean
   noUsageReport?: boolean
   /**
@@ -173,6 +177,8 @@ export class K6Client {
   run({
     path,
     quiet,
+    verbose,
+    httpDebug,
     insecureSkipTLSVerify,
     noUsageReport,
     metrics,
@@ -185,6 +191,9 @@ export class K6Client {
     const args = [
       ['--log-format', 'json'],
       quiet && '--quiet',
+      verbose && '--verbose',
+      // One token: the flag's implicit value binds only with `=`.
+      httpDebug && '--http-debug=full',
       insecureSkipTLSVerify && '--insecure-skip-tls-verify',
       noUsageReport && '--no-usage-report',
       metrics && ['--out', 'csv=-'],

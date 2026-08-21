@@ -41,6 +41,9 @@ export function LogsTable({ logs }: LogsTableProps) {
           font-family: var(--code-font-family);
           font-size: 13px;
           padding: var(--space-2) var(--space-1);
+          /* Grid columns default to their content's width, so a long line —
+             a request body logged by k6 — would stretch the table. */
+          min-width: 0;
         }
       `}
     >
@@ -77,6 +80,12 @@ export function LogsTable({ logs }: LogsTableProps) {
               <pre
                 css={css`
                   margin: 0;
+                  white-space: pre-wrap;
+                  overflow-wrap: anywhere;
+                  /* ponytail: a logged body can be megabytes — scroll it inside
+                     its own row rather than paging the whole console. */
+                  max-height: 16em;
+                  overflow: auto;
                 `}
               >
                 {entry.msg}

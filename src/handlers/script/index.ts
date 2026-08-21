@@ -95,7 +95,15 @@ export function initialize() {
     ScriptHandler.RunLoad,
     async (
       event,
-      { path: scriptPath, content, vus, iterations, stages }: RunLoadTestOptions
+      {
+        path: scriptPath,
+        content,
+        vus,
+        iterations,
+        stages,
+        verbose,
+        httpDebug,
+      }: RunLoadTestOptions
     ) => {
       console.info(`${ScriptHandler.RunLoad} event received`)
 
@@ -118,6 +126,8 @@ export function initialize() {
           vus,
           iterations,
           stages,
+          verbose,
+          httpDebug,
         })
       } catch (error) {
         browserWindow.webContents.send(ScriptHandler.Failed)

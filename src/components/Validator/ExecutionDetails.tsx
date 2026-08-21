@@ -22,6 +22,8 @@ interface ExecutionDetailsProps {
   logs: LogEntry[]
   checks: Check[]
   stats?: RunStats | null
+  /** Tab to open on, for callers whose main view is not the script or logs. */
+  defaultTab?: Tab
 }
 
 export function ExecutionDetails({
@@ -30,9 +32,10 @@ export function ExecutionDetails({
   logs,
   checks,
   stats = null,
+  defaultTab,
 }: ExecutionDetailsProps) {
   const [selectedTab, setSelectedTab] = useState<Tab>(
-    script !== undefined ? 'script' : 'logs'
+    defaultTab ?? (script !== undefined ? 'script' : 'logs')
   )
 
   const consoleFilter = useConsoleFilter({

@@ -194,6 +194,8 @@ interface RunLoadTestOptions extends LoadProfileOverrides {
   scriptPath: string
   usageReport: boolean
   browserWindow: BrowserWindow
+  verbose?: boolean
+  httpDebug?: boolean
 }
 
 /**
@@ -212,6 +214,8 @@ export const runLoadTest = async ({
   vus,
   iterations,
   stages,
+  verbose,
+  httpDebug,
 }: RunLoadTestOptions) => {
   const client = new K6Client()
 
@@ -224,6 +228,8 @@ export const runLoadTest = async ({
   const testRun = client.run({
     path: TEMP_K6_LOAD_ARCHIVE_PATH,
     quiet: true,
+    verbose,
+    httpDebug,
     insecureSkipTLSVerify: true,
     noUsageReport: !usageReport,
     metrics: true,
