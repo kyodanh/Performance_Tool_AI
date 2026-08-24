@@ -3,9 +3,12 @@ import {
   Box,
   Button,
   Callout,
+  Card,
   DataList,
   Dialog,
   Flex,
+  Grid,
+  Heading,
   Link,
   ScrollArea,
   Text,
@@ -18,8 +21,13 @@ import { RunStats, StatsBucket } from '@/utils/k6/stats'
 import { ChecksTable } from './ChecksTable'
 import { ErrorsTable } from './ErrorsTable'
 import { formatBytes, formatCount, formatDuration, formatTime } from './format'
+import {
+  MAX_SERIES,
+  MetricPanel,
+  PanelSeries,
+  seriesStyle,
+} from './MetricPanel'
 import { Sparkline } from './Sparkline'
-import { TransactionChart } from './TransactionChart'
 import { TransactionsTable } from './TransactionsTable'
 
 /**
@@ -58,6 +66,20 @@ const SERIES: Array<{
   },
 ]
 
+/** Counts on an axis: whole numbers, but a midpoint of 0.5 stays visible. */
+function formatAxisCount(value: number) {
+  return value.toFixed(Number.isInteger(value) ? 0 : 1)
+}
+
+const PHASES: Array<{ label: string; key: keyof RunStats['timings'] }> = [
+  { label: 'Blocked', key: 'blocked' },
+  { label: 'Connecting', key: 'connecting' },
+  { label: 'TLS handshake', key: 'tlsHandshaking' },
+  { label: 'Sending', key: 'sending' },
+  { label: 'Waiting (TTFB)', key: 'waiting' },
+  { label: 'Receiving', key: 'receiving' },
+]
+
 type Detail = 'transactions' | 'errors'
 
 interface MetricsSectionProps {
@@ -89,145 +111,51 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
   )
   const errorCount = stats.errors.reduce((sum, error) => sum + error.count, 0)
   // The charts plot the buckets, so their axis spans those, not stats.elapsed.
-  const span = (stats.buckets.at(-1)?.time ?? 0) - (stats.buckets[0]?.time ?? 0)
+  const start = stats.buckets[0]?.time ?? 0
+  const end = stats.buckets.at(-1)?.time ?? 0
+  const span = end - start
+
+  const samples = (select: (bucket: StatsBucket) => number) =>
+    stats.buckets.map((bucket) => ({
+      time: bucket.time,
+      value: select(bucket),
+    }))
+
+  const line = (
+    name: string,
+    index: number,
+    select: (bucket: StatsBucket) => number
+  ): PanelSeries => ({
+    name,
+    ...seriesStyle(index),
+    samples: samples(select),
+  })
+
+  const transactions: PanelSeries[] = stats.groups
+    .filter((group) => group.series.length > 0)
+    .slice(0, MAX_SERIES)
+    .map((group, index) => ({
+      name: group.name,
+      ...seriesStyle(index),
+      samples: group.series.map((sample) => ({
+        time: sample.time,
+        value: sample.value,
+      })),
+    }))
+
+  const maxPhase = Math.max(
+    ...PHASES.map((phase) => stats.timings[phase.key]),
+    1
+  )
 
   return (
     <ScrollArea scrollbars="vertical">
-      <Flex direction="column" gap="3" p="3">
-        <DataList.Root size="1" orientation="horizontal">
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Running VUs</DataList.Label>
-            <DataList.Value>
-              {stats.vus} / {stats.vusMax}
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Elapsed time</DataList.Label>
-            <DataList.Value>{formatDuration(stats.elapsed)}</DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Hits/second</DataList.Label>
-            <DataList.Value>
-              {hitsPerSecond(stats.buckets).toFixed(2)} (last 60 sec)
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Passed transactions</DataList.Label>
-            <DataList.Value>
-              <Counter
-                value={passed}
-                color="green"
-                onClick={() => setDetail('transactions')}
-              />
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Failed transactions</DataList.Label>
-            <DataList.Value>
-              <Counter
-                value={failed}
-                color={failed > 0 ? 'red' : 'gray'}
-                onClick={() => setDetail('transactions')}
-              />
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Errors</DataList.Label>
-            <DataList.Value>
-              <Counter
-                value={errorCount}
-                color={errorCount > 0 ? 'red' : 'gray'}
-                onClick={() => setDetail('errors')}
-              />
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Checks</DataList.Label>
-            <DataList.Value>
-              {formatCount(stats.checksPassed)} passed /{' '}
-              <Text color={stats.checksFailed > 0 ? 'red' : undefined}>
-                {formatCount(stats.checksFailed)} failed
-              </Text>
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Requests</DataList.Label>
-            <DataList.Value>
-              {formatCount(stats.requests)} ({formatCount(stats.failedRequests)}{' '}
-              failed)
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Iterations</DataList.Label>
-            <DataList.Value>
-              {formatCount(stats.iterations)}
-              {stats.droppedIterations > 0 && (
-                <Text color="red">
-                  {' '}
-                  ({formatCount(stats.droppedIterations)} dropped)
-                </Text>
-              )}
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Response time</DataList.Label>
-            <DataList.Value>
-              {formatTime(stats.avgDuration)} avg /{' '}
-              {formatTime(stats.maxDuration)} max
-            </DataList.Value>
-          </DataList.Item>
-          <DataList.Item>
-            <DataList.Label minWidth="88px">Data received</DataList.Label>
-            <DataList.Value>{formatBytes(stats.dataReceived)}</DataList.Value>
-          </DataList.Item>
-        </DataList.Root>
-
-        <Section title="Response time breakdown">
-          <DataList.Root size="1" orientation="horizontal">
-            <DataList.Item>
-              <DataList.Label minWidth="88px">Blocked</DataList.Label>
-              <DataList.Value>
-                {formatTime(stats.timings.blocked)}
-              </DataList.Value>
-            </DataList.Item>
-            <DataList.Item>
-              <DataList.Label minWidth="88px">Connecting</DataList.Label>
-              <DataList.Value>
-                {formatTime(stats.timings.connecting)}
-              </DataList.Value>
-            </DataList.Item>
-            <DataList.Item>
-              <DataList.Label minWidth="88px">TLS handshake</DataList.Label>
-              <DataList.Value>
-                {formatTime(stats.timings.tlsHandshaking)}
-              </DataList.Value>
-            </DataList.Item>
-            <DataList.Item>
-              <DataList.Label minWidth="88px">Sending</DataList.Label>
-              <DataList.Value>
-                {formatTime(stats.timings.sending)}
-              </DataList.Value>
-            </DataList.Item>
-            <DataList.Item>
-              <DataList.Label minWidth="88px">Waiting (TTFB)</DataList.Label>
-              <DataList.Value>
-                {formatTime(stats.timings.waiting)}
-              </DataList.Value>
-            </DataList.Item>
-            <DataList.Item>
-              <DataList.Label minWidth="88px">Receiving</DataList.Label>
-              <DataList.Value>
-                {formatTime(stats.timings.receiving)}
-              </DataList.Value>
-            </DataList.Item>
-          </DataList.Root>
-          <Text size="1" color="gray">
-            Blocked/connecting/TLS/sending time points at the client or network;
-            waiting (time to first byte) points at the target.
-          </Text>
-        </Section>
-
-        <Flex gap="3" wrap="wrap">
+      <Flex direction="column" gap="4" p="3">
+        <Grid
+          columns="repeat(auto-fit, minmax(190px, 1fr))"
+          gap="3"
+          align="start"
+        >
           {SERIES.map(({ label, select, format }) => {
             const values = stats.buckets.map(select)
 
@@ -242,16 +170,217 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
               />
             )
           })}
-        </Flex>
+        </Grid>
 
-        {stats.groups.length > 0 && (
-          <Section title="Transaction response time">
-            <TransactionChart
-              groups={stats.groups}
-              start={stats.buckets[0]?.time ?? 0}
-              end={stats.buckets.at(-1)?.time ?? 0}
-            />
-          </Section>
+        <Grid
+          columns="repeat(auto-fit, minmax(320px, 1fr))"
+          gap="3"
+          align="start"
+        >
+          <Card size="2">
+            <Flex direction="column" gap="2">
+              <SectionTitle>Summary</SectionTitle>
+              <DataList.Root size="1" orientation="horizontal">
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Running VUs</DataList.Label>
+                  <DataList.Value>
+                    {stats.vus} / {stats.vusMax}
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Elapsed time</DataList.Label>
+                  <DataList.Value>
+                    {formatDuration(stats.elapsed)}
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Hits/second</DataList.Label>
+                  <DataList.Value>
+                    {hitsPerSecond(stats.buckets).toFixed(2)} (last 60 sec)
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">
+                    Passed transactions
+                  </DataList.Label>
+                  <DataList.Value>
+                    <Counter
+                      value={passed}
+                      color="green"
+                      onClick={() => setDetail('transactions')}
+                    />
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">
+                    Failed transactions
+                  </DataList.Label>
+                  <DataList.Value>
+                    <Counter
+                      value={failed}
+                      color={failed > 0 ? 'red' : 'gray'}
+                      onClick={() => setDetail('transactions')}
+                    />
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Errors</DataList.Label>
+                  <DataList.Value>
+                    <Counter
+                      value={errorCount}
+                      color={errorCount > 0 ? 'red' : 'gray'}
+                      onClick={() => setDetail('errors')}
+                    />
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Checks</DataList.Label>
+                  <DataList.Value>
+                    {formatCount(stats.checksPassed)} passed /{' '}
+                    <Text color={stats.checksFailed > 0 ? 'red' : undefined}>
+                      {formatCount(stats.checksFailed)} failed
+                    </Text>
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Requests</DataList.Label>
+                  <DataList.Value>
+                    {formatCount(stats.requests)} (
+                    {formatCount(stats.failedRequests)} failed)
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Iterations</DataList.Label>
+                  <DataList.Value>
+                    {formatCount(stats.iterations)}
+                    {stats.droppedIterations > 0 && (
+                      <Text color="red">
+                        {' '}
+                        ({formatCount(stats.droppedIterations)} dropped)
+                      </Text>
+                    )}
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Response time</DataList.Label>
+                  <DataList.Value>
+                    {formatTime(stats.avgDuration)} avg /{' '}
+                    {formatTime(stats.maxDuration)} max
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Data received</DataList.Label>
+                  <DataList.Value>
+                    {formatBytes(stats.dataReceived)}
+                  </DataList.Value>
+                </DataList.Item>
+              </DataList.Root>
+            </Flex>
+          </Card>
+
+          <Card size="2">
+            <Flex direction="column" gap="2">
+              <SectionTitle>Response time breakdown</SectionTitle>
+              <Flex direction="column">
+                {PHASES.map(({ label, key }) => (
+                  <Grid
+                    key={key}
+                    columns="minmax(80px, 110px) 1fr 64px"
+                    gap="3"
+                    align="center"
+                    py="1"
+                  >
+                    <Text size="1" color="gray">
+                      {label}
+                    </Text>
+                    <Box
+                      css={css`
+                        height: 6px;
+                        border-radius: var(--radius-1);
+                        background-color: var(--gray-4);
+                        overflow: hidden;
+                      `}
+                    >
+                      <Box
+                        css={css`
+                          height: 100%;
+                          width: ${(
+                            (stats.timings[key] / maxPhase) *
+                            100
+                          ).toFixed(1)}%;
+                          background-color: ${key === 'waiting'
+                            ? 'var(--accent-9)'
+                            : 'var(--accent-7)'};
+                        `}
+                      />
+                    </Box>
+                    <Text size="1" weight="medium" align="right">
+                      {formatTime(stats.timings[key])}
+                    </Text>
+                  </Grid>
+                ))}
+              </Flex>
+              <Text size="1" color="gray">
+                Blocked/connecting/TLS/sending time points at the client or
+                network; waiting (time to first byte) points at the target.
+              </Text>
+            </Flex>
+          </Card>
+        </Grid>
+
+        <Flex justify="between" align="baseline" gap="3">
+          <Heading size="3">Whole load test</Heading>
+          <Text size="1" color="gray">
+            {formatDuration(0)} → {formatDuration(span)}
+          </Text>
+        </Flex>
+        <Grid
+          columns="repeat(auto-fit, minmax(320px, 1fr))"
+          gap="3"
+          align="start"
+        >
+          <MetricPanel
+            title="Running VUsers"
+            unit="# of VUsers"
+            series={[line('Running', 0, (bucket) => bucket.vus)]}
+            start={start}
+            end={end}
+            format={formatAxisCount}
+          />
+          <MetricPanel
+            title="Trans response time"
+            unit="sec"
+            series={transactions}
+            start={start}
+            end={end}
+            format={formatTime}
+          />
+          <MetricPanel
+            title="Hits per second"
+            unit="# hits/sec"
+            series={[
+              line('Hits', 0, (bucket) => bucket.requests),
+              line('Failed', 1, (bucket) => bucket.failed),
+            ]}
+            start={start}
+            end={end}
+            format={formatAxisCount}
+          />
+          <MetricPanel
+            title="Throughput"
+            unit="bytes/sec"
+            series={[line('Received', 0, (bucket) => bucket.throughput)]}
+            start={start}
+            end={end}
+            format={formatBytes}
+          />
+        </Grid>
+
+        {transactions.length < stats.groups.length && (
+          <Text size="1" color="gray">
+            The response time chart draws the first {MAX_SERIES} transactions —
+            the rest keep their numbers in the table below.
+          </Text>
         )}
 
         {stats.groups.length > 0 && (
@@ -348,6 +477,23 @@ function Counter({
         {formatCount(value)}
       </button>
     </Link>
+  )
+}
+
+/** The all-caps card heading a controller labels its panels with. */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <Text
+      size="1"
+      color="gray"
+      weight="medium"
+      css={css`
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      `}
+    >
+      {children}
+    </Text>
   )
 }
 

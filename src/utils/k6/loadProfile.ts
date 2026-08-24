@@ -107,3 +107,40 @@ export function describeProfile(profile: LoadProfileExecutorOptions): string {
 
   return stages.join(', ') || 'no stages'
 }
+
+const DURATION_UNITS: Record<string, number> = {
+  h: 3600,
+  m: 60,
+  s: 1,
+  ms: 0.001,
+}
+
+/** Seconds in a k6 duration such as `1h30m`, `90s` or `500ms`. */
+export function parseK6Duration(value: string): number {
+  let total = 0
+
+  for (const [, amount, unit] of value.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)) {
+    total += Number(amount) * (DURATION_UNITS[unit ?? ''] ?? 0)
+  }
+
+  return total
+}
+
+/**
+ * How long the run is scheduled to last, for a progress readout. Iteration-based
+ * profiles finish when the work does, not on a clock, so they have no answer.
+ */
+export function profileSeconds(
+  profile: LoadProfileExecutorOptions
+): number | null {
+  if (profile.executor === 'shared-iterations') {
+    return null
+  }
+
+  const total = profile.stages.reduce(
+    (sum, stage) => sum + parseK6Duration(stage.duration),
+    0
+  )
+
+  return total > 0 ? total : null
+}

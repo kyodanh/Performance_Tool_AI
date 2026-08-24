@@ -73,6 +73,26 @@ export function ExecutionDetails({
       <Tabs.List
         css={css`
           flex-shrink: 0;
+          align-self: flex-start;
+          margin-bottom: var(--space-3);
+          padding: var(--space-1);
+          border-radius: var(--radius-6);
+          background-color: var(--gray-3);
+          box-shadow: none;
+          --tab-inner-border-radius: var(--radius-6);
+
+          /* a pill has no underline indicator */
+          & > button::before {
+            display: none;
+          }
+
+          & > button[data-state='active'] {
+            color: var(--accent-contrast);
+          }
+
+          & > button[data-state='active'] .rt-BaseTabListTriggerInner {
+            background-color: var(--accent-9);
+          }
         `}
       >
         <Tabs.Trigger value="logs">Logs ({logs.length})</Tabs.Trigger>

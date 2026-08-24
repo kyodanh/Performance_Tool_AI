@@ -13,8 +13,8 @@ import {
 import { ChecksTable } from './ChecksTable'
 import { ErrorsTable } from './ErrorsTable'
 import { formatCount, formatTime } from './format'
+import { SERIES_COLORS, SERIES_DASHES, chartedSeries } from './MetricPanel'
 import { RequestsTable } from './RequestsTable'
-import { SERIES_COLORS, SERIES_DASHES, chartedSeries } from './TransactionChart'
 
 function tps(count: number, elapsed: number) {
   return (count / Math.max(1, elapsed)).toFixed(2)

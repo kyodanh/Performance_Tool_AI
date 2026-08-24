@@ -2,8 +2,10 @@ import { css } from '@emotion/react'
 import {
   Button,
   Callout,
+  Card,
   Checkbox,
   Flex,
+  Progress,
   ScrollArea,
   Text,
 } from '@radix-ui/themes'
@@ -19,12 +21,14 @@ import { LoadProfileExecutorOptions } from '@/types/testOptions'
 import {
   describeProfile,
   isRunnableProfile,
+  profileSeconds,
   toLoadProfile,
   toProfileOverrides,
 } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
 
 import { ExecutionDetails } from './ExecutionDetails'
+import { formatDuration } from './format'
 import { ScheduleBuilder } from './ScheduleBuilder'
 
 interface LoadTestRunnerProps {
@@ -74,6 +78,10 @@ export function LoadTestRunner({
   // would fall back to the script's own profile while this panel claims
   // otherwise.
   const canRun = isRunnableProfile(profile)
+
+  // Iteration-based profiles finish when the work does, so there is no clock to
+  // show progress against.
+  const planned = profileSeconds(profile)
 
   const { stats, resetStats } = useRunStats()
   const { logs, resetLogs } = useRunLogs()
@@ -143,12 +151,13 @@ export function LoadTestRunner({
         {isRunning ? (
           <Flex gap="3" align="center">
             <TextSpinner text="Running" />
-            <Button variant="outline" onClick={handleStop}>
+            <Button color="red" radius="full" onClick={handleStop}>
               <SquareIcon /> Stop
             </Button>
           </Flex>
         ) : (
           <Button
+            radius="full"
             onClick={handleStart}
             disabled={scriptPath === null || (override && !canRun)}
           >
@@ -238,9 +247,27 @@ export function LoadTestRunner({
             `}
           >
             <ScheduleBuilder onChange={setProfile} disabled={isRunning} />
-            <Text as="p" size="1" color="gray" mt="3">
-              k6 runs: {describeProfile(profile)}
-            </Text>
+            <Card size="2" mt="3">
+              <details
+                css={css`
+                  summary {
+                    cursor: pointer;
+                    font-size: var(--font-size-1);
+                    color: var(--gray-11);
+                  }
+                `}
+              >
+                <summary>About the load profile</summary>
+                <Text as="p" size="1" color="gray" mt="2">
+                  A gradual start becomes a linear ramp of the same length — k6
+                  interpolates between stages instead of stepping. Running until
+                  completion runs one iteration per VU.
+                </Text>
+              </details>
+              <Text as="p" size="1" color="gray" mt="2">
+                k6 runs: {describeProfile(profile)}
+              </Text>
+            </Card>
             <details
               css={css`
                 margin-top: var(--space-3);
@@ -271,6 +298,34 @@ export function LoadTestRunner({
                 />
               </fieldset>
             </details>
+            <Card size="2" mt="3">
+              <Flex direction="column" gap="2">
+                <Flex justify="between" align="baseline" gap="2">
+                  <Text
+                    size="1"
+                    color="gray"
+                    weight="medium"
+                    css={css`
+                      text-transform: uppercase;
+                      letter-spacing: 0.08em;
+                    `}
+                  >
+                    Current run
+                  </Text>
+                  <Text size="3" weight="bold">
+                    {formatDuration(stats?.elapsed ?? 0)}
+                  </Text>
+                </Flex>
+                {planned !== null && (
+                  <Progress
+                    value={Math.min(
+                      100,
+                      ((stats?.elapsed ?? 0) / planned) * 100
+                    )}
+                  />
+                )}
+              </Flex>
+            </Card>
           </ScrollArea>
         )}
         <Flex direction="column" flexGrow="1" minHeight="0" minWidth="0">

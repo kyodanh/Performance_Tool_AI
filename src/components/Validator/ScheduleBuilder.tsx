@@ -1,5 +1,5 @@
 import { css } from '@emotion/react'
-import { Flex, RadioGroup, Text, TextField } from '@radix-ui/themes'
+import { Card, Flex, RadioGroup, Text, TextField } from '@radix-ui/themes'
 import { useState } from 'react'
 
 import { LoadProfileExecutorOptions } from '@/types/testOptions'
@@ -12,6 +12,23 @@ import {
 interface ScheduleBuilderProps {
   onChange: (profile: LoadProfileExecutorOptions) => void
   disabled?: boolean
+}
+
+/** The all-caps card heading a controller labels its panels with. */
+function PanelTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <Text
+      size="1"
+      color="gray"
+      weight="medium"
+      css={css`
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      `}
+    >
+      {children}
+    </Text>
+  )
 }
 
 /**
@@ -35,93 +52,103 @@ export function ScheduleBuilder({ onChange, disabled }: ScheduleBuilderProps) {
 
   return (
     <Flex direction="column" gap="3">
-      <Flex gap="2" align="center">
-        <Text size="2">Start</Text>
-        <TextField.Root
-          type="number"
-          min="1"
-          value={String(schedule.vus)}
-          disabled={disabled}
-          onChange={(event) => set('vus', Number(event.target.value))}
-          css={css`
-            width: 70px;
-          `}
-        />
-        <Text size="2">Vusers</Text>
-      </Flex>
+      <Card size="2">
+        <Flex direction="column" gap="3">
+          <Flex justify="between" align="center" gap="2">
+            <PanelTitle>Virtual users</PanelTitle>
+            <Flex gap="2" align="center">
+              <TextField.Root
+                type="number"
+                min="1"
+                size="1"
+                value={String(schedule.vus)}
+                disabled={disabled}
+                onChange={(event) => set('vus', Number(event.target.value))}
+                css={css`
+                  width: 60px;
+                `}
+              />
+              <Text size="1" color="gray">
+                Vusers
+              </Text>
+            </Flex>
+          </Flex>
 
-      <RadioGroup.Root
-        size="1"
-        value={schedule.startMode}
-        disabled={disabled}
-        onValueChange={(value) =>
-          set('startMode', value as Schedule['startMode'])
-        }
-      >
-        <RadioGroup.Item value="simultaneous">Simultaneously</RadioGroup.Item>
-        <Flex gap="2" align="center" mt="1">
-          <RadioGroup.Item value="gradual" />
-          <TextField.Root
-            type="number"
-            min="1"
-            value={String(schedule.stepVus)}
-            disabled={disabled || schedule.startMode !== 'gradual'}
-            onChange={(event) => set('stepVus', Number(event.target.value))}
-            css={css`
-              width: 60px;
-            `}
-          />
-          <Text size="2">Vusers every</Text>
-          <TextField.Root
-            value={schedule.stepEvery}
-            disabled={disabled || schedule.startMode !== 'gradual'}
-            onChange={(event) => set('stepEvery', event.target.value)}
-            css={css`
-              width: 90px;
-            `}
-          />
-          <Text size="1" color="gray">
-            (HH:MM:SS)
-          </Text>
+          <RadioGroup.Root
+            size="1"
+            value={schedule.startMode}
+            disabled={disabled}
+            onValueChange={(value) =>
+              set('startMode', value as Schedule['startMode'])
+            }
+          >
+            <RadioGroup.Item value="simultaneous">
+              Simultaneously
+            </RadioGroup.Item>
+            <Flex gap="2" align="center" mt="1" wrap="wrap">
+              <RadioGroup.Item value="gradual" />
+              <TextField.Root
+                type="number"
+                min="1"
+                size="1"
+                value={String(schedule.stepVus)}
+                disabled={disabled || schedule.startMode !== 'gradual'}
+                onChange={(event) => set('stepVus', Number(event.target.value))}
+                css={css`
+                  width: 56px;
+                `}
+              />
+              <Text size="2">Vusers every</Text>
+              <TextField.Root
+                size="1"
+                value={schedule.stepEvery}
+                disabled={disabled || schedule.startMode !== 'gradual'}
+                onChange={(event) => set('stepEvery', event.target.value)}
+                css={css`
+                  width: 84px;
+                `}
+              />
+              <Text size="1" color="gray">
+                (HH:MM:SS)
+              </Text>
+            </Flex>
+          </RadioGroup.Root>
         </Flex>
-      </RadioGroup.Root>
+      </Card>
 
-      <Text size="2" weight="medium">
-        Duration
-      </Text>
-      <RadioGroup.Root
-        size="1"
-        value={schedule.durationMode}
-        disabled={disabled}
-        onValueChange={(value) =>
-          set('durationMode', value as Schedule['durationMode'])
-        }
-      >
-        <RadioGroup.Item value="completion">
-          Run until completion
-        </RadioGroup.Item>
-        <Flex gap="2" align="center" mt="1">
-          <RadioGroup.Item value="runFor" />
-          <Text size="2">Run for</Text>
-          <TextField.Root
-            value={schedule.runFor}
-            disabled={disabled || schedule.durationMode !== 'runFor'}
-            onChange={(event) => set('runFor', event.target.value)}
-            css={css`
-              width: 90px;
-            `}
-          />
-          <Text size="1" color="gray">
-            (HH:MM:SS)
-          </Text>
+      <Card size="2">
+        <Flex direction="column" gap="3">
+          <PanelTitle>Duration</PanelTitle>
+          <RadioGroup.Root
+            size="1"
+            value={schedule.durationMode}
+            disabled={disabled}
+            onValueChange={(value) =>
+              set('durationMode', value as Schedule['durationMode'])
+            }
+          >
+            <RadioGroup.Item value="completion">
+              Run until completion
+            </RadioGroup.Item>
+            <Flex gap="2" align="center" mt="1" wrap="wrap">
+              <RadioGroup.Item value="runFor" />
+              <Text size="2">Run for</Text>
+              <TextField.Root
+                size="1"
+                value={schedule.runFor}
+                disabled={disabled || schedule.durationMode !== 'runFor'}
+                onChange={(event) => set('runFor', event.target.value)}
+                css={css`
+                  width: 84px;
+                `}
+              />
+              <Text size="1" color="gray">
+                (HH:MM:SS)
+              </Text>
+            </Flex>
+          </RadioGroup.Root>
         </Flex>
-      </RadioGroup.Root>
-
-      <Text size="1" color="gray">
-        A gradual start becomes a linear ramp of the same length — k6
-        interpolates between stages instead of stepping. Running until
-        completion runs one iteration per VU.
-      </Text>
+      </Card>
     </Flex>
   )
 }

@@ -5,6 +5,7 @@ import { newSyntheticKey } from '@/utils/zod'
 import {
   describeProfile,
   isRunnableProfile,
+  profileSeconds,
   toLoadProfile,
   toProfileOverrides,
 } from './loadProfile'
@@ -119,5 +120,34 @@ describe('isRunnableProfile', () => {
         iterations: 1,
       })
     ).toBe(true)
+  })
+})
+
+describe('profileSeconds', () => {
+  it('sums the stage durations', () => {
+    expect(
+      profileSeconds({
+        executor: 'ramping-vus',
+        stages: [
+          { key: newSyntheticKey(), duration: '1m40s', target: 100 },
+          { key: newSyntheticKey(), duration: '1h', target: 100 },
+          { key: newSyntheticKey(), duration: '500ms', target: 0 },
+        ],
+      })
+    ).toBe(3700.5)
+  })
+
+  it('has no duration for an iteration-based profile', () => {
+    expect(
+      profileSeconds({
+        executor: 'shared-iterations',
+        vus: 10,
+        iterations: 100,
+      })
+    ).toBeNull()
+  })
+
+  it('has no duration when nothing is scheduled', () => {
+    expect(profileSeconds({ executor: 'ramping-vus', stages: [] })).toBeNull()
   })
 })
