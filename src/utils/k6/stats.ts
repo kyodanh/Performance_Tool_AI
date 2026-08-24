@@ -103,6 +103,22 @@ export interface GroupStats {
   series: GroupSample[]
 }
 
+/**
+ * Where `http_req_duration` actually goes, broken out into k6's request
+ * phases — averaged in milliseconds across the whole run. `waiting` is time to
+ * first byte on the server; the others (`blocked`, `connecting`,
+ * `tlsHandshaking`, `sending`) are spent setting up or writing the request and
+ * point at the client/network rather than the server.
+ */
+export interface RequestTimingBreakdown {
+  blocked: number
+  connecting: number
+  tlsHandshaking: number
+  sending: number
+  waiting: number
+  receiving: number
+}
+
 export interface RunStats {
   buckets: StatsBucket[]
   /** Seconds between the first and the newest sample seen. */
@@ -112,11 +128,18 @@ export interface RunStats {
   requests: number
   failedRequests: number
   iterations: number
+  /**
+   * Iterations k6 couldn't start because the client ran out of headroom for
+   * the configured arrival rate — a sign the run is limited by the machine
+   * running k6, not by the target.
+   */
+  droppedIterations: number
   checksPassed: number
   checksFailed: number
   dataReceived: number
   avgDuration: number
   maxDuration: number
+  timings: RequestTimingBreakdown
   groups: GroupStats[]
   /** Per-request breakdown, one row per method + name + status. */
   requestStats: RequestStats[]
@@ -225,12 +248,30 @@ export class RunStatsCollector {
   #requests = 0
   #failedRequests = 0
   #iterations = 0
+  #droppedIterations = 0
   #checksPassed = 0
   #checksFailed = 0
   #dataReceived = 0
   #durationSum = 0
   #durationCount = 0
   #maxDuration = 0
+
+  #timingSums: RequestTimingBreakdown = {
+    blocked: 0,
+    connecting: 0,
+    tlsHandshaking: 0,
+    sending: 0,
+    waiting: 0,
+    receiving: 0,
+  }
+  #timingCounts: RequestTimingBreakdown = {
+    blocked: 0,
+    connecting: 0,
+    tlsHandshaking: 0,
+    sending: 0,
+    waiting: 0,
+    receiving: 0,
+  }
 
   get hasData() {
     return this.#buckets.size > 0
@@ -320,6 +361,40 @@ export class RunStatsCollector {
         this.#iterations += value
         break
 
+      case 'dropped_iterations':
+        this.#droppedIterations += value
+        break
+
+      case 'http_req_blocked':
+        this.#timingSums.blocked += value
+        this.#timingCounts.blocked += 1
+        break
+
+      case 'http_req_connecting':
+        this.#timingSums.connecting += value
+        this.#timingCounts.connecting += 1
+        break
+
+      case 'http_req_tls_handshaking':
+        this.#timingSums.tlsHandshaking += value
+        this.#timingCounts.tlsHandshaking += 1
+        break
+
+      case 'http_req_sending':
+        this.#timingSums.sending += value
+        this.#timingCounts.sending += 1
+        break
+
+      case 'http_req_waiting':
+        this.#timingSums.waiting += value
+        this.#timingCounts.waiting += 1
+        break
+
+      case 'http_req_receiving':
+        this.#timingSums.receiving += value
+        this.#timingCounts.receiving += 1
+        break
+
       case 'checks':
         if (value === 1) {
           this.#checksPassed += 1
@@ -400,6 +475,11 @@ export class RunStatsCollector {
       (a, b) => b.fails - a.fails || a.name.localeCompare(b.name)
     )
 
+    const phaseAvg = (phase: keyof RequestTimingBreakdown) =>
+      this.#timingCounts[phase]
+        ? this.#timingSums[phase] / this.#timingCounts[phase]
+        : 0
+
     return {
       buckets,
       groups,
@@ -411,6 +491,7 @@ export class RunStatsCollector {
       requests: this.#requests,
       failedRequests: this.#failedRequests,
       iterations: this.#iterations,
+      droppedIterations: this.#droppedIterations,
       checksPassed: this.#checksPassed,
       checksFailed: this.#checksFailed,
       dataReceived: this.#dataReceived,
@@ -418,6 +499,14 @@ export class RunStatsCollector {
         ? this.#durationSum / this.#durationCount
         : 0,
       maxDuration: this.#maxDuration,
+      timings: {
+        blocked: phaseAvg('blocked'),
+        connecting: phaseAvg('connecting'),
+        tlsHandshaking: phaseAvg('tlsHandshaking'),
+        sending: phaseAvg('sending'),
+        waiting: phaseAvg('waiting'),
+        receiving: phaseAvg('receiving'),
+      },
       errors: [...this.#errors.values()].sort((a, b) => b.count - a.count),
     }
   }
@@ -627,8 +716,15 @@ const KNOWN_METRICS = new Set([
   'http_reqs',
   'http_req_failed',
   'http_req_duration',
+  'http_req_blocked',
+  'http_req_connecting',
+  'http_req_tls_handshaking',
+  'http_req_sending',
+  'http_req_waiting',
+  'http_req_receiving',
   'data_received',
   'iterations',
+  'dropped_iterations',
   'checks',
   'group_duration',
 ])

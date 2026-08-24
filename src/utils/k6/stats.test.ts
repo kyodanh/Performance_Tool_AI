@@ -298,6 +298,34 @@ describe('RunStatsCollector', () => {
     expect(stats.iterations).toBe(1)
   })
 
+  it('accumulates dropped iterations and averages the request timing breakdown', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push('dropped_iterations,100,2.000000,,,,,,,,,default,,,,,,,')
+    collector.push('dropped_iterations,100,1.000000,,,,,,,,,default,,,,,,,')
+    collector.push('http_req_blocked,100,5.000000,,,,,,,,,default,,,,,,,')
+    collector.push('http_req_blocked,100,15.000000,,,,,,,,,default,,,,,,,')
+    collector.push('http_req_connecting,100,10.000000,,,,,,,,,default,,,,,,,')
+    collector.push(
+      'http_req_tls_handshaking,100,20.000000,,,,,,,,,default,,,,,,,'
+    )
+    collector.push('http_req_sending,100,1.000000,,,,,,,,,default,,,,,,,')
+    collector.push('http_req_waiting,100,100.000000,,,,,,,,,default,,,,,,,')
+    collector.push('http_req_receiving,100,4.000000,,,,,,,,,default,,,,,,,')
+
+    const stats = collector.snapshot()
+
+    expect(stats.droppedIterations).toBe(3)
+    expect(stats.timings).toEqual({
+      blocked: 10,
+      connecting: 10,
+      tlsHandshaking: 20,
+      sending: 1,
+      waiting: 100,
+      receiving: 4,
+    })
+  })
+
   it('reports pass and fail counts per check', () => {
     const collector = new RunStatsCollector()
 

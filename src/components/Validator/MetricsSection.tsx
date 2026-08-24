@@ -159,7 +159,15 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
           </DataList.Item>
           <DataList.Item>
             <DataList.Label minWidth="88px">Iterations</DataList.Label>
-            <DataList.Value>{formatCount(stats.iterations)}</DataList.Value>
+            <DataList.Value>
+              {formatCount(stats.iterations)}
+              {stats.droppedIterations > 0 && (
+                <Text color="red">
+                  {' '}
+                  ({formatCount(stats.droppedIterations)} dropped)
+                </Text>
+              )}
+            </DataList.Value>
           </DataList.Item>
           <DataList.Item>
             <DataList.Label minWidth="88px">Response time</DataList.Label>
@@ -173,6 +181,51 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
             <DataList.Value>{formatBytes(stats.dataReceived)}</DataList.Value>
           </DataList.Item>
         </DataList.Root>
+
+        <Section title="Response time breakdown">
+          <DataList.Root size="1" orientation="horizontal">
+            <DataList.Item>
+              <DataList.Label minWidth="88px">Blocked</DataList.Label>
+              <DataList.Value>
+                {formatTime(stats.timings.blocked)}
+              </DataList.Value>
+            </DataList.Item>
+            <DataList.Item>
+              <DataList.Label minWidth="88px">Connecting</DataList.Label>
+              <DataList.Value>
+                {formatTime(stats.timings.connecting)}
+              </DataList.Value>
+            </DataList.Item>
+            <DataList.Item>
+              <DataList.Label minWidth="88px">TLS handshake</DataList.Label>
+              <DataList.Value>
+                {formatTime(stats.timings.tlsHandshaking)}
+              </DataList.Value>
+            </DataList.Item>
+            <DataList.Item>
+              <DataList.Label minWidth="88px">Sending</DataList.Label>
+              <DataList.Value>
+                {formatTime(stats.timings.sending)}
+              </DataList.Value>
+            </DataList.Item>
+            <DataList.Item>
+              <DataList.Label minWidth="88px">Waiting (TTFB)</DataList.Label>
+              <DataList.Value>
+                {formatTime(stats.timings.waiting)}
+              </DataList.Value>
+            </DataList.Item>
+            <DataList.Item>
+              <DataList.Label minWidth="88px">Receiving</DataList.Label>
+              <DataList.Value>
+                {formatTime(stats.timings.receiving)}
+              </DataList.Value>
+            </DataList.Item>
+          </DataList.Root>
+          <Text size="1" color="gray">
+            Blocked/connecting/TLS/sending time points at the client or network;
+            waiting (time to first byte) points at the target.
+          </Text>
+        </Section>
 
         <Flex gap="3" wrap="wrap">
           {SERIES.map(({ label, select, format }) => {
