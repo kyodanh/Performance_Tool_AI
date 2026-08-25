@@ -23,3 +23,7 @@ overrides:
 
 patchedDependencies:
   rrweb: patches/rrweb.patch
+
+minimumReleaseAgeExclude:
+  - '@ai-sdk/openai-compatible@1.0.49'
+  - '@ai-sdk/provider-utils@3.0.33'

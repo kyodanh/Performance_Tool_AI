@@ -9,6 +9,7 @@ import {
 } from './types'
 
 export * from './a2a/preload'
+export * from './errorAnalysis/preload'
 
 export function streamChat(request: StreamChatRequest) {
   // Send the initial request

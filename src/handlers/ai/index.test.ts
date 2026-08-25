@@ -33,6 +33,10 @@ vi.mock('./a2a/assistantAuth', () => ({
   initialize: vi.fn(),
 }))
 
+vi.mock('./errorAnalysis', () => ({
+  initialize: vi.fn(),
+}))
+
 function createMockEvent() {
   return {
     sender: { send: vi.fn() },

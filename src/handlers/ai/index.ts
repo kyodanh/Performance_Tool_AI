@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { stripUndefined } from '@/utils/object'
 
 import * as assistantAuth from './a2a/assistantAuth'
+import * as errorAnalysis from './errorAnalysis'
 import { GrafanaAssistantLanguageModel } from './grafanaAssistantProvider'
 import { streamMessages } from './streamMessages'
 import {
@@ -31,6 +32,7 @@ export function initialize() {
   ipcMain.on(AiHandler.StreamChat, handleStreamChat)
   ipcMain.on(AiHandler.AbortStreamChat, handleAbortStreamChat)
   assistantAuth.initialize()
+  errorAnalysis.initialize()
 }
 
 export async function handleStreamChat(

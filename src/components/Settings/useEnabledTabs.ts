@@ -4,6 +4,7 @@ import { useFeaturesStore } from '@/store/features'
 import { Feature } from '@/types/features'
 
 import { AppearanceSettings } from './AppearanceSettings'
+import { ErrorAnalysisProviderSettings } from './ErrorAnalysisProviderSettings'
 import { LogsSettings } from './LogsSettings'
 import { ProxySettings } from './ProxySettings'
 import { RecorderSettings } from './RecorderSettings'
@@ -32,6 +33,11 @@ const TABS: Array<{
     label: 'Logs',
     value: 'logs',
     component: LogsSettings,
+  },
+  {
+    label: 'AI Provider',
+    value: 'aiProvider',
+    component: ErrorAnalysisProviderSettings,
   },
   // Example of a feature-toggle controlled tab
   // {

@@ -9,12 +9,13 @@ import { RunStats } from '@/utils/k6/stats'
 import { ReadOnlyEditor } from '../Monaco/ReadOnlyEditor'
 
 import { ChecksSection } from './ChecksSection'
+import { FailedSection, hasFailures } from './FailedSection'
 import { LogsSection, useConsoleFilter } from './LogsSection'
 import { MetricsSection } from './MetricsSection'
 
-type Tab = 'logs' | 'checks' | 'metrics' | 'script'
+type Tab = 'logs' | 'checks' | 'failed' | 'metrics' | 'script'
 
-const TABS: Tab[] = ['logs', 'checks', 'metrics', 'script']
+const TABS: Tab[] = ['logs', 'checks', 'failed', 'metrics', 'script']
 
 interface ExecutionDetailsProps {
   isRunning: boolean
@@ -99,6 +100,9 @@ export function ExecutionDetails({
         <Tabs.Trigger value="checks" disabled={checks.length === 0}>
           Checks ({checks.length})
         </Tabs.Trigger>
+        <Tabs.Trigger value="failed" disabled={!hasFailures(checks, stats)}>
+          Failed
+        </Tabs.Trigger>
         <Tabs.Trigger value="metrics">Metrics</Tabs.Trigger>
         {script !== undefined && (
           <Tabs.Trigger value="script">Script</Tabs.Trigger>
@@ -136,6 +140,15 @@ export function ExecutionDetails({
         `}
       >
         <ChecksSection checks={checks} isRunning={isRunning} />
+      </Tabs.Content>
+      <Tabs.Content
+        value="failed"
+        css={css`
+          flex: 1;
+          min-height: 0;
+        `}
+      >
+        <FailedSection checks={checks} stats={stats} logs={logs} />
       </Tabs.Content>
       <Tabs.Content
         value="metrics"
