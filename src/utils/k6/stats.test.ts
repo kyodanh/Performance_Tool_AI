@@ -338,8 +338,42 @@ describe('RunStatsCollector', () => {
     collector.push('checks,100,1.000000,body is json,,,,,,,,default,,,,,,,')
 
     expect(collector.snapshot().checks).toEqual([
-      { name: 'status is 200', group: '1_Trans_Home', passes: 1, fails: 1 },
-      { name: 'body is json', group: '', passes: 1, fails: 0 },
+      {
+        name: 'status is 200',
+        group: '1_Trans_Home',
+        request: '',
+        passes: 1,
+        fails: 1,
+      },
+      { name: 'body is json', group: '', request: '', passes: 1, fails: 0 },
+    ])
+  })
+
+  it('splits a check per request when the script tags it', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'checks,100,1.000000,status equals 200,,,,::Default group,,https://api/list,,default,,,,,,,'
+    )
+    collector.push(
+      'checks,100,0.000000,status equals 200,,,,::Default group,,https://api/create,,default,,,,,,,'
+    )
+
+    expect(collector.snapshot().checks).toEqual([
+      {
+        name: 'status equals 200',
+        group: 'Default group',
+        request: 'https://api/create',
+        passes: 0,
+        fails: 1,
+      },
+      {
+        name: 'status equals 200',
+        group: 'Default group',
+        request: 'https://api/list',
+        passes: 1,
+        fails: 0,
+      },
     ])
   })
 })

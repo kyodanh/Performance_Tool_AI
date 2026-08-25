@@ -6,6 +6,7 @@ import { ReactNode } from 'react'
 import { SimpleMarkdown } from '@/components/Assistant/SimpleMarkdown'
 import { Table } from '@/components/Table'
 import { TextButton } from '@/components/TextButton'
+import { ChecksTable } from '@/components/Validator/ChecksTable'
 import { Check, LogEntry } from '@/schemas/k6'
 import { useStudioUIStore } from '@/store/ui'
 import { RunStats } from '@/utils/k6/stats'
@@ -18,12 +19,20 @@ interface FailedSectionProps {
 
 export function hasFailures(checks: Check[], stats: RunStats | null): boolean {
   return (
-    checks.some((check) => check.fails > 0) || (stats?.errors.length ?? 0) > 0
+    checks.some((check) => check.fails > 0) ||
+    (stats?.errors.length ?? 0) > 0 ||
+    // A 4xx/5xx response raises no transport error, so `errors` stays empty.
+    (stats?.failedRequests ?? 0) > 0
   )
 }
 
 export function FailedSection({ checks, stats, logs }: FailedSectionProps) {
   const failedChecks = checks.filter((check) => check.fails > 0)
+  // The metric stream carries the request and group each check ran in; the
+  // stdout summary does not, so prefer it when both are available.
+  const failedCheckStats = (stats?.checks ?? []).filter(
+    (check) => check.fails > 0
+  )
   const errors = stats?.errors ?? []
   const failedRequests = (stats?.requestStats ?? []).filter(
     (request) => request.failed > 0
@@ -45,30 +54,9 @@ export function FailedSection({ checks, stats, logs }: FailedSectionProps) {
   return (
     <ScrollArea scrollbars="vertical">
       <Flex direction="column" gap="4" p="2" pb="4">
-        {failedChecks.length > 0 && (
+        {failedCheckStats.length > 0 && (
           <Section title="Failed checks">
-            <Table.Root size="1" variant="ghost">
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell align="right">
-                    Passed
-                  </Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell align="right">
-                    Failed
-                  </Table.ColumnHeaderCell>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {failedChecks.map((check) => (
-                  <Table.Row key={check.id}>
-                    <Table.Cell>{check.name}</Table.Cell>
-                    <Table.Cell align="right">{check.passes}</Table.Cell>
-                    <Table.Cell align="right">{check.fails}</Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Root>
+            <ChecksTable checks={failedCheckStats} />
           </Section>
         )}
 

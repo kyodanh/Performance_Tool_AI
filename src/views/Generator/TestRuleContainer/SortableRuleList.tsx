@@ -66,7 +66,7 @@ export function SortableRuleList({
   const gridColumns = 'auto auto 1fr auto auto'
 
   return (
-    <Flex direction="column">
+    <Flex direction="column" px="3" py="2">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -75,7 +75,7 @@ export function SortableRuleList({
         modifiers={[restrictToVerticalAxis]}
       >
         <SortableContext items={rules} strategy={verticalListSortingStrategy}>
-          <Grid columns={gridColumns}>
+          <Grid columns={gridColumns} gap="2">
             {rules.map((rule) => (
               <TestRuleItem
                 rule={rule}

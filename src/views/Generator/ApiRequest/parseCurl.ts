@@ -1,3 +1,5 @@
+import { DEFAULT_GROUP_NAME } from '@/constants'
+
 import { ApiRequestFormData, HTTP_METHODS } from './ApiRequest.utils'
 
 const DATA_FLAGS = [
@@ -55,6 +57,7 @@ export function parseCurl(command: string): ApiRequestFormData | null {
     url,
     headers,
     content,
+    group: DEFAULT_GROUP_NAME,
   }
 }
 

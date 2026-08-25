@@ -13,6 +13,7 @@ import {
   hashTree,
   headerManager,
   sampler,
+  syncTimer,
   testAction,
   threadGroup,
   timer,
@@ -96,7 +97,7 @@ function renderGroup(
   rewrite: (value: string) => string
 ) {
   const samplers = group.requests
-    .map((request) => renderRequest(request, thinkTime, rewrite))
+    .map((request) => renderRequest(request, rewrite))
     .join('\n')
 
   return `
@@ -111,7 +112,6 @@ function renderGroup(
 
 function renderRequest(
   request: PlannedRequest,
-  thinkTime: ThinkTime,
   rewrite: (value: string) => string
 ) {
   const cookieHeader: Header[] =
@@ -131,10 +131,13 @@ function renderRequest(
   )
 
   const children = [
+    // Timers run before the sampler they hang off, so the barrier holds the
+    // thread until the group has arrived.
+    request.rendezvous ? syncTimer() : '',
     headerManager(headers),
     ...request.extractions.map(extractor),
     ...request.assertions.map((item) => renderAssertion(item, rewrite)),
-    thinkTime.sleepType === 'requests' ? timer(thinkTime.timing) : '',
+    request.thinkTime ? timer(request.thinkTime) : '',
   ]
     .filter(Boolean)
     .join('\n')

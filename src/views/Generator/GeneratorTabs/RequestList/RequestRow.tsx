@@ -1,6 +1,4 @@
-import { Flex, IconButton } from '@radix-ui/themes'
-import { PencilIcon, Trash2Icon } from 'lucide-react'
-import { useState } from 'react'
+import { Box, Flex } from '@radix-ui/themes'
 
 import { HighlightedText } from '@/components/HighlightedText'
 import { Table } from '@/components/Table'
@@ -17,9 +15,10 @@ import { SearchResults } from '@/components/WebLogView/SearchResults'
 import { useGeneratorStore } from '@/store/generator'
 import { RuleInstance } from '@/types/rules'
 
-import { ApiRequestDialog } from '../../ApiRequest'
-
+import { RendezvousBadge } from './RendezvousBadge'
+import { RowActions } from './RowActions'
 import { RuleBadges } from './RuleBadges'
+import { ThinkTimeBadge } from './ThinkTimeBadge'
 
 export function RequestRow({
   data,
@@ -32,11 +31,9 @@ export function RequestRow({
   const manualRequest = useGeneratorStore((state) =>
     state.manualRequests.find((request) => request.id === data.id)
   )
-  const isManual = manualRequest !== undefined
-  const removeManualRequest = useGeneratorStore(
-    (store) => store.removeManualRequest
+  const previewOriginalRequests = useGeneratorStore(
+    (state) => state.previewOriginalRequests
   )
-  const [isEditing, setIsEditing] = useState(false)
 
   return (
     <>
@@ -51,8 +48,15 @@ export function RequestRow({
         <HostCell data={data} />
 
         <Table.Cell css={{ padding: 0 }}>
-          <Flex justify="between" align="center" height="100%" gap="1">
-            <TextWithTooltip size="1">
+          <Flex align="center" height="100%" gap="1">
+            <TextWithTooltip
+              size="1"
+              css={{
+                fontFamily: 'var(--code-font-family)',
+                flex: '0 1 auto',
+                minWidth: 0,
+              }}
+            >
               <HighlightedText
                 text={data.request.path}
                 matches={data.matches}
@@ -63,47 +67,20 @@ export function RequestRow({
               selectedRuleInstance={selectedRuleInstance}
               data={data}
             />
-            {isManual && (
-              <IconButton
-                aria-label="Edit request"
-                variant="ghost"
-                color="gray"
-                size="1"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setIsEditing(true)
-                }}
-              >
-                <PencilIcon />
-              </IconButton>
-            )}
-            {isManual && (
-              <IconButton
-                aria-label="Remove request"
-                variant="ghost"
-                color="gray"
-                size="1"
-                mr="1"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  removeManualRequest(data.id)
-                }}
-              >
-                <Trash2Icon />
-              </IconButton>
+            <ThinkTimeBadge data={data} />
+            <RendezvousBadge data={data} />
+            {/* Keeps the row actions grouped at the trailing edge. */}
+            <Box flexGrow="1" />
+            {/* Keyed off the request as shown, so previewing originals would
+                point a think time override at a URL the script never requests. */}
+            {!previewOriginalRequests && (
+              <Flex justify="end" pr="2" css={{ flex: '0 0 96px' }}>
+                <RowActions data={data} manualRequest={manualRequest} />
+              </Flex>
             )}
           </Flex>
         </Table.Cell>
       </TableRow>
-
-      {/* Mounted only while editing so the form picks up the current request. */}
-      {isEditing && (
-        <ApiRequestDialog
-          open
-          request={manualRequest}
-          onOpenChange={setIsEditing}
-        />
-      )}
 
       <SearchResults
         data={data}

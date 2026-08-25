@@ -12,6 +12,8 @@ interface ChecksTableProps {
 /**
  * Per-check results read from the metric stream, so a failing `check()` is
  * visible during a load test — the end-of-test summary is not available there.
+ * One row per check per request, so a failure points at the request that
+ * caused it (`Request` is empty for a check the script left untagged).
  */
 export function ChecksTable({ checks }: ChecksTableProps) {
   return (
@@ -19,6 +21,7 @@ export function ChecksTable({ checks }: ChecksTableProps) {
       <Table.Header>
         <Table.Row>
           <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Request</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>Transaction</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell align="right">Passed</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell align="right">Failed</Table.ColumnHeaderCell>
@@ -26,8 +29,9 @@ export function ChecksTable({ checks }: ChecksTableProps) {
       </Table.Header>
       <Table.Body>
         {checks.map((check) => (
-          <Table.Row key={`${check.group}|${check.name}`}>
+          <Table.Row key={`${check.group}|${check.name}|${check.request}`}>
             <Table.Cell>{check.name}</Table.Cell>
+            <Table.Cell>{check.request || '—'}</Table.Cell>
             <Table.Cell>{check.group || '—'}</Table.Cell>
             <Table.Cell align="right">{formatCount(check.passes)}</Table.Cell>
             <Table.Cell align="right">

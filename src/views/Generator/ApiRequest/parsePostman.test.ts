@@ -42,6 +42,7 @@ describe('parsePostman', () => {
           url: 'https://example.com/users/login',
           headers: [{ name: 'content-type', value: 'application/json' }],
           content: '{"email":"a@b.com"}',
+          group: 'Default group',
         },
       ],
     })
@@ -73,6 +74,7 @@ describe('parsePostman', () => {
         url: 'https://example.com/api/users/1',
         headers: [{ name: 'authorization', value: 'Bearer abc' }],
         content: '{"token":"abc"}',
+        group: 'Default group',
       },
     ])
   })
@@ -96,6 +98,30 @@ describe('parsePostman', () => {
     expect(parsed?.requests.map(({ url, method }) => [method, url])).toEqual([
       ['GET', 'https://example.com/a'],
       ['GET', 'https://example.com/b'],
+    ])
+  })
+
+  it('uses the innermost folder name as the group', () => {
+    const parsed = parsePostman(
+      collection([
+        { name: 'Ping', request: { url: 'https://example.com/ping' } },
+        {
+          name: 'transaction_login',
+          item: [
+            { name: 'Login', request: { url: 'https://example.com/login' } },
+            {
+              name: 'trans_view',
+              item: [{ request: { url: 'https://example.com/view' } }],
+            },
+          ],
+        },
+      ])
+    )
+
+    expect(parsed?.requests.map(({ url, group }) => [group, url])).toEqual([
+      ['Default group', 'https://example.com/ping'],
+      ['transaction_login', 'https://example.com/login'],
+      ['trans_view', 'https://example.com/view'],
     ])
   })
 
@@ -125,6 +151,7 @@ describe('parsePostman', () => {
         { name: 'content-type', value: 'application/x-www-form-urlencoded' },
       ],
       content: 'name=a%20b',
+      group: 'Default group',
     })
   })
 
@@ -205,6 +232,7 @@ describe('parsePostman', () => {
         url: 'https://dev.example.com/users',
         headers: [{ name: 'authorization', value: 'Bearer env-token' }],
         content: '',
+        group: 'Default group',
       },
     ])
   })

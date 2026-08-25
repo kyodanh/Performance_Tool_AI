@@ -1,4 +1,4 @@
-import { Button, Flex, Heading, ScrollArea } from '@radix-ui/themes'
+import { Badge, Button, Flex, Heading, ScrollArea } from '@radix-ui/themes'
 import { WandSparkles } from 'lucide-react'
 import { useState } from 'react'
 
@@ -43,9 +43,14 @@ export function TestRuleContainer() {
           <RulesNotAppliedCallout />
 
           <Flex align="center" gap="3">
-            <Heading size="2" weight="medium">
-              Test rules ({rules.length})
-            </Heading>
+            <Flex align="center" gap="2">
+              <Heading size="2" weight="medium">
+                Test rules
+              </Heading>
+              <Badge color="gray" variant="soft" radius="medium">
+                {rules.length}
+              </Badge>
+            </Flex>
             <NewRuleMenu />
             <Button
               variant="ghost"

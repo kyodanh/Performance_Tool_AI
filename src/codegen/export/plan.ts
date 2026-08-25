@@ -6,9 +6,10 @@ import { Header, Method, ProxyData, Response } from '@/types'
 import { GeneratorFileData } from '@/types/generator'
 import { ExtractorSelector, VerificationRule } from '@/types/rules'
 import { Variable } from '@/types/testData'
-import { TestOptions, ThinkTime } from '@/types/testOptions'
+import { TestOptions, ThinkTime, Timing } from '@/types/testOptions'
 import { groupProxyData } from '@/utils/groups'
 import * as path from '@/utils/path'
+import { requestKey, resolveThinkTime } from '@/utils/thinkTime'
 
 import { isBinaryContent } from '../codegen'
 import {
@@ -43,6 +44,10 @@ export interface PlannedRequest {
   /** Extracted from *this* request's response, so emitters register them before it. */
   extractions: Extraction[]
   assertions: Assertion[]
+  /** Think time to wait after this request, already resolved from overrides. */
+  thinkTime: Timing | null
+  /** All VUs meet before this request fires. */
+  rendezvous: boolean
 }
 
 export interface PlannedGroup {
@@ -111,6 +116,8 @@ export function buildExportPlan({
         assertions: response
           ? collectAssertions(verificationRules, request.url, response)
           : [],
+        thinkTime: resolveThinkTime(generator.options.thinkTime, data),
+        rendezvous: generator.options.rendezvous[requestKey(data)] === true,
       }
     }
   )

@@ -1,3 +1,5 @@
+import { Box, Text } from '@radix-ui/themes'
+
 import { Table } from '@/components/Table'
 import { RequestListProps } from '@/components/WebLogView'
 import { RuleInstance } from '@/types/rules'
@@ -11,8 +13,23 @@ export function RequestTable({
   filter,
   selectedRuleInstance,
 }: RequestListProps & { selectedRuleInstance?: RuleInstance }) {
+  if (requests.length === 0) {
+    return (
+      <Box px="4" py="2">
+        <Text size="1" color="gray">
+          Empty group. Move requests here with the folder button on a request.
+        </Text>
+      </Box>
+    )
+  }
+
   return (
-    <Table.Root size="1" layout="fixed">
+    <Table.Root
+      size="1"
+      layout="fixed"
+      // Roomier rows than the default so a request reads as one line of data.
+      css={{ '--table-cell-min-height': '40px' }}
+    >
       <Table.Header css={{ textWrap: 'nowrap' }}>
         <Table.Row>
           <Table.ColumnHeaderCell width="70px">Method</Table.ColumnHeaderCell>

@@ -53,6 +53,8 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
   const {
     sleepType,
     timing,
+    thinkTimeOverrides,
+    rendezvous,
     thresholds,
     loadZones,
     variables,
@@ -74,7 +76,9 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
       thinkTime: {
         sleepType,
         timing,
+        overrides: thinkTimeOverrides,
       },
+      rendezvous,
       thresholds,
       cloud: { loadZones },
     },

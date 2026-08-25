@@ -39,7 +39,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
     ...createTestOptionsSlice(set, ...rest),
     ...createScriptDataSlice(set, ...rest),
     setGeneratorFile: ({
-      options: { thinkTime, loadProfile, thresholds, cloud },
+      options: { thinkTime, loadProfile, thresholds, cloud, rendezvous },
       testData: { variables, files },
       recordingPath,
       rules,
@@ -54,6 +54,8 @@ export const useGeneratorStore = create<GeneratorStore>()(
         // options
         state.sleepType = thinkTime.sleepType
         state.timing = thinkTime.timing
+        state.thinkTimeOverrides = thinkTime.overrides ?? {}
+        state.rendezvous = rendezvous ?? {}
         state.loadZones = cloud.loadZones
         state.thresholds = thresholds
         state.executor = loadProfile.executor
@@ -75,6 +77,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         state.recordingPath = recordingPath
         state.allowlist = allowlist
         state.manualRequests = manualRequests
+        state.emptyGroups = []
 
         state.includeStaticAssets = includeStaticAssets
         state.scriptName = scriptName

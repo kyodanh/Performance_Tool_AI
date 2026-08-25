@@ -8,6 +8,7 @@ import {
   ScrollArea,
   Tabs,
   Text,
+  TextField,
 } from '@radix-ui/themes'
 import { CircleAlertIcon, SendIcon } from 'lucide-react'
 import { ClipboardEvent, useEffect, useMemo, useState } from 'react'
@@ -18,6 +19,7 @@ import { ReactMonacoEditor } from '@/components/Monaco/ReactMonacoEditor'
 import { ResponseStatusBadge } from '@/components/ResponseStatusBadge'
 import { useResponseDetailsTab } from '@/components/WebLogView/Details.hooks'
 import { ResponseDetails } from '@/components/WebLogView/ResponseDetails'
+import { DEFAULT_GROUP_NAME } from '@/constants'
 import { useGeneratorStore } from '@/store/generator'
 import { useToast } from '@/store/ui/useToast'
 import { ProxyData } from '@/types'
@@ -35,6 +37,7 @@ import {
 import { HeadersEditor } from './HeadersEditor'
 import { parseCurl } from './parseCurl'
 import { useCorrelationVariables } from './useCorrelationVariables'
+import { useGroupNames } from './useGroupNames'
 import { VariableSuggestField } from './VariableSuggestField'
 
 const METHOD_OPTIONS = HTTP_METHODS.map((method) => ({
@@ -73,6 +76,8 @@ export function ApiRequestDialog({
   const variables = useCorrelationVariables()
   const variableNames = Object.keys(variables)
 
+  const groupNames = useGroupNames()
+
   const {
     control,
     register,
@@ -80,6 +85,7 @@ export function ApiRequestDialog({
     watch,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<ApiRequestFormData>({
     resolver: zodResolver(ApiRequestSchema),
@@ -133,7 +139,7 @@ export function ApiRequestDialog({
     }
 
     event.preventDefault()
-    reset(parsed)
+    reset({ ...parsed, group: getValues('group') })
     showToast({ title: 'cURL command imported', status: 'success' })
   }
 
@@ -204,6 +210,30 @@ export function ApiRequestDialog({
               <SendIcon />
               Send
             </Button>
+          </Flex>
+
+          <Flex gap="2" align="center" mt="2">
+            <Text size="1" color="gray" as="label" htmlFor="api-request-group">
+              Group
+            </Text>
+            <Box width="240px">
+              <TextField.Root
+                id="api-request-group"
+                size="1"
+                list="api-request-groups"
+                placeholder={DEFAULT_GROUP_NAME}
+                {...register('group')}
+              />
+              <datalist id="api-request-groups">
+                {groupNames.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </Box>
+            <Text size="1" color="gray">
+              Requests in the same group run inside one <code>group()</code> in
+              the script.
+            </Text>
           </Flex>
 
           <Tabs.Root defaultValue="headers" mt="4">

@@ -1,6 +1,6 @@
 import { css } from '@emotion/react'
 import { Tabs } from '@radix-ui/themes'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useTrackScriptCopy } from '@/hooks/useTrackScriptCopy'
 import { Check, LogEntry } from '@/schemas/k6'
@@ -9,6 +9,7 @@ import { RunStats } from '@/utils/k6/stats'
 import { ReadOnlyEditor } from '../Monaco/ReadOnlyEditor'
 
 import { ChecksSection } from './ChecksSection'
+import { checksFromStats } from './ChecksSection.utils'
 import { FailedSection, hasFailures } from './FailedSection'
 import { LogsSection, useConsoleFilter } from './LogsSection'
 import { MetricsSection } from './MetricsSection'
@@ -37,6 +38,13 @@ export function ExecutionDetails({
 }: ExecutionDetailsProps) {
   const [selectedTab, setSelectedTab] = useState<Tab>(
     defaultTab ?? (script !== undefined ? 'script' : 'logs')
+  )
+
+  // A load test emits no stdout checks summary, so the CSV stream is the only
+  // source there — see `checksFromStats`.
+  const resolvedChecks = useMemo(
+    () => (checks.length > 0 ? checks : checksFromStats(stats)),
+    [checks, stats]
   )
 
   const consoleFilter = useConsoleFilter({
@@ -97,10 +105,13 @@ export function ExecutionDetails({
         `}
       >
         <Tabs.Trigger value="logs">Logs ({logs.length})</Tabs.Trigger>
-        <Tabs.Trigger value="checks" disabled={checks.length === 0}>
-          Checks ({checks.length})
+        <Tabs.Trigger value="checks" disabled={resolvedChecks.length === 0}>
+          Checks ({resolvedChecks.length})
         </Tabs.Trigger>
-        <Tabs.Trigger value="failed" disabled={!hasFailures(checks, stats)}>
+        <Tabs.Trigger
+          value="failed"
+          disabled={!hasFailures(resolvedChecks, stats)}
+        >
           Failed
         </Tabs.Trigger>
         <Tabs.Trigger value="metrics">Metrics</Tabs.Trigger>
@@ -139,7 +150,7 @@ export function ExecutionDetails({
           min-height: 0;
         `}
       >
-        <ChecksSection checks={checks} isRunning={isRunning} />
+        <ChecksSection checks={resolvedChecks} isRunning={isRunning} />
       </Tabs.Content>
       <Tabs.Content
         value="failed"
@@ -148,7 +159,7 @@ export function ExecutionDetails({
           min-height: 0;
         `}
       >
-        <FailedSection checks={checks} stats={stats} logs={logs} />
+        <FailedSection checks={resolvedChecks} stats={stats} logs={logs} />
       </Tabs.Content>
       <Tabs.Content
         value="metrics"

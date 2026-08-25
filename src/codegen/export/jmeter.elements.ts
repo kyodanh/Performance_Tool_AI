@@ -332,6 +332,25 @@ function uniformRandomTimer(min: number, max: number) {
 }
 
 /**
+ * Synchronizing Timer — holds threads until the whole group has arrived, then
+ * releases them together. `groupSize` 0 means "every thread in the thread
+ * group".
+ *
+ * ponytail: the timeout is what stops a ramping profile from deadlocking when
+ * fewer threads than the peak ever reach the barrier. Raise it in the GUI if a
+ * slow iteration needs longer.
+ */
+export function syncTimer() {
+  return `
+    <SyncTimer guiclass="TestBeanGUI" testclass="SyncTimer" testname="Rendezvous" enabled="true">
+      <intProp name="groupSize">0</intProp>
+      <longProp name="timeoutInMs">30000</longProp>
+    </SyncTimer>
+    <hashTree/>
+  `
+}
+
+/**
  * Flow Control Action pause — unlike a timer this runs once where it sits,
  * which is what group- and iteration-level think time needs.
  */

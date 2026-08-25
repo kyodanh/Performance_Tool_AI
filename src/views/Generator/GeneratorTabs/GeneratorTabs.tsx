@@ -1,5 +1,5 @@
 import { css } from '@emotion/react'
-import { Box, Flex, Tabs } from '@radix-ui/themes'
+import { Badge, Box, Flex, Tabs } from '@radix-ui/themes'
 import { CircleXIcon } from 'lucide-react'
 import { useState } from 'react'
 
@@ -44,7 +44,12 @@ export function GeneratorTabs({
             <Flex justify="between" width="100%" align="center">
               <Flex>
                 <Tabs.Trigger value="requests">
-                  Requests ({filteredRequests.length})
+                  <Flex align="center" gap="2">
+                    Requests
+                    <Badge color="gray" variant="soft" radius="medium">
+                      {filteredRequests.length}
+                    </Badge>
+                  </Flex>
                 </Tabs.Trigger>
                 <Tabs.Trigger
                   value="script"

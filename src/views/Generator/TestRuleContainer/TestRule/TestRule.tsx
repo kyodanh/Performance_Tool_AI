@@ -60,8 +60,10 @@ export function TestRuleItem({
         position: relative;
         transition: ${transition};
         transform: ${isSorting ? undefined : CSS.Translate.toString(transform)};
-        border-bottom: 1px solid var(--gray-3);
-        background-color: ${isSelected ? 'var(--accent-2)' : 'unset'};
+        border-radius: var(--radius-4);
+        box-shadow: inset 0 0 0 1px
+          ${isSelected ? 'var(--accent-6)' : 'var(--gray-a6)'};
+        background-color: ${isSelected ? 'var(--accent-2)' : 'var(--gray-2)'};
         opacity: ${isDragging ? 0.5 : 1};
         grid-column: 1 / -1;
         grid-template-columns: subgrid;

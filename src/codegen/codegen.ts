@@ -5,11 +5,12 @@ import { ProxyData, RequestSnippetSchema } from '@/types'
 import { GeneratorFileData } from '@/types/generator'
 import { CustomCodeValue, ParameterizationRule, TestRule } from '@/types/rules'
 import { DataFile, Variable } from '@/types/testData'
-import { ThinkTime } from '@/types/testOptions'
+import { TestOptions, ThinkTime } from '@/types/testOptions'
 import { safeBtoa } from '@/utils/format'
 import { groupProxyData } from '@/utils/groups'
 import { getContentTypeWithCharsetHeader } from '@/utils/headers'
 import * as path from '@/utils/path'
+import { requestKey, resolveThinkTime } from '@/utils/thinkTime'
 import { exhaustive } from '@/utils/typescript'
 
 import {
@@ -48,7 +49,7 @@ export function generateScript({
     ${generateGetUniqueItemFunction(generator.testData.files)}
 
     export default function() {
-      ${generateVUCode(recording, generator.rules, generator.options.thinkTime)}
+      ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous)}
     }
   `
 }
@@ -141,7 +142,8 @@ export function generateGetUniqueItemFunction(files: DataFile[]) {
 export function generateVUCode(
   recording: ProxyData[],
   rules: TestRule[],
-  thinkTime: ThinkTime
+  thinkTime: ThinkTime,
+  rendezvous: TestOptions['rendezvous'] = {}
 ): string {
   const cleanedRecording = cleanupRecording(recording)
   const enabledRules = rules.filter((rule) => rule.enabled)
@@ -157,7 +159,8 @@ export function generateVUCode(
   )
   const requestSnippets = generateRequestSnippetsFromSchemas(
     snippets,
-    thinkTime
+    thinkTime,
+    rendezvous
   )
 
   const parameterizationRules = enabledRules.filter(
@@ -189,6 +192,9 @@ export function generateVUCode(
     let url
     const correlation_vars = {}
     `,
+    snippets.some(({ data }) => rendezvous[requestKey(data)])
+      ? RENDEZVOUS_HELPER
+      : '',
     parameterizationCustomCode,
     groupSnippets,
     thinkTime.sleepType === 'iterations' ? generateSleep(thinkTime.timing) : '',
@@ -202,19 +208,23 @@ type GenerateRequestSnippetReturnValue = Array<{
 
 export function generateRequestSnippetsFromSchemas(
   requestSnippetSchemas: RequestSnippetSchema[],
-  thinkTime: ThinkTime
+  thinkTime: ThinkTime,
+  rendezvous: TestOptions['rendezvous'] = {}
 ): GenerateRequestSnippetReturnValue {
   return requestSnippetSchemas.reduce<GenerateRequestSnippetReturnValue>(
     (acc, requestSnippetSchema) => {
       const requestSnippet = generateSingleRequestSnippet(requestSnippetSchema)
+      const timing = resolveThinkTime(thinkTime, requestSnippetSchema.data)
+      const meets = rendezvous[requestKey(requestSnippetSchema.data)] === true
 
       return [
         ...acc,
         {
           group: requestSnippetSchema.data.group,
           snippet: `
+            ${meets ? 'rendezvous()' : ''}
             ${requestSnippet}
-            ${thinkTime.sleepType === 'requests' ? `${generateSleep(thinkTime.timing)}` : ''}
+            ${timing ? generateSleep(timing) : ''}
           `,
         },
       ]
@@ -286,6 +296,23 @@ export function generateSingleRequestSnippet(
 
   return [params, ...before, main, generateChecks(checks), ...after].join('\n')
 }
+
+/**
+ * k6 has no cross-VU barrier, so VUs meet on a shared wall-clock tick instead
+ * of counting arrivals: everyone waits for the next 30s boundary and fires
+ * together.
+ *
+ * ponytail: approximate on purpose. Ceiling — no "exactly N VUs" guarantee, and
+ * an iteration longer than the period spreads VUs over several boundaries.
+ * Upgrade path: a k6/experimental/redis counter if exactness matters.
+ */
+const RENDEZVOUS_HELPER = `
+    function rendezvous(period = 30) {
+      const now = Date.now()
+      const next = Math.ceil(now / (period * 1000)) * period * 1000
+      sleep(Math.max(0, (next - Date.now()) / 1000))
+    }
+    `
 
 function generateSleep(timing: ThinkTime['timing']): string {
   switch (timing.type) {
@@ -391,5 +418,9 @@ function generateChecks(checks: RequestSnippetSchema['checks']) {
     )
     .join(',')
 
-  return `check(resp, { ${checksString} })`
+  // The `name` tag is what ties a failed check back to its request: k6 puts no
+  // request context on a check sample, so an untagged check reports as a bare
+  // name (see `CheckStats.request`). `url.name` is the same value `http.url`
+  // tags the request with, so the two join exactly.
+  return `check(resp, { ${checksString} }, { name: url.name })`
 }

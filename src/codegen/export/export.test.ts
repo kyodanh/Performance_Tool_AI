@@ -238,3 +238,48 @@ describe('generateVUGenScript', () => {
     expect(script).toContain('5 VUs, 20 iterations')
   })
 })
+
+describe('rendezvous', () => {
+  const withRendezvous = createGeneratorData({
+    rules: [],
+    options: {
+      ...createGeneratorData().options,
+      rendezvous: { 'POST https://example.com/login': true },
+    },
+  })
+
+  it('holds VUs before the marked request in VuGen', () => {
+    const script = generateVUGenScript({
+      recording,
+      generator: withRendezvous,
+    })
+
+    expect(script).toContain('lr_rendezvous("POST_login");')
+    // Before the request it guards, not after.
+    expect(script.indexOf('lr_rendezvous')).toBeLessThan(
+      script.indexOf('web_custom_request')
+    )
+    // Only the marked request gets one.
+    expect(script.match(/lr_rendezvous/g)).toHaveLength(1)
+  })
+
+  it('holds threads before the marked sampler in JMeter', () => {
+    const script = generateJMeterScript({
+      recording,
+      generator: withRendezvous,
+    })
+
+    expect(script).toContain('testclass="SyncTimer"')
+    expect(script.match(/SyncTimer/g)?.length).toBeGreaterThan(0)
+    expect(script).toContain('<longProp name="timeoutInMs">30000</longProp>')
+  })
+
+  it('leaves both exports untouched when nothing is marked', () => {
+    expect(generateVUGenScript({ recording, generator })).not.toContain(
+      'lr_rendezvous'
+    )
+    expect(generateJMeterScript({ recording, generator })).not.toContain(
+      'SyncTimer'
+    )
+  })
+})

@@ -22,6 +22,7 @@ export function createGeneratorData(
           value: 1,
         },
       },
+      rendezvous: {},
       thresholds: [],
       cloud: {
         loadZones: {
@@ -99,9 +100,19 @@ export function createGeneratorState(
     addManualRequest: vi.fn(),
     updateManualRequest: vi.fn(),
     removeManualRequest: vi.fn(),
+    emptyGroups: [],
+    addGroup: vi.fn(),
+    renameGroup: vi.fn(),
+    removeGroup: vi.fn(),
 
     sleepType: 'groups',
     setSleepType: vi.fn(),
+
+    thinkTimeOverrides: {},
+    setThinkTimeOverride: vi.fn(),
+
+    rendezvous: {},
+    toggleRendezvous: vi.fn(),
 
     stages: [],
     setStages: vi.fn(),

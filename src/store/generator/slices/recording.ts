@@ -1,3 +1,4 @@
+import { DEFAULT_GROUP_NAME } from '@/constants'
 import { ProxyData } from '@/types'
 import { ImmerStateCreator } from '@/utils/typescript'
 
@@ -12,6 +13,9 @@ interface State {
   // Requests added by hand instead of coming from the recording. Kept apart
   // from `requests` because loading a recording replaces that list wholesale.
   manualRequests: ProxyData[]
+  // Groups created by hand that hold no requests yet. Only a place to move
+  // requests into, so they are not saved with the generator file.
+  emptyGroups: string[]
   recordingPath: string
   recordingError: unknown
   allowlist: string[]
@@ -26,6 +30,9 @@ interface Actions {
   addManualRequest: (request: ProxyData) => void
   updateManualRequest: (id: string, request: ProxyData) => void
   removeManualRequest: (id: string) => void
+  addGroup: (name: string) => void
+  renameGroup: (from: string, to: string) => void
+  removeGroup: (name: string) => void
   resetRecording: () => void
   setAllowlist: (value: string[]) => void
   setIncludeStaticAssets: (value: boolean) => void
@@ -50,6 +57,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   },
   requests: [],
   manualRequests: [],
+  emptyGroups: [],
   recordingPath: '',
   recordingError: null,
   allowlist: [],
@@ -109,9 +117,36 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
         (request) => request.id !== id
       )
     }),
+  addGroup: (name: string) =>
+    set((state) => {
+      if (!state.emptyGroups.includes(name)) {
+        state.emptyGroups.push(name)
+      }
+    }),
+  renameGroup: (from: string, to: string) =>
+    set((state) => {
+      // Requests loaded from a recording have no group of their own when the
+      // HAR has no pageref, so they answer to the default name.
+      const rename = (request: ProxyData) => {
+        if ((request.group || DEFAULT_GROUP_NAME) === from) {
+          request.group = to
+        }
+      }
+
+      state.requests.forEach(rename)
+      state.manualRequests.forEach(rename)
+      state.emptyGroups = state.emptyGroups.map((group) =>
+        group === from ? to : group
+      )
+    }),
+  removeGroup: (name: string) =>
+    set((state) => {
+      state.emptyGroups = state.emptyGroups.filter((group) => group !== name)
+    }),
   resetRecording: () =>
     set((state) => {
       state.requests = []
+      state.emptyGroups = []
       state.allowlist = []
       state.recordingPath = ''
     }),

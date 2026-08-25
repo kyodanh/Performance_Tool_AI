@@ -21,6 +21,7 @@ export function createNewGeneratorFile(recordingPath = ''): GeneratorFileData {
           value: 1,
         },
       },
+      rendezvous: {},
       thresholds: [],
       cloud: {
         loadZones: {

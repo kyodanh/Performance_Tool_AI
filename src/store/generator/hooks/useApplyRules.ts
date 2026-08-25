@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { applyRules } from '@/rules/rules'
 
@@ -8,7 +9,9 @@ import { useGeneratorStore } from '../useGeneratorStore'
 export function useApplyRules() {
   const rules = useGeneratorStore((state) => state.rules)
   const selectedRuleId = useGeneratorStore((state) => state.selectedRuleId)
-  const requests = useGeneratorStore(selectFilteredRequests)
+  // Shallow, because the selector builds a new array every time: without it
+  // any store write would recompute the rules and remount the request rows.
+  const requests = useGeneratorStore(useShallow(selectFilteredRequests))
 
   const ruleApplicationResult = useMemo(
     () => applyRules(requests, rules),

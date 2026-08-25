@@ -71,6 +71,13 @@ export interface CheckStats {
   name: string
   /** The `group()` the check ran in, empty outside any group. */
   group: string
+  /**
+   * The request the check ran against, from the `name` tag the generated
+   * script puts on the `check()` call. Empty for a hand-written check that
+   * carries no tag — k6 attaches no request context to a check sample on its
+   * own, so without the tag there is no way back to the request.
+   */
+  request: string
   passes: number
   fails: number
 }
@@ -658,7 +665,10 @@ export class RunStatsCollector {
     }
 
     const group = groupName(columns[COLUMN.group] ?? '')
-    const key = `${group}|${name}`
+    const request = columns[COLUMN.name] ?? ''
+    // Keyed by request too, so the same check reused across requests reports
+    // per request instead of collapsing into one row.
+    const key = `${group}|${name}|${request}`
     const existing = this.#checkResults.get(key)
 
     if (existing) {
@@ -671,6 +681,7 @@ export class RunStatsCollector {
     this.#checkResults.set(key, {
       name,
       group,
+      request,
       passes: passed ? 1 : 0,
       fails: passed ? 0 : 1,
     })

@@ -33,6 +33,10 @@ export const TimingSchema = z.discriminatedUnion('type', [
 export const ThinkTimeSchema = z.object({
   sleepType: SleepTypeSchema,
   timing: TimingSchema,
+  // Per-request think time, keyed by `METHOD URL`. Recording request ids are
+  // regenerated on every load, so the key is derived from the request itself
+  // and identical requests share an override.
+  overrides: z.record(z.string(), TimingSchema).optional(),
 })
 
 export const CommonOptionsSchema = z.object({
@@ -71,6 +75,9 @@ export const LoadProfileExecutorOptionsSchema = z.discriminatedUnion(
 export const TestOptionsSchema = z.object({
   loadProfile: LoadProfileExecutorOptionsSchema,
   thinkTime: ThinkTimeSchema,
+  // Requests where every VU waits for the others before firing, keyed by
+  // `requestKey` — same per-request override shape as think time.
+  rendezvous: z.record(z.string(), z.literal(true)).default({}),
   thresholds: z.array(ThresholdSchema).default([]),
   cloud: z
     .object({

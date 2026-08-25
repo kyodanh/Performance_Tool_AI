@@ -14,7 +14,9 @@ interface WebLogViewProps {
   selectedRequestId?: string
   onSelectRequest: (data: ProxyDataWithMatches | null) => void
   onUpdateGroup?: (group: GroupType) => void
+  onRemoveGroup?: (group: GroupType) => void
   filter?: string
+  groupVariant?: 'plain' | 'card'
   RowComponent?: ComponentType<RowProps>
   ListComponent?: ComponentType<RequestListProps>
 }
@@ -26,7 +28,9 @@ export const WebLogView = memo(function WebLogView({
   selectedRequestId,
   onSelectRequest,
   onUpdateGroup,
+  onRemoveGroup,
   filter,
+  groupVariant = 'plain',
   RowComponent = Row,
   ListComponent = RequestList,
 }: WebLogViewProps) {
@@ -57,14 +61,25 @@ export const WebLogView = memo(function WebLogView({
     [requests, groups]
   )
   return (
-    <Box mb="2">
+    <Box
+      mb="2"
+      css={
+        groupVariant === 'card' && {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-3)',
+        }
+      }
+    >
       {grouped.map((item) => (
         <Group
           key={item.group.id}
           group={item.group}
           groups={groups}
           length={item.requests.length}
+          variant={groupVariant}
           onUpdate={onUpdateGroup}
+          onRemove={onRemoveGroup}
         >
           <ListComponent
             requests={item.requests}

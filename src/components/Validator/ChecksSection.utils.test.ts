@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { Check } from '@/schemas/k6'
+import { RunStats } from '@/utils/k6/stats'
 
 import {
+  checksFromStats,
   getPassPercentage,
   groupChecksByPath,
   hasFailures,
@@ -60,6 +62,32 @@ describe('Checks Section - utils', () => {
       }
 
       expect(groupedChecks).toMatchObject(expected)
+    })
+  })
+
+  describe('checksFromStats', () => {
+    it('maps CSV checks into group paths, so a load test run shows them', () => {
+      const checks = checksFromStats({
+        checks: [
+          {
+            name: 'status equals 200',
+            group: 'Default group',
+            passes: 2,
+            fails: 1,
+          },
+          { name: 'no group', group: '', passes: 1, fails: 0 },
+        ],
+      } as RunStats)
+
+      expect(checks.map((check) => check.path)).toEqual([
+        '::Default group::status equals 200',
+        '::no group',
+      ])
+      expect(groupChecksByPath(checks)['Default group']).toHaveLength(1)
+    })
+
+    it('returns nothing without stats', () => {
+      expect(checksFromStats(null)).toEqual([])
     })
   })
 

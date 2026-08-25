@@ -27,6 +27,8 @@ export const ApiRequestSchema = z.object({
     })
     .array(),
   content: z.string(),
+  // Free text: typing a name that doesn't exist yet creates the group.
+  group: z.string(),
 })
 
 export type ApiRequestFormData = z.infer<typeof ApiRequestSchema>
@@ -36,6 +38,7 @@ export const DEFAULT_API_REQUEST: ApiRequestFormData = {
   url: '',
   headers: [],
   content: '',
+  group: DEFAULT_GROUP_NAME,
 }
 
 export function toRequest(
@@ -71,7 +74,10 @@ export function toRequest(
   }
 }
 
-export function fromProxyData({ request }: ProxyData): ApiRequestFormData {
+export function fromProxyData({
+  request,
+  group,
+}: ProxyData): ApiRequestFormData {
   const method = HTTP_METHODS.find((value) => value === request.method)
 
   return {
@@ -79,6 +85,7 @@ export function fromProxyData({ request }: ProxyData): ApiRequestFormData {
     url: request.url,
     headers: request.headers.map(([name, value]) => ({ name, value })),
     content: request.content ?? '',
+    group: group || DEFAULT_GROUP_NAME,
   }
 }
 
@@ -141,7 +148,7 @@ export function toProxyData(
       response ?? { timestampStart: 0, timestampEnd: 0 }
     ),
     response,
-    group: DEFAULT_GROUP_NAME,
+    group: data.group.trim() || DEFAULT_GROUP_NAME,
   }
 }
 

@@ -22,6 +22,7 @@ describe('parseCurl', () => {
         { name: 'authorization', value: 'Bearer abc.def' },
       ],
       content: '{"email":"a@b.com","password":"secret"}',
+      group: 'Default group',
     })
   })
 
@@ -53,6 +54,7 @@ describe('parseCurl', () => {
     ).toMatchObject({
       headers: [{ name: 'Cookie', value: 'a=1; b=2' }],
       content: '{"a":1}',
+      group: 'Default group',
     })
   })
 })

@@ -93,7 +93,7 @@ function renderGroup(
   const name = escapeC(group.name)
 
   const requests = group.requests
-    .map((request) => renderRequest(request, think, rewrite))
+    .map((request) => renderRequest(request, rewrite))
     .join('\n\n')
 
   return [
@@ -112,17 +112,21 @@ function renderGroup(
 
 function renderRequest(
   request: PlannedRequest,
-  think: ThinkTime,
   rewrite: (value: string) => string
 ) {
   const lines = [
+    // Every VU meets here before the request goes out. The name is derived from
+    // the request, so identical requests share one rendezvous — which is what
+    // the per-request key means. Declare it in the Controller to set the
+    // release policy.
+    request.rendezvous ? `lr_rendezvous("${rendezvousName(request)}");` : '',
     // Registration functions must precede the request they inspect.
     ...request.extractions.map((extraction) => saveParam(extraction)),
     ...request.assertions.flatMap((item) => registerFind(item, rewrite)),
     ...headerLines(request, rewrite),
     customRequest(request, rewrite),
     ...request.assertions.flatMap(statusCheck),
-    think.sleepType === 'requests' ? thinkTime(think.timing) : '',
+    request.thinkTime ? thinkTime(request.thinkTime) : '',
   ].filter((line) => line !== '')
 
   return indent(lines.join('\n'), 1)
@@ -271,6 +275,14 @@ function regFunction(name: string, args: string[]) {
     ...args.map((arg) => indent(`${arg},`, 1)),
     indent('LAST);', 1),
   ].join('\n')
+}
+
+/** VuGen rendezvous names allow letters, digits and underscores only. */
+function rendezvousName(request: PlannedRequest): string {
+  const path = new URL(request.url).pathname
+  const name = `${request.method}_${path}`.replace(/[^A-Za-z0-9_]/g, '_')
+
+  return name.replace(/_+/g, '_').replace(/^_|_$/g, '') || 'rendezvous'
 }
 
 function thinkTime(timing: ThinkTime['timing']): string {

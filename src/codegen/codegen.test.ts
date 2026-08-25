@@ -102,6 +102,7 @@ describe('Code generation', () => {
                   value: 1,
                 },
               },
+              rendezvous: {},
               thresholds: [],
               cloud: {
                 loadZones: {
@@ -155,6 +156,7 @@ describe('Code generation', () => {
             value: 1,
           },
         },
+        rendezvous: {},
         thresholds: [],
         cloud: {
           loadZones: {
@@ -294,6 +296,62 @@ describe('Code generation', () => {
       expect(result[0]?.snippet.replace(/\s/g, '')).toBe(
         expectedResult.replace(/\s/g, '')
       )
+    })
+
+    it('sleeps per request when the request has a think time override', () => {
+      const schemas = ['/api/v1/users', '/api/v1/orders'].map((url) => ({
+        data: createProxyData({
+          request: createRequest({ method: 'GET', url }),
+        }),
+        before: [],
+        after: [],
+        checks: [],
+      }))
+
+      const result = generateRequestSnippetsFromSchemas(schemas, {
+        ...thinkTime,
+        overrides: { 'GET /api/v1/users': { type: 'fixed', value: 3 } },
+      })
+
+      expect(result[0]?.snippet).toContain('sleep(3)')
+      expect(result[1]?.snippet).not.toContain('sleep')
+    })
+
+    it('meets before the marked request only', () => {
+      const schemas = ['/api/v1/users', '/api/v1/orders'].map((url) => ({
+        data: createProxyData({
+          request: createRequest({ method: 'GET', url }),
+        }),
+        before: [],
+        after: [],
+        checks: [],
+      }))
+
+      const result = generateRequestSnippetsFromSchemas(schemas, thinkTime, {
+        'GET /api/v1/users': true,
+      })
+
+      expect(result[0]?.snippet).toContain('rendezvous()')
+      // Before the request it guards, not after.
+      expect(result[0]?.snippet.indexOf('rendezvous()')).toBeLessThan(
+        result[0]?.snippet.indexOf('http.request') ?? 0
+      )
+      expect(result[1]?.snippet).not.toContain('rendezvous')
+    })
+
+    it('declares the barrier helper only when a request is marked', () => {
+      const recording = [
+        createProxyData({
+          request: createRequest({ method: 'GET', url: '/api/v1/users' }),
+        }),
+      ]
+
+      expect(generateVUCode(recording, [], thinkTime)).not.toContain(
+        'function rendezvous'
+      )
+      expect(
+        generateVUCode(recording, [], thinkTime, { 'GET /api/v1/users': true })
+      ).toContain('function rendezvous')
     })
 
     describe('Correlation', () => {
@@ -496,7 +554,7 @@ describe('Code generation', () => {
       expect(result).toContain('http.url`http://test.k6.io/api/v1/foo`')
       expect(result).toContain("http.request('POST', url, null, params)")
       expect(result).toContain(
-        "check(resp, { 'status equals 200': (r) => r.status === 200 })"
+        "check(resp, { 'status equals 200': (r) => r.status === 200 }, { name: url.name })"
       )
     })
 

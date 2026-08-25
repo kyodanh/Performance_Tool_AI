@@ -9,7 +9,7 @@ import {
 } from 'react-select'
 import CreatableSelect from 'react-select/creatable'
 
-import { getThemeConfig } from '@/components/StyledReactSelect/StyledReactSelect.styles'
+import { getThemeConfig } from './StyledReactSelect/StyledReactSelect.styles'
 
 type ComboBoxOption = {
   label: string

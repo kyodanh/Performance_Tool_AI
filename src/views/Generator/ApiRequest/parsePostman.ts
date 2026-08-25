@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { DEFAULT_GROUP_NAME } from '@/constants'
+
 import { ApiRequestFormData, HTTP_METHODS, hasBody } from './ApiRequest.utils'
 
 const KeyValueSchema = z.object({
@@ -105,8 +107,8 @@ export function parsePostman(
   const requests: ApiRequestFormData[] = []
   let skipped = 0
 
-  for (const entry of collectRequests(collection.item)) {
-    const request = toApiRequest(entry, resolve)
+  for (const { request: entry, group } of collectRequests(collection.item)) {
+    const request = toApiRequest(entry, group, resolve)
 
     if (request === null) {
       skipped++
@@ -129,7 +131,12 @@ function parseJson<T>(schema: z.ZodType<T>, json: string): T | null {
 }
 
 // Folders nest arbitrarily deep, each level holding `item` and/or `request`.
-function collectRequests(items: unknown): unknown[] {
+// The innermost folder name becomes the group, so a collection's structure
+// shows up as `group()` calls in the script.
+function collectRequests(
+  items: unknown,
+  group: string = DEFAULT_GROUP_NAME
+): Array<{ request: unknown; group: string }> {
   if (!Array.isArray(items)) {
     return []
   }
@@ -139,17 +146,21 @@ function collectRequests(items: unknown): unknown[] {
       return []
     }
 
-    const { request, item: children } = item as Record<string, unknown>
+    const { request, item: children, name } = item as Record<string, unknown>
+
+    const childGroup =
+      typeof name === 'string' && name.trim() !== '' ? name.trim() : group
 
     return [
-      ...(request === undefined ? [] : [request]),
-      ...collectRequests(children),
+      ...(request === undefined ? [] : [{ request, group }]),
+      ...collectRequests(children, childGroup),
     ]
   })
 }
 
 function toApiRequest(
   entry: unknown,
+  group: string,
   resolve: (value: string) => string
 ): ApiRequestFormData | null {
   const parsed = RequestSchema.safeParse(entry)
@@ -182,6 +193,7 @@ function toApiRequest(
     url: resolvedUrl,
     headers: toHeaders(parsed.data, resolve),
     content,
+    group,
   }
 }
 

@@ -31,6 +31,7 @@ describe('toRequest', () => {
         url: 'https://example.com/api/users?page=2',
         headers: [],
         content: '',
+        group: 'Default group',
       },
       response
     )
@@ -51,6 +52,7 @@ describe('toRequest', () => {
           { name: '', value: 'ignored' },
         ],
         content: '{"name":"k6"}',
+        group: 'Default group',
       },
       response
     )
@@ -67,6 +69,7 @@ describe('toRequest', () => {
         url: 'https://example.com/api/users',
         headers: [],
         content: '{"name":"k6"}',
+        group: 'Default group',
       },
       response
     )
@@ -76,6 +79,7 @@ describe('toRequest', () => {
         url: 'https://example.com/api/users',
         headers: [],
         content: 'name=k6',
+        group: 'Default group',
       },
       response
     )
@@ -91,6 +95,7 @@ describe('toRequest', () => {
         url: 'https://example.com/api/users',
         headers: [],
         content: '{"name":"k6"}',
+        group: 'Default group',
       },
       response
     )
@@ -108,6 +113,7 @@ describe('toProxyData', () => {
         url: 'https://example.com/api/users',
         headers: [],
         content: '',
+        group: 'Default group',
       },
       response
     )
@@ -126,6 +132,7 @@ describe('fromProxyData', () => {
       url: 'https://example.com/api/users?page=2',
       headers: [{ name: 'authorization', value: 'Bearer 123' }],
       content: '{"name":"k6"}',
+      group: 'Default group',
     }
 
     const proxyData = toProxyData(data, response, 'request-1')
@@ -147,6 +154,7 @@ describe('toSendOptions', () => {
     url: 'https://app.test/contacts?t={token}',
     headers: [{ name: 'Authorization', value: 'Bearer {token}' }],
     content: '',
+    group: 'Default group',
   }
 
   it('resolves placeholders with the recorded value', () => {

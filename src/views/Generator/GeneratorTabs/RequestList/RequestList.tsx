@@ -1,14 +1,16 @@
-import { Button, Flex, ScrollArea } from '@radix-ui/themes'
+import { Box, Button, Flex, ScrollArea } from '@radix-ui/themes'
 import { GlobeIcon } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { EmptyMessage } from '@/components/EmptyMessage'
 import { WebLogView } from '@/components/WebLogView'
 import { useFilterRequests } from '@/components/WebLogView/Filter.hooks'
+import { RequestListProps as RequestTableProps } from '@/components/WebLogView/WebLogView'
 import { useProxyDataGroups } from '@/hooks/useProxyDataGroups'
 import { useGeneratorStore } from '@/store/generator'
 import { useApplyRules } from '@/store/generator/hooks/useApplyRules'
 import { useHighlightRequestChanges } from '@/store/generator/hooks/useHighlightRequestChanges'
-import { ProxyData } from '@/types'
+import { Group, ProxyData } from '@/types'
 
 import { AddRequestButton, ImportPostmanButton } from '../../ApiRequest'
 import { RecordingSelector } from '../../RecordingSelector'
@@ -49,7 +51,36 @@ export function RequestList({
     (state) => state.manualRequests.length > 0
   )
 
-  const groups = useProxyDataGroups(requests)
+  const usedGroups = useProxyDataGroups(requests)
+  const emptyGroups = useGeneratorStore((state) => state.emptyGroups)
+  const removeGroup = useGeneratorStore((state) => state.removeGroup)
+  const renameGroup = useGeneratorStore((state) => state.renameGroup)
+
+  // Groups are derived from the requests, so which one is being renamed can't
+  // live on the group itself.
+  const [editedGroup, setEditedGroup] = useState<string | null>(null)
+
+  // Groups created by hand only show up while they hold no requests, after
+  // that the requests themselves put them in the list.
+  const groups = useMemo(
+    () =>
+      [
+        ...usedGroups,
+        ...emptyGroups
+          .filter((name) => !usedGroups.some((group) => group.id === name))
+          .map((name) => ({ id: name, name })),
+      ].map((group) => ({ ...group, isEditing: group.id === editedGroup })),
+    [usedGroups, emptyGroups, editedGroup]
+  )
+
+  // `id` is the current name, so a differing `name` means it was renamed.
+  function handleUpdateGroup(group: Group) {
+    setEditedGroup(group.isEditing ? group.id : null)
+
+    if (!group.isEditing && group.name !== group.id) {
+      renameGroup(group.id, group.name)
+    }
+  }
 
   const recordingError = useGeneratorStore((state) => state.recordingError)
 
@@ -60,6 +91,15 @@ export function RequestList({
   )
 
   const requestWithHighlights = useHighlightRequestChanges(filteredRequests)
+
+  // A new function here would be a new component type, remounting every row
+  // and dropping any popover a row has open.
+  const ListComponent = useCallback(
+    (props: RequestTableProps) => (
+      <RequestTable {...props} selectedRuleInstance={selectedRuleInstance} />
+    ),
+    [selectedRuleInstance]
+  )
 
   if (recordingError !== null && !hasManualRequests) {
     return (
@@ -130,19 +170,19 @@ export function RequestList({
       />
 
       <ScrollArea scrollbars="vertical">
-        <WebLogView
-          requests={requestWithHighlights}
-          selectedRequestId={selectedRequest?.id}
-          onSelectRequest={onSelectRequest}
-          groups={groups}
-          filter={filter}
-          ListComponent={(props) => (
-            <RequestTable
-              {...props}
-              selectedRuleInstance={selectedRuleInstance}
-            />
-          )}
-        />
+        <Box px="3" pb="3">
+          <WebLogView
+            requests={requestWithHighlights}
+            selectedRequestId={selectedRequest?.id}
+            onSelectRequest={onSelectRequest}
+            groups={groups}
+            filter={filter}
+            groupVariant="card"
+            onUpdateGroup={handleUpdateGroup}
+            onRemoveGroup={({ name }) => removeGroup(name)}
+            ListComponent={ListComponent}
+          />
+        </Box>
       </ScrollArea>
     </Flex>
   )

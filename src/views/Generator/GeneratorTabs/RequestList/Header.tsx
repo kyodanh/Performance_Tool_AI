@@ -1,10 +1,11 @@
-import { Flex, Switch, Text } from '@radix-ui/themes'
+import { Flex, Separator, Switch, Text } from '@radix-ui/themes'
 
 import { Filter } from '@/components/WebLogView/Filter'
 import { useGeneratorStore } from '@/store/generator'
 
-import { AddRequestButton, ImportPostmanButton } from '../../ApiRequest'
 import { RecordingSelector } from '../../RecordingSelector'
+
+import { RequestActions } from './RequestActions'
 
 interface HeaderProps {
   filter: string
@@ -30,7 +31,7 @@ export function Header({
   )
 
   return (
-    <Flex justify="between" align="center" px="2" py="1" gap="2">
+    <Flex justify="between" align="center" px="3" py="2" gap="2">
       <Flex gap="2" align="center">
         <Text size="2" weight="medium" as="label" htmlFor="recording-selector">
           Recording
@@ -39,8 +40,8 @@ export function Header({
           id="recording-selector"
           onChangeRecording={onChangeRecording}
         />
-        <AddRequestButton variant="ghost" size="1" />
-        <ImportPostmanButton variant="ghost" size="1" />
+        <Separator orientation="vertical" size="1" mx="1" />
+        <RequestActions />
       </Flex>
 
       <Flex justify="end" align="center" gap="4">
