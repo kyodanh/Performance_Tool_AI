@@ -54,9 +54,16 @@ function hitsPerSecond(buckets: StatsBucket[], window = 60) {
 const SERIES: Array<{
   label: string
   select: (bucket: StatsBucket) => number
-  format: (value: number) => string
+  format: (value: number, stats: RunStats) => string
 }> = [
-  { label: 'Running VUs', select: (b) => b.vus, format: formatCount },
+  {
+    label: 'Running VUs',
+    select: (b) => b.vus,
+    // The last gauge tick of a finished run catches VUs shutting down, so the
+    // headline alone reads lower than the run ever was — pair it with the peak.
+    format: (value, stats) =>
+      `${formatCount(value)} / ${formatCount(stats.vusMax)}`,
+  },
   { label: 'Requests/s', select: (b) => b.requests, format: formatCount },
   { label: 'Response time', select: (b) => b.duration, format: formatTime },
   {
@@ -164,7 +171,7 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
                 key={label}
                 label={label}
                 values={values}
-                value={format(currentValue(values))}
+                value={format(currentValue(values), stats)}
                 from={formatDuration(0)}
                 to={formatDuration(span)}
               />

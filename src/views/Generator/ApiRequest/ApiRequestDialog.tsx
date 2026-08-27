@@ -36,8 +36,12 @@ import {
 } from './ApiRequest.utils'
 import { HeadersEditor } from './HeadersEditor'
 import { parseCurl } from './parseCurl'
-import { useCorrelationVariables } from './useCorrelationVariables'
+import {
+  resolveRequestVariables,
+  useRequestVariables,
+} from './useCorrelationVariables'
 import { useGroupNames } from './useGroupNames'
+import { useVariableCompletion } from './useVariableCompletion'
 import { VariableSuggestField } from './VariableSuggestField'
 
 const METHOD_OPTIONS = HTTP_METHODS.map((method) => ({
@@ -50,12 +54,15 @@ interface ApiRequestDialogProps {
   onOpenChange: (open: boolean) => void
   // When set, the dialog edits this request instead of adding a new one.
   request?: ProxyData
+  // Where to save the edited request, when it is not a manual one.
+  onSave?: (request: ProxyData) => void
 }
 
 export function ApiRequestDialog({
   open,
   onOpenChange,
   request,
+  onSave,
 }: ApiRequestDialogProps) {
   const isEditing = request !== undefined
   const defaultValues = useMemo(
@@ -73,8 +80,9 @@ export function ApiRequestDialog({
   const [error, setError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
 
-  const variables = useCorrelationVariables()
+  const variables = useRequestVariables()
   const variableNames = Object.keys(variables)
+  const handleBodyEditorMount = useVariableCompletion(variableNames)
 
   const groupNames = useGroupNames()
 
@@ -114,8 +122,12 @@ export function ApiRequestDialog({
     setSent(null)
     setError(null)
 
+    // Resolved on send, not on render: reading the data files is async.
     const result = await window.studio.httpRequest.send(
-      toSendOptions(data, variables)
+      toSendOptions(
+        data,
+        await resolveRequestVariables(useGeneratorStore.getState())
+      )
     )
 
     setIsSending(false)
@@ -158,7 +170,9 @@ export function ApiRequestDialog({
       return
     }
 
-    if (isEditing) {
+    if (onSave) {
+      onSave(sent)
+    } else if (isEditing) {
       updateManualRequest(sent.id, sent)
     } else {
       addManualRequest(sent)
@@ -279,6 +293,16 @@ export function ApiRequestDialog({
                         defaultLanguage="json"
                         value={field.value}
                         onChange={(value = '') => field.onChange(value)}
+                        onMount={handleBodyEditorMount}
+                        // A `{variable}` lives inside a JSON string, where
+                        // Monaco keeps quick suggestions off by default.
+                        options={{
+                          quickSuggestions: {
+                            other: true,
+                            comments: false,
+                            strings: true,
+                          },
+                        }}
                       />
                     )}
                   />

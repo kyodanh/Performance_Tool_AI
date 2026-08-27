@@ -2,12 +2,17 @@ import { produce } from 'immer'
 
 import { ProxyData, RequestSnippetSchema } from '@/types'
 import { TestRule } from '@/types/rules'
+import { Variable } from '@/types/testData'
 
 import { exhaustive } from '../utils/typescript'
 
 import { createCorrelationRuleInstance } from './correlation'
 import { createCustomCodeRuleInstance } from './customCode'
 import { createParameterizationRuleInstance } from './parameterization'
+import {
+  interpolateRequestPlaceholders,
+  placeholderExpressions,
+} from './placeholders'
 import { generateSequentialInt, urlToQueryParams } from './utils'
 import { createVerificationRuleInstance } from './verification'
 
@@ -25,13 +30,27 @@ function createSequentialIdPool() {
   return (type: TestRule['type']) => currentId[type]
 }
 
-export function applyRules(recording: ProxyData[], rules: TestRule[]) {
+/**
+ * `variables` lets hand-typed `{name}` placeholders resolve to test data. Pass
+ * it wherever the result becomes a script; omit it when only rule effects are
+ * inspected.
+ */
+export function applyRules(
+  recording: ProxyData[],
+  rules: TestRule[],
+  variables: Variable[] = []
+) {
   const idGenerator = createSequentialIdPool()
   const ruleInstances = rules
     .filter((rule) => rule.enabled)
     .map((rule) => createRuleInstance(rule, idGenerator(rule.type)))
 
+  const expressions = placeholderExpressions(variables, rules)
+
   const requestSnippetSchemas = recording
+    // Before the rules run: a placeholder is a variable reference the user
+    // typed, not recorded text a rule should be matching against.
+    .map((data) => interpolateRequestPlaceholders(data, expressions))
     .map((data) =>
       ruleInstances.reduce<RequestSnippetSchema>(
         (acc, rule) => rule.apply(acc),

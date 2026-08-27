@@ -1,14 +1,20 @@
+import { DEFAULT_HTTP_TIMEOUT } from '@/schemas/generator'
 import { GeneratorFileData } from '@/types/generator'
 import { RampingStage } from '@/types/testOptions'
 import { newSyntheticKey } from '@/utils/zod'
 
 import { createEmptyRule } from './rules'
 
-export function createNewGeneratorFile(recordingPath = ''): GeneratorFileData {
+export function createNewGeneratorFile(
+  recordingPath = '',
+  httpTimeout = DEFAULT_HTTP_TIMEOUT
+): GeneratorFileData {
   return {
     version: '3.0',
     recordingPath,
     manualRequests: [],
+    excludedRequests: [],
+    requestOverrides: {},
     options: {
       loadProfile: {
         executor: 'ramping-vus',
@@ -23,6 +29,7 @@ export function createNewGeneratorFile(recordingPath = ''): GeneratorFileData {
       },
       rendezvous: {},
       thresholds: [],
+      httpTimeout,
       cloud: {
         loadZones: {
           distribution: 'even',

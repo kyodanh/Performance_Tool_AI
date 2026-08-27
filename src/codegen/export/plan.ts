@@ -58,6 +58,8 @@ export interface PlannedGroup {
 export interface ExportPlan {
   load: TestOptions['loadProfile']
   thinkTime: ThinkTime
+  /** Per-request timeout in seconds, shared by every exporter. */
+  httpTimeout: number
   variables: Variable[]
   dataFiles: string[]
   groups: PlannedGroup[]
@@ -77,7 +79,11 @@ export function buildExportPlan({
   const enabledRules = generator.rules.filter((rule) => rule.enabled)
 
   const { requestSnippetSchemas, ruleInstances, affectedRequestIds } =
-    applyRules(cleanupRecording(recording), generator.rules)
+    applyRules(
+      cleanupRecording(recording),
+      generator.rules,
+      generator.testData.variables
+    )
 
   const snippets = processRedirectChains(
     requestSnippetSchemas,
@@ -139,6 +145,7 @@ export function buildExportPlan({
   return {
     load: generator.options.loadProfile,
     thinkTime: generator.options.thinkTime,
+    httpTimeout: generator.options.httpTimeout,
     variables: generator.testData.variables.filter(({ name }) => name),
     dataFiles: generator.testData.files.map(({ name }) => path.name(name)),
     groups: Object.entries(groupProxyData(planned)).map(([name, requests]) => ({

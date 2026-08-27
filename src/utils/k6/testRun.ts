@@ -138,15 +138,33 @@ interface TestRunEventMap {
 const STATS_INTERVAL = 1_000
 
 export class TestRun extends EventEmitter<TestRunEventMap> {
-  #process: ChildProcessWithoutNullStreams
+  /**
+   * Null when the load runs entirely on remote generators: there is no local k6
+   * to wrap, but the metrics, logs and lifecycle still belong to one run.
+   */
+  #process: ChildProcessWithoutNullStreams | null
 
   #checks: Check[] = []
 
   #stats = new RunStatsCollector()
   #statsInterval: NodeJS.Timeout | null = null
+  #finished = false
 
-  constructor(process: ChildProcessWithoutNullStreams) {
+  constructor(process: ChildProcessWithoutNullStreams | null) {
     super()
+
+    this.#process = process
+
+    this.on('done', this.#emitStop)
+    this.on('abort', this.#emitStop)
+    this.on('error', this.#emitStop)
+
+    if (process === null) {
+      // Nothing to wait for a spawn event from, so the run starts immediately.
+      queueMicrotask(this.#handleStart)
+
+      return
+    }
 
     process.on('spawn', this.#handleStart)
 
@@ -155,31 +173,7 @@ export class TestRun extends EventEmitter<TestRunEventMap> {
     process.on('close', this.#handleClose)
 
     readline.createInterface(process.stdout).on('line', (line) => {
-      // Metric samples (`--out csv=-`) share stdout with the checks summary and
-      // the end-of-test report, so consume them before parsing any JSON.
-      if (this.#stats.push(line)) {
-        return
-      }
-
-      if (line[0] !== '[' && line[0] !== '{') {
-        return
-      }
-
-      const checks = parseJsonAsSchema(line, CheckArraySchema)
-
-      if (checks.success) {
-        this.#checks.push(...checks.data)
-
-        return
-      }
-
-      const log = parseJsonAsSchema(line, LogEntrySchema)
-
-      if (!log.success) {
-        return
-      }
-
-      this.emit('log', { entry: log.data })
+      this.#consumeLine(line)
     })
 
     readline.createInterface(process.stderr).on('line', (line) => {
@@ -191,27 +185,94 @@ export class TestRun extends EventEmitter<TestRunEventMap> {
 
       this.emit('log', { entry: log.data })
     })
+  }
 
-    this.#process = process
+  /**
+   * Completes a run with no local process, once the generators carrying it have
+   * finished. `passed` is false when the run was cut short.
+   */
+  finish(passed: boolean) {
+    if (this.#finished) {
+      return
+    }
 
-    this.on('done', this.#emitStop)
-    this.on('abort', this.#emitStop)
-    this.on('error', this.#emitStop)
+    this.#finished = true
+
+    this.emit('done', { result: { passed }, checks: this.#checks })
+  }
+
+  /**
+   * Feeds one output line from a remote generator into the same pipeline as the
+   * local process, so charts and logs cover the whole pool rather than only this
+   * machine's share.
+   */
+  pushRemote(line: string, source: string, clockOffset: number) {
+    this.#consumeLine(line, source, clockOffset)
+  }
+
+  #consumeLine(line: string, source = 'local', clockOffset = 0) {
+    // Metric samples (`--out csv=-`) share stdout with the checks summary and
+    // the end-of-test report, so consume them before parsing any JSON.
+    if (this.#stats.push(line, source, clockOffset)) {
+      return
+    }
+
+    if (line[0] !== '[' && line[0] !== '{') {
+      return
+    }
+
+    const checks = parseJsonAsSchema(line, CheckArraySchema)
+
+    if (checks.success) {
+      this.#checks.push(...checks.data)
+
+      return
+    }
+
+    const log = parseJsonAsSchema(line, LogEntrySchema)
+
+    if (!log.success) {
+      return
+    }
+
+    // Remote entries are tagged so a failure can be traced to the machine it
+    // happened on instead of looking like a local one.
+    this.emit('log', {
+      entry:
+        source === 'local'
+          ? log.data
+          : { ...log.data, msg: `[${source}] ${log.data.msg}` },
+    })
   }
 
   isRunning(): boolean {
+    if (this.#process === null) {
+      return !this.#finished
+    }
+
     return this.#process.pid != undefined && this.#process.exitCode === null
   }
 
   stop(): Promise<void> {
+    const process = this.#process
+
+    if (process === null) {
+      // Only the generators are running; the caller aborts them. Marked finished
+      // here so their streams closing afterwards cannot emit a second ending.
+      this.#finished = true
+      this.emit('abort', {})
+
+      return Promise.resolve()
+    }
+
     if (!this.isRunning()) {
       return Promise.resolve()
     }
 
     return new Promise((resolve) => {
-      this.#process.once('close', resolve)
+      process.once('close', resolve)
 
-      this.#process.kill()
+      process.kill()
     })
   }
 
@@ -234,6 +295,8 @@ export class TestRun extends EventEmitter<TestRunEventMap> {
   }
 
   #handleClose = (code: number | null) => {
+    this.#finished = true
+
     switch (code) {
       case ExitCode.Success:
         this.emit('done', {

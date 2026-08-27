@@ -28,31 +28,20 @@ describe('getValidateTooltip', () => {
 })
 
 describe('getConfigureTooltip', () => {
-  it('prompts to select a recording when the generator has none', () => {
-    expect(getConfigureTooltip(false, false, false)).toBe(
-      'Select a recording to configure with the Assistant'
+  it('prompts for requests when the generator has none', () => {
+    expect(getConfigureTooltip(false, false)).toBe(
+      'Select a recording or add a request to configure with the Assistant'
     )
-    expect(getConfigureTooltip(false, false, true)).toBe(
-      'Select a recording to configure with the Assistant'
-    )
-  })
-
-  it('explains an empty recording gives the Assistant nothing to analyze', () => {
-    expect(getConfigureTooltip(true, false, false)).toBe(
-      'The selected recording has no requests to analyze'
-    )
-    expect(getConfigureTooltip(true, false, true)).toBe(
-      'The selected recording has no requests to analyze'
+    expect(getConfigureTooltip(false, true)).toBe(
+      'Select a recording or add a request to configure with the Assistant'
     )
   })
 
   it('labels the collapsed icon button when compact', () => {
-    expect(getConfigureTooltip(true, true, true)).toBe(
-      'Configure with Assistant'
-    )
+    expect(getConfigureTooltip(true, true)).toBe('Configure with Assistant')
   })
 
   it('shows no tooltip when the labelled button is enabled and roomy', () => {
-    expect(getConfigureTooltip(true, true, false)).toBe('')
+    expect(getConfigureTooltip(true, false)).toBe('')
   })
 })

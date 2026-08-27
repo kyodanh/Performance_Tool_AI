@@ -1,5 +1,6 @@
 import { K6_GENERATOR_FILE_EXTENSION } from '@/constants/files'
 import { GENERATORS_PATH } from '@/constants/workspace'
+import { getSettings } from '@/main/settings'
 import { trackEvent } from '@/services/usageTracking'
 import { UsageEventName } from '@/services/usageTracking/types'
 import { createFileWithUniqueName } from '@/utils/fs'
@@ -9,7 +10,8 @@ import * as path from '@/utils/path'
 import { serializeGenerator } from './serialization'
 
 export async function createGenerator(recordingPath?: string): Promise<string> {
-  const generator = createNewGeneratorFile(recordingPath)
+  const { script } = await getSettings()
+  const generator = createNewGeneratorFile(recordingPath, script.httpTimeout)
 
   const filePath = await createFileWithUniqueName({
     data: serializeGenerator(

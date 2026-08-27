@@ -13,7 +13,12 @@ import { LoadProfile } from './LoadProfile'
 import { LoadZones } from './LoadZones'
 import { Thresholds, MetricsConfig } from './Thresholds'
 
-export type TabId = 'loadProfile' | 'thresholds' | 'thinkTime' | 'loadZones'
+export type TabId =
+  | 'loadProfile'
+  | 'thresholds'
+  | 'thinkTime'
+  | 'http'
+  | 'loadZones'
 
 interface ControlledSlot<T> {
   value: T
@@ -38,12 +43,14 @@ interface TestOptionsDialogProps<M extends string> {
   thresholds: ThresholdsSlot<M>
   loadZones?: ControlledSlot<LoadZoneData>
   thinkTime?: { content: ReactNode }
+  http?: { content: ReactNode }
 }
 
 const TAB_LABELS: Record<TabId, string> = {
   loadProfile: 'Load profile',
   thresholds: 'Thresholds',
   thinkTime: 'Think time',
+  http: 'HTTP',
   loadZones: 'Load zones',
 }
 
@@ -54,6 +61,7 @@ export function TestOptionsDialog<M extends string>({
   thresholds,
   loadZones,
   thinkTime,
+  http,
 }: TestOptionsDialogProps<M>) {
   const [selectedTab, setSelectedTab] = useState<TabId>(
     tabs[0] ?? 'loadProfile'
@@ -107,6 +115,9 @@ export function TestOptionsDialog<M extends string>({
                 <Tabs.Content value="thinkTime">
                   {thinkTime.content}
                 </Tabs.Content>
+              )}
+              {tabs.includes('http') && http && (
+                <Tabs.Content value="http">{http.content}</Tabs.Content>
               )}
               {tabs.includes('loadZones') && loadZones && (
                 <Tabs.Content value="loadZones">

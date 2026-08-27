@@ -324,6 +324,7 @@ function WhatWillRun({
   )
   const allowlist = useGeneratorStore((store) => store.allowlist)
   const manualRequests = useGeneratorStore((store) => store.manualRequests)
+  const excludedRequests = useGeneratorStore((store) => store.excludedRequests)
   // selectFilteredRequests scans and re-allocates on every store change;
   // recompute the count only when its actual inputs change.
   const requestCount = useMemo(
@@ -331,10 +332,14 @@ function WhatWillRun({
       selectFilteredRequests({
         requests,
         manualRequests,
+        excludedRequests,
+        // Overrides replace requests one for one, so they can't change the
+        // count.
+        requestOverrides: {},
         includeStaticAssets,
         allowlist,
       }).length,
-    [requests, manualRequests, includeStaticAssets, allowlist]
+    [requests, manualRequests, excludedRequests, includeStaticAssets, allowlist]
   )
   const loadProfile = useGeneratorStore(
     useShallow(selectLoadProfileExecutorOptions)

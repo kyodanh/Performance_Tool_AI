@@ -11,6 +11,11 @@ vi.mock('@/components/Assistant/AssistantAuthGate', () => ({
   AssistantAuthGate: () => <div data-testid="auth-gate">gate</div>,
 }))
 
+const useAiProvider = vi.fn(() => 'grafana')
+vi.mock('@/hooks/useAiProvider', () => ({
+  useAiProvider: () => useAiProvider(),
+}))
+
 vi.mock('./steps/HostsStep/HostsStep', () => ({
   HostsStep: () => <div data-testid="hosts-step" />,
 }))
@@ -59,6 +64,7 @@ function renderShell(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  useAiProvider.mockReturnValue('grafana')
 })
 
 describe('WizardShell', () => {
@@ -67,6 +73,15 @@ describe('WizardShell', () => {
 
     expect(screen.getByTestId('auth-gate')).toBeDefined()
     expect(screen.queryByTestId('hosts-step')).toBeNull()
+  })
+
+  it('does not gate agent steps when a custom AI provider serves them', () => {
+    useAiProvider.mockReturnValue('custom')
+
+    renderShell('hosts')
+
+    expect(screen.getByTestId('hosts-step')).toBeDefined()
+    expect(screen.queryByTestId('auth-gate')).toBeNull()
   })
 
   it('does not gate the run test step', () => {

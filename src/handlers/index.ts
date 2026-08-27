@@ -10,6 +10,7 @@ import * as fs from './fs'
 import * as generator from './generator'
 import * as har from './har'
 import * as httpRequest from './httpRequest'
+import * as loadGenerator from './loadGenerator'
 import * as log from './log'
 import * as proxy from './proxy'
 import * as script from './script'
@@ -31,6 +32,7 @@ export function initialize() {
   browserTest.initialize()
   dataFiles.initialize()
   fs.initialize()
+  loadGenerator.initialize()
   log.initialize()
   app.initialize()
   ai.initialize()

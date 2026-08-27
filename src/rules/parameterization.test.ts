@@ -105,6 +105,31 @@ describe('applyParameterization', () => {
     )
   })
 
+  it('interpolates ${name} in a text value into a VARS lookup', () => {
+    const requestSnippet = createRequestSnippet(
+      createProxyData({
+        request: createRequest({
+          headers: [['content-Type', 'application/json']],
+          content: JSON.stringify({ user_id: '123' }),
+        }),
+      })
+    )
+
+    const inlineRule: ParameterizationRule = {
+      ...jsonRule,
+      value: { type: 'string', value: '${user}@ssc.com' },
+    }
+
+    const updatedRequest = createParameterizationRuleInstance(
+      inlineRule,
+      idGenerator
+    ).apply(requestSnippet)
+
+    expect(updatedRequest.data.request.content).toBe(
+      '{"user_id":"${VARS[\'user\']}@ssc.com"}'
+    )
+  })
+
   it('does not apply rule if filter does not match', () => {
     const requestSnippet = createRequestSnippet(
       createProxyData({

@@ -5,6 +5,10 @@ import { syntheticKey } from '@/utils/zod'
 import { LoadZoneSchema } from './loadZone'
 import { ThresholdSchema } from './thresholds'
 
+// k6 defaults to 60s, which is tight for report / export endpoints. VuGen's
+// own default is higher, so match that and let the user tune it.
+export const DEFAULT_HTTP_TIMEOUT = 120
+
 export const SleepTypeSchema = z.enum(['groups', 'requests', 'iterations'])
 
 export const FixedTimingSchema = z.object({
@@ -79,6 +83,10 @@ export const TestOptionsSchema = z.object({
   // `requestKey` — same per-request override shape as think time.
   rendezvous: z.record(z.string(), z.literal(true)).default({}),
   thresholds: z.array(ThresholdSchema).default([]),
+  // Applied to every request in the generated script and to the JMeter / VuGen
+  // exports. Seconds, not a k6 duration string: VuGen runtime settings and
+  // JMeter sampler props both want a plain number.
+  httpTimeout: z.number().positive().default(DEFAULT_HTTP_TIMEOUT),
   cloud: z
     .object({
       loadZones: LoadZoneSchema,

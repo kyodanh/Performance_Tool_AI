@@ -14,6 +14,9 @@ const ErrorAnalysisConfigStoreSchema = z.object({
   baseUrl: z.string(),
   model: z.string(),
   apiKey: z.string(),
+  // Optional: files written before the Assistant could use this provider
+  // have no such key, and absent means "Grafana Assistant".
+  useForAssistant: z.boolean().optional(),
 })
 
 type ErrorAnalysisConfigStore = z.infer<typeof ErrorAnalysisConfigStoreSchema>
@@ -82,18 +85,38 @@ export async function getErrorAnalysisStatus(): Promise<ErrorAnalysisStatus> {
     configured: store !== null,
     baseUrl: store?.baseUrl ?? null,
     model: store?.model ?? null,
+    useForAssistant: store?.useForAssistant ?? false,
   }
 }
 
 export async function saveErrorAnalysisConfig(
   config: ErrorAnalysisConfigInput
 ): Promise<void> {
+  // Editing the endpoint or key must not silently move the Assistant back to
+  // Grafana, so the existing choice is carried over.
+  const existing = await readStore()
+
   await writeStore({
     version: '1.0',
     baseUrl: config.baseUrl,
     model: config.model,
     apiKey: encryptString(config.apiKey),
+    useForAssistant: existing?.useForAssistant ?? false,
   })
+}
+
+/**
+ * Ignored while unconfigured: there is nothing to point the Assistant at, and
+ * clearing the config drops the flag with it (falling back to Grafana).
+ */
+export async function setUseForAssistant(value: boolean): Promise<void> {
+  const store = await readStore()
+
+  if (!store) {
+    return
+  }
+
+  await writeStore({ ...store, useForAssistant: value })
 }
 
 export async function clearErrorAnalysisConfig(): Promise<void> {

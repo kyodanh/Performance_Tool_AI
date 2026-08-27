@@ -2,6 +2,7 @@ import { type GeneratorStore } from '@/store/generator'
 import { GeneratorFileData } from '@/types/generator'
 import { LoadProfileExecutorOptions, TestOptions } from '@/types/testOptions'
 import { isNonStaticAssetResponse } from '@/utils/staticAssets'
+import { requestKey } from '@/utils/thinkTime'
 import { exhaustive } from '@/utils/typescript'
 
 export function selectRuleById(state: GeneratorStore, id?: string) {
@@ -32,16 +33,34 @@ export function selectHasRecording(state: GeneratorStore) {
 export function selectFilteredRequests(
   state: Pick<
     GeneratorStore,
-    'requests' | 'manualRequests' | 'allowlist' | 'includeStaticAssets'
+    | 'requests'
+    | 'manualRequests'
+    | 'allowlist'
+    | 'includeStaticAssets'
+    | 'excludedRequests'
+    | 'requestOverrides'
   >
 ) {
+  const excluded = new Set(state.excludedRequests)
+
   const allowedRequests = state.requests.filter((request) => {
-    return state.allowlist.includes(request.request.host)
+    return (
+      state.allowlist.includes(request.request.host) &&
+      !excluded.has(requestKey(request))
+    )
   })
 
-  const recordedRequests = state.includeStaticAssets
+  const filtered = state.includeStaticAssets
     ? allowedRequests
     : allowedRequests.filter(isNonStaticAssetResponse)
+
+  // An edited recorded request keeps its place in the script, so it replaces
+  // the recorded one rather than being appended like a manual request.
+  const recordedRequests = filtered.map((request) => {
+    const override = state.requestOverrides[requestKey(request)]
+
+    return override ? { ...override, id: request.id } : request
+  })
 
   // Manual requests skip the allowlist and static asset filters, they were
   // added on purpose so they always belong in the script.
@@ -57,12 +76,15 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     rendezvous,
     thresholds,
     loadZones,
+    httpTimeout,
     variables,
     files,
     recordingPath,
     rules,
     allowlist,
     manualRequests,
+    excludedRequests,
+    requestOverrides,
     includeStaticAssets,
     scriptName,
     wizardUsed,
@@ -80,12 +102,15 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
       },
       rendezvous,
       thresholds,
+      httpTimeout,
       cloud: { loadZones },
     },
     testData: { variables, files },
     rules,
     allowlist,
     manualRequests,
+    excludedRequests,
+    requestOverrides,
     includeStaticAssets,
     scriptName,
     wizardUsed,

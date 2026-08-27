@@ -3,5 +3,6 @@ export type SettingsTabValue =
   | 'recorder'
   | 'usageReport'
   | 'appearance'
+  | 'script'
   | 'logs'
   | 'aiProvider'

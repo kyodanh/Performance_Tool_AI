@@ -14,7 +14,7 @@ import * as path from './path'
 import { normalize } from './path'
 import { isNodeJsErrnoException } from './typescript'
 
-export { createWriteStream, readFileSync } from 'fs'
+export { createReadStream, createWriteStream, readFileSync } from 'fs'
 export {
   copyFile,
   readFile,

@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 
+import { DEFAULT_HTTP_TIMEOUT } from '@/schemas/generator'
 import { GeneratorStore } from '@/store/generator'
 import { GeneratorFileData } from '@/types/generator'
 
@@ -24,6 +25,7 @@ export function createGeneratorData(
       },
       rendezvous: {},
       thresholds: [],
+      httpTimeout: DEFAULT_HTTP_TIMEOUT,
       cloud: {
         loadZones: {
           distribution: 'even',
@@ -32,6 +34,8 @@ export function createGeneratorData(
       },
     },
     recordingPath: '',
+    excludedRequests: [],
+    requestOverrides: {},
     rules: [],
     scriptName: 'script.js',
     testData: {
@@ -52,6 +56,8 @@ export function createGeneratorState(
       requestJsonPaths: [],
       responseJsonPaths: [],
     },
+    httpTimeout: DEFAULT_HTTP_TIMEOUT,
+    setHttpTimeout: vi.fn(),
     addRule: vi.fn(),
     setRules: vi.fn(),
     cloneRule: vi.fn(),
@@ -100,6 +106,12 @@ export function createGeneratorState(
     addManualRequest: vi.fn(),
     updateManualRequest: vi.fn(),
     removeManualRequest: vi.fn(),
+    excludedRequests: [],
+    toggleExcludedRequest: vi.fn(),
+    restoreExcludedRequests: vi.fn(),
+    requestOverrides: {},
+    setRequestOverride: vi.fn(),
+    clearRequestOverride: vi.fn(),
     emptyGroups: [],
     addGroup: vi.fn(),
     renameGroup: vi.fn(),

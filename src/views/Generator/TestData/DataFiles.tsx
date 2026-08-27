@@ -80,13 +80,20 @@ interface DataFileRowProps {
 }
 
 function DataFileRow({ file, onRemove }: DataFileRowProps) {
-  const isFileInUse = useGeneratorStore((state) =>
-    state.rules.some(
-      (rule) =>
-        rule.type === 'parameterization' &&
-        rule.value.type === 'dataFileValue' &&
-        path.equal(rule.value.fileName, file.name)
-    )
+  const isFileInUse = useGeneratorStore(
+    (state) =>
+      state.rules.some(
+        (rule) =>
+          rule.type === 'parameterization' &&
+          rule.value.type === 'dataFileValue' &&
+          path.equal(rule.value.fileName, file.name)
+      ) ||
+      // Variables can bind to a file column too, and removing the file would
+      // emit a script referencing a missing FILES entry.
+      state.variables.some(
+        (variable) =>
+          variable.file && path.equal(variable.file.fileName, file.name)
+      )
   )
 
   const fileState = useFileExists(file.name)
@@ -127,7 +134,7 @@ function DataFileRow({ file, onRemove }: DataFileRowProps) {
       <Table.Cell>Unique item per iteration</Table.Cell>
       <Table.Cell>
         <Tooltip
-          content="Data file is referenced in a rule"
+          content="Data file is referenced in a rule or variable"
           hidden={!isFileInUse}
         >
           <IconButton

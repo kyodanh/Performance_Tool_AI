@@ -1,8 +1,9 @@
-import { DropdownMenu, Flex } from '@radix-ui/themes'
+import { Button, DropdownMenu, Flex } from '@radix-ui/themes'
 import {
   EllipsisIcon,
   FolderInputIcon,
   PencilIcon,
+  RotateCcwIcon,
   TimerIcon,
   Trash2Icon,
   UsersIcon,
@@ -12,6 +13,7 @@ import { useRef, useState } from 'react'
 import { IconButtonWithTooltip } from '@/components/IconButtonWithTooltip'
 import { PopoverDialog } from '@/components/PopoverDialogs'
 import { useGeneratorStore } from '@/store/generator'
+import { useToast } from '@/store/ui/useToast'
 import { ProxyData } from '@/types'
 import { requestKey } from '@/utils/thinkTime'
 
@@ -27,7 +29,7 @@ import { ThinkTimeForm } from './ThinkTimeForm'
 
 interface RowActionsProps {
   data: ProxyData
-  // Only requests added by hand can be sent again, edited, moved or removed.
+  // Set when the row is a request added by hand rather than a recorded one.
   manualRequest?: ProxyData
 }
 
@@ -42,10 +44,34 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
   const removeManualRequest = useGeneratorStore(
     (store) => store.removeManualRequest
   )
+  const setRequestOverride = useGeneratorStore(
+    (store) => store.setRequestOverride
+  )
+  const clearRequestOverride = useGeneratorStore(
+    (store) => store.clearRequestOverride
+  )
+  const toggleExcludedRequest = useGeneratorStore(
+    (store) => store.toggleExcludedRequest
+  )
+  const showToast = useToast()
   const groupNames = useGroupNames()
   const key = requestKey(data)
   const isRendezvous = useGeneratorStore((store) => store.rendezvous[key])
   const toggleRendezvous = useGeneratorStore((store) => store.toggleRendezvous)
+
+  // Edits to a recorded request are stored against the request as recorded, so
+  // the key has to come from that rather than from the row, which carries both
+  // the rules and any earlier edit.
+  const recorded = useGeneratorStore((store) =>
+    store.requests.find((request) => request.id === data.id)
+  )
+  const overrideKey = recorded ? requestKey(recorded) : null
+  const override = useGeneratorStore((store) =>
+    overrideKey ? store.requestOverrides[overrideKey] : undefined
+  )
+  // What an edit starts from and writes back to: the stored request, never the
+  // row, which has rules applied to it.
+  const editedRequest = manualRequest ?? override ?? recorded
 
   const [isEditingThinkTime, setIsEditingThinkTime] = useState(false)
   const [isEditingRequest, setIsEditingRequest] = useState(false)
@@ -67,6 +93,40 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
     setTimeout(selection)
   }
 
+  // A manual request lives in its own list, so it is edited in place. A
+  // recorded one belongs to the HAR, so the edit is stored as an override that
+  // shadows it.
+  function handleSave(request: ProxyData) {
+    if (manualRequest) {
+      updateManualRequest(manualRequest.id, request)
+      return
+    }
+
+    if (overrideKey) {
+      setRequestOverride(overrideKey, request)
+    }
+  }
+
+  // A manual request is stored in the generator, so removing it drops it for
+  // good. A recorded one belongs to the HAR: it can only be excluded, and the
+  // exclusion is keyed so it survives reloading the recording - hence the undo.
+  function handleRemove() {
+    if (manualRequest) {
+      removeManualRequest(manualRequest.id)
+      return
+    }
+
+    toggleExcludedRequest(key)
+    showToast({
+      title: 'Request removed from the test',
+      action: (
+        <Button variant="ghost" onClick={() => toggleExcludedRequest(key)}>
+          Undo
+        </Button>
+      ),
+    })
+  }
+
   return (
     <>
       <PopoverDialog
@@ -80,9 +140,9 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
             css={buttonGroupCss}
             onClick={(event) => event.stopPropagation()}
           >
-            {manualRequest && (
+            {editedRequest && (
               <>
-                <SendAgainButton request={manualRequest} />
+                <SendAgainButton request={editedRequest} onSent={handleSave} />
                 <ButtonGroupDivider />
               </>
             )}
@@ -121,7 +181,7 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                   Rendezvous
                 </DropdownMenu.CheckboxItem>
 
-                {manualRequest && (
+                {editedRequest && (
                   <>
                     <DropdownMenu.Sub>
                       <DropdownMenu.SubTrigger>
@@ -132,12 +192,9 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                         {groupNames.map((group) => (
                           <DropdownMenu.Item
                             key={group}
-                            disabled={group === manualRequest.group}
+                            disabled={group === editedRequest.group}
                             onSelect={() =>
-                              updateManualRequest(manualRequest.id, {
-                                ...manualRequest,
-                                group,
-                              })
+                              handleSave({ ...editedRequest, group })
                             }
                           >
                             {group}
@@ -155,18 +212,24 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                       <PencilIcon />
                       Edit request
                     </DropdownMenu.Item>
-
-                    <DropdownMenu.Separator />
-
-                    <DropdownMenu.Item
-                      color="red"
-                      onSelect={() => removeManualRequest(manualRequest.id)}
-                    >
-                      <Trash2Icon />
-                      Remove request
-                    </DropdownMenu.Item>
                   </>
                 )}
+
+                {override && overrideKey && (
+                  <DropdownMenu.Item
+                    onSelect={() => clearRequestOverride(overrideKey)}
+                  >
+                    <RotateCcwIcon />
+                    Revert to recorded
+                  </DropdownMenu.Item>
+                )}
+
+                <DropdownMenu.Separator />
+
+                <DropdownMenu.Item color="red" onSelect={handleRemove}>
+                  <Trash2Icon />
+                  Remove request
+                </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
           </Flex>
@@ -179,10 +242,11 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
       </PopoverDialog>
 
       {/* Mounted only while editing so the form picks up the current request. */}
-      {isEditingRequest && manualRequest && (
+      {isEditingRequest && editedRequest && (
         <ApiRequestDialog
           open
-          request={manualRequest}
+          request={editedRequest}
+          onSave={handleSave}
           onOpenChange={setIsEditingRequest}
         />
       )}

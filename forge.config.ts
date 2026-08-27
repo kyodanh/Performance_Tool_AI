@@ -111,6 +111,7 @@ const config: ForgeConfig = {
       './resources/entrypoint.js',
       './resources/replay.js',
       './resources/k6-testing.js',
+      './resources/loadGenerator',
       ...getPlatformSpecificResources(),
     ],
     // Windows signing relies on the Azure Trusted Signing tool. Only enable it

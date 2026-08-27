@@ -8,6 +8,14 @@ export const VariableSchema = z.object({
     // Don't allow native object properties, like __proto__, valueOf, etc.
     .refine((val) => !(val in {}), { message: 'Invalid name' }),
   value: z.string(),
+  // ponytail: optional binding to a data file column. Absent = plain constant,
+  // so existing .k6g files stay valid and no schema migration is needed.
+  file: z
+    .object({
+      fileName: z.string().min(1, { message: 'Required' }),
+      propertyName: z.string().min(1, { message: 'Required' }),
+    })
+    .optional(),
 })
 
 export const DataFileSchema = z.object({

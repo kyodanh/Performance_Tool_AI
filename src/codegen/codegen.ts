@@ -44,12 +44,16 @@ export function generateScript({
 
     export const options = ${generateOptions(generator.options)}
 
+    // Applies to every request below. Raise it for slow report / export
+    // endpoints, lower it to make a hung server fail fast.
+    const HTTP_TIMEOUT = '${generator.options.httpTimeout}s'
+
     ${generateVariableDeclarations(generator.testData.variables)}
     ${generateDataFileDeclarations(generator.testData.files, scriptPath)}
     ${generateGetUniqueItemFunction(generator.testData.files)}
 
     export default function() {
-      ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous)}
+      ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous, generator.testData.variables)}
     }
   `
 }
@@ -90,7 +94,13 @@ export function generateVariableDeclarations(variables: Variable[]): string {
 
   const variableKeyValuePairs = variables
     .filter(({ name }) => name)
-    .map(({ name, value }) => `"${name}": ${JSON.stringify(value)}`)
+    .map(({ name, value, file }) =>
+      file
+        ? // Getter, not a value: it must be read per iteration so each VU gets its
+          // own row. Lazy evaluation also keeps it valid before FILES is awaited.
+          `get "${name}"() { return getUniqueItem(FILES['${path.name(file.fileName)}'])['${file.propertyName}'] }`
+        : `"${name}": ${JSON.stringify(value)}`
+    )
     .join(',\n')
 
   return `const VARS = {\n${variableKeyValuePairs}\n};`
@@ -143,14 +153,16 @@ export function generateVUCode(
   recording: ProxyData[],
   rules: TestRule[],
   thinkTime: ThinkTime,
-  rendezvous: TestOptions['rendezvous'] = {}
+  rendezvous: TestOptions['rendezvous'] = {},
+  variables: Variable[] = []
 ): string {
   const cleanedRecording = cleanupRecording(recording)
   const enabledRules = rules.filter((rule) => rule.enabled)
 
   const { requestSnippetSchemas, affectedRequestIds } = applyRules(
     cleanedRecording,
-    enabledRules
+    enabledRules,
+    variables
   )
 
   const snippets = processRedirectChains(
@@ -343,6 +355,9 @@ export function generateRequestParams(
     .join(',\n')
 
   const params = [
+    // ponytail: a script-level const instead of threading the value through
+    // every snippet function — one place for the user to edit after export too.
+    'timeout: HTTP_TIMEOUT',
     `headers: {
       ${headers}
     }`,

@@ -11,6 +11,7 @@ import {
 } from '@/store/generator'
 
 import { HTTP_METRICS_CONFIG } from './httpThresholdMetrics'
+import { HttpTimeout } from './HttpTimeout'
 import { ThinkTime } from './ThinkTime'
 
 export function TestOptions() {
@@ -33,7 +34,7 @@ export function TestOptions() {
           Test options
         </Button>
       }
-      tabs={['loadProfile', 'thresholds', 'thinkTime', 'loadZones']}
+      tabs={['loadProfile', 'thresholds', 'thinkTime', 'http', 'loadZones']}
       loadProfile={{
         value: loadProfile,
         onChange: setLoadProfile,
@@ -47,6 +48,7 @@ export function TestOptions() {
       }}
       loadZones={{ value: loadZones, onChange: setLoadZones }}
       thinkTime={{ content: <ThinkTime /> }}
+      http={{ content: <HttpTimeout /> }}
     />
   )
 }

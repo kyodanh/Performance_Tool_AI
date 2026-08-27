@@ -12,10 +12,11 @@ export function useApplyRules() {
   // Shallow, because the selector builds a new array every time: without it
   // any store write would recompute the rules and remount the request rows.
   const requests = useGeneratorStore(useShallow(selectFilteredRequests))
+  const variables = useGeneratorStore((state) => state.variables)
 
   const ruleApplicationResult = useMemo(
-    () => applyRules(requests, rules),
-    [requests, rules]
+    () => applyRules(requests, rules, variables),
+    [requests, rules, variables]
   )
 
   const selectedRuleInstance = useMemo(

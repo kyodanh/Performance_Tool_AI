@@ -18,7 +18,7 @@ import { TestRun } from './testRun'
 
 const EXECUTABLE_NAME = getPlatform() === 'win' ? 'k6.exe' : 'k6'
 
-function getDefaultExecutablePath() {
+export function getK6ExecutablePath() {
   const resourcesPath = import.meta.env.DEV
     ? path.join(app.getAppPath(), 'resources', getPlatform())
     : process.resourcesPath
@@ -70,6 +70,13 @@ interface RunArgs {
   iterations?: number
   /** `<duration>:<target>` pairs replacing the script's own ramp. */
   stages?: string[]
+  /**
+   * Share of the load this process takes, e.g. `0:1/2`. The profile above stays
+   * the total: k6 applies the segment to the resolved options.
+   */
+  executionSegment?: string
+  /** Every boundary in the split, identical across the participating processes. */
+  executionSegmentSequence?: string
   env?: Record<string, string>
 }
 
@@ -88,7 +95,7 @@ export class ArchiveError extends Error {
 export class K6Client {
   #executablePath: string
 
-  constructor(executablePath: string = getDefaultExecutablePath()) {
+  constructor(executablePath: string = getK6ExecutablePath()) {
     this.#executablePath = executablePath
   }
 
@@ -186,6 +193,8 @@ export class K6Client {
     duration,
     iterations,
     stages,
+    executionSegment,
+    executionSegmentSequence,
     env = {},
   }: RunArgs): TestRun {
     const args = [
@@ -201,6 +210,14 @@ export class K6Client {
       duration !== undefined && ['--duration', duration],
       iterations !== undefined && ['--iterations', String(iterations)],
       stages?.flatMap((stage) => ['--stage', stage]),
+      executionSegment !== undefined && [
+        '--execution-segment',
+        executionSegment,
+      ],
+      executionSegmentSequence !== undefined && [
+        '--execution-segment-sequence',
+        executionSegmentSequence,
+      ],
       toNativePath(path),
     ]
 

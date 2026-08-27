@@ -12,6 +12,7 @@ import * as fs from './handlers/fs/preload'
 import * as generator from './handlers/generator/preload'
 import * as har from './handlers/har/preload'
 import * as httpRequest from './handlers/httpRequest/preload'
+import * as loadGenerator from './handlers/loadGenerator/preload'
 import * as log from './handlers/log/preload'
 import * as proxy from './handlers/proxy/preload'
 import * as script from './handlers/script/preload'
@@ -36,6 +37,7 @@ const studio = {
   browserRemote,
   cloud,
   ai,
+  loadGenerator,
   fs,
   platform: process.platform,
 } as const

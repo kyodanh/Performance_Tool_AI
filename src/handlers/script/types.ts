@@ -37,4 +37,10 @@ export interface RunLoadTestOptions extends LoadProfileOverrides {
   verbose?: boolean
   /** Logs every request and response, bodies included. */
   httpDebug?: boolean
+  /**
+   * Whether this machine takes a share of the load. Off leaves it aggregating
+   * only, which keeps its CPU out of the measurement when generators are joined.
+   * Defaults to on.
+   */
+  useLocalGenerator?: boolean
 }

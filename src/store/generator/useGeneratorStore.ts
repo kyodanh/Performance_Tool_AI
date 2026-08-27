@@ -39,12 +39,21 @@ export const useGeneratorStore = create<GeneratorStore>()(
     ...createTestOptionsSlice(set, ...rest),
     ...createScriptDataSlice(set, ...rest),
     setGeneratorFile: ({
-      options: { thinkTime, loadProfile, thresholds, cloud, rendezvous },
+      options: {
+        thinkTime,
+        loadProfile,
+        thresholds,
+        cloud,
+        rendezvous,
+        httpTimeout,
+      },
       testData: { variables, files },
       recordingPath,
       rules,
       allowlist,
       manualRequests,
+      excludedRequests,
+      requestOverrides,
       includeStaticAssets,
       scriptName,
       wizardUsed,
@@ -58,6 +67,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         state.rendezvous = rendezvous ?? {}
         state.loadZones = cloud.loadZones
         state.thresholds = thresholds
+        state.httpTimeout = httpTimeout
         state.executor = loadProfile.executor
         switch (loadProfile.executor) {
           case 'ramping-vus':
@@ -77,6 +87,10 @@ export const useGeneratorStore = create<GeneratorStore>()(
         state.recordingPath = recordingPath
         state.allowlist = allowlist
         state.manualRequests = manualRequests
+        // Older generator files predate the field, and so does any main
+        // process still running from before it existed.
+        state.excludedRequests = excludedRequests ?? []
+        state.requestOverrides = requestOverrides ?? {}
         state.emptyGroups = []
 
         state.includeStaticAssets = includeStaticAssets

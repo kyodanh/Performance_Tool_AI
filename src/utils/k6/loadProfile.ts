@@ -108,6 +108,18 @@ export function describeProfile(profile: LoadProfileExecutorOptions): string {
   return stages.join(', ') || 'no stages'
 }
 
+/**
+ * The highest VU count the profile reaches. Used to warn when a generator's
+ * socket limits cannot carry the share it has been given.
+ */
+export function peakVus(profile: LoadProfileExecutorOptions): number {
+  if (profile.executor === 'shared-iterations') {
+    return profile.vus ?? 0
+  }
+
+  return profile.stages.reduce((peak, { target }) => Math.max(peak, target), 0)
+}
+
 const DURATION_UNITS: Record<string, number> = {
   h: 3600,
   m: 60,

@@ -1,10 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, IconButton, TextField, Text, Tooltip } from '@radix-ui/themes'
+import {
+  Button,
+  Code,
+  Flex,
+  IconButton,
+  TextField,
+  Text,
+  Tooltip,
+} from '@radix-ui/themes'
 import { Trash2Icon } from 'lucide-react'
 import { useCallback, useEffect } from 'react'
 import {
   useForm,
   useFieldArray,
+  Control,
   FieldArrayWithId,
   UseFormRegister,
   FieldErrors,
@@ -17,9 +26,12 @@ import { TestDataSchema } from '@/schemas/generator'
 import { useGeneratorStore } from '@/store/generator'
 import { TestData } from '@/types/testData'
 
+import { VariableFileValue } from './VariableFileValue'
+
 export function VariablesEditor() {
   const variables = useGeneratorStore((store) => store.variables)
   const setVariables = useGeneratorStore((store) => store.setVariables)
+  const dataFiles = useGeneratorStore((store) => store.files)
 
   const {
     handleSubmit,
@@ -57,16 +69,25 @@ export function VariablesEditor() {
     append({ name: `variable_${watchVariables.length}`, value: '' })
   }
 
+  function handleAddFileVariable() {
+    append({
+      name: `variable_${watchVariables.length}`,
+      value: '',
+      file: { fileName: dataFiles[0]?.name ?? '', propertyName: '' },
+    })
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <Text size="2" as="p" mb="2">
-        Define variables and use them in your test rules.
+        Define variables and use them in your test rules, or inline in any text
+        value with <Code size="1">{'${name}'}</Code>.
       </Text>
       <Table.Root size="1" variant="surface">
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell width="30%">Name</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Value (string)</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Value</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell width="0"></Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
@@ -77,6 +98,7 @@ export function VariablesEditor() {
               key={field.id}
               field={field}
               index={index}
+              control={control}
               register={register}
               errors={errors}
               onRemove={remove}
@@ -84,9 +106,23 @@ export function VariablesEditor() {
           ))}
           <Table.Row>
             <Table.RowHeaderCell colSpan={3} justify="center">
-              <Button variant="ghost" onClick={handleAddVariable}>
-                Add variable
-              </Button>
+              <Flex gap="4" justify="center">
+                <Button variant="ghost" onClick={handleAddVariable}>
+                  Add variable
+                </Button>
+                <Tooltip
+                  content="Add a data file in the Data files tab first"
+                  hidden={dataFiles.length > 0}
+                >
+                  <Button
+                    variant="ghost"
+                    disabled={dataFiles.length === 0}
+                    onClick={handleAddFileVariable}
+                  >
+                    Add variable from file
+                  </Button>
+                </Tooltip>
+              </Flex>
             </Table.RowHeaderCell>
           </Table.Row>
         </Table.Body>
@@ -98,6 +134,7 @@ export function VariablesEditor() {
 interface VariableRowProps {
   field: FieldArrayWithId<Pick<TestData, 'variables'>, 'variables', 'id'>
   index: number
+  control: Control<Pick<TestData, 'variables'>>
   register: UseFormRegister<Pick<TestData, 'variables'>>
   errors: FieldErrors<Pick<TestData, 'variables'>>
   onRemove: UseFieldArrayRemove
@@ -106,6 +143,7 @@ interface VariableRowProps {
 function VariableRow({
   field,
   index,
+  control,
   errors,
   register,
   onRemove,
@@ -131,12 +169,16 @@ function VariableRow({
         </FieldGroup>
       </Table.Cell>
       <Table.Cell>
-        <FieldGroup errors={errors} name={`variables.${index}.value`} mb="0">
-          <TextField.Root
-            placeholder="value"
-            {...register(`variables.${index}.value`)}
-          />
-        </FieldGroup>
+        {field.file ? (
+          <VariableFileValue control={control} errors={errors} index={index} />
+        ) : (
+          <FieldGroup errors={errors} name={`variables.${index}.value`} mb="0">
+            <TextField.Root
+              placeholder="value"
+              {...register(`variables.${index}.value`)}
+            />
+          </FieldGroup>
+        )}
       </Table.Cell>
       <Table.Cell>
         <Tooltip

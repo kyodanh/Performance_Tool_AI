@@ -21,6 +21,8 @@ export async function loadGeneratorTest(generatorPath: string) {
   const requests = selectFilteredRequests({
     requests: recording,
     manualRequests: generator.manualRequests ?? [],
+    excludedRequests: generator.excludedRequests ?? [],
+    requestOverrides: generator.requestOverrides ?? {},
     allowlist: generator.allowlist,
     includeStaticAssets: generator.includeStaticAssets,
   })

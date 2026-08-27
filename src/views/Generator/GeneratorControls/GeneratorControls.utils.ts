@@ -20,12 +20,11 @@ export function getValidateTooltip(
  * as the Validate one: the disabled reason wins, then the compact label.
  */
 export function getConfigureTooltip(
-  hasRecording: boolean,
   hasRequests: boolean,
   isCompact: boolean
 ): string {
-  if (!hasRecording) return 'Select a recording to configure with the Assistant'
-  if (!hasRequests) return 'The selected recording has no requests to analyze'
+  if (!hasRequests)
+    return 'Select a recording or add a request to configure with the Assistant'
   if (isCompact) return 'Configure with Assistant'
 
   return ''

@@ -38,6 +38,13 @@ export function errorAnalysisTestConnection(
   ) as Promise<TestConnectionResult>
 }
 
+export function errorAnalysisSetUseForAssistant(useForAssistant: boolean) {
+  return ipcRenderer.invoke(
+    ErrorAnalysisHandler.SetUseForAssistant,
+    useForAssistant
+  ) as Promise<ErrorAnalysisStatus>
+}
+
 export function errorAnalysisAnalyzeFailure(request: AnalyzeFailureRequest) {
   return ipcRenderer.invoke(
     ErrorAnalysisHandler.Analyze,

@@ -12,6 +12,7 @@ import {
   extractor,
   hashTree,
   headerManager,
+  httpDefaults,
   sampler,
   syncTimer,
   testAction,
@@ -49,6 +50,7 @@ export function generateJMeterScript({
     .join('\n')
 
   const preamble = [
+    httpDefaults(plan.httpTimeout),
     cookieManager(),
     ...plan.dataFiles.map((file) => csvDataSet(file)),
   ].join('\n')

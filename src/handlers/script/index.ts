@@ -103,6 +103,7 @@ export function initialize() {
         stages,
         verbose,
         httpDebug,
+        useLocalGenerator,
       }: RunLoadTestOptions
     ) => {
       console.info(`${ScriptHandler.RunLoad} event received`)
@@ -128,6 +129,7 @@ export function initialize() {
           stages,
           verbose,
           httpDebug,
+          useLocalGenerator,
         })
       } catch (error) {
         browserWindow.webContents.send(ScriptHandler.Failed)

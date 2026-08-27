@@ -47,16 +47,27 @@ export async function handleStreamChat(
       convertToModelMessages(request.messages)
     )
 
+    // The user can point the Assistant at their own OpenAI-compatible
+    // endpoint (Settings), which is the only way to run it without a Grafana
+    // Cloud account. Read per stream so a switch takes effect immediately.
+    const modelOverride = await errorAnalysis.getAssistantModelOverride()
+
     const response = streamText({
-      model: grafanaAssistantModel,
+      model: modelOverride ?? grafanaAssistantModel,
       messages,
       tools: buildToolSet(request.tools),
       abortSignal: abortController.signal,
-      providerOptions: {
-        grafanaAssistant: {
-          chatId: request.id,
-        },
-      },
+      // `chatId` is the Grafana Assistant's task id; no other provider has an
+      // equivalent, so it is only sent when Grafana is serving the stream.
+      ...(modelOverride
+        ? {}
+        : {
+            providerOptions: {
+              grafanaAssistant: {
+                chatId: request.id,
+              },
+            },
+          }),
     })
 
     await streamMessages(event.sender, response, request.id)

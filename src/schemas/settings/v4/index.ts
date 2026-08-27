@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { DEFAULT_HTTP_TIMEOUT } from '../../generator/v3/testOptions'
 import * as v5 from '../v5'
 
 const RegularProxySettingsSchema = z.object({
@@ -130,5 +131,6 @@ export function migrate(
   return {
     ...rest,
     version: '5.0',
+    script: { httpTimeout: DEFAULT_HTTP_TIMEOUT },
   }
 }

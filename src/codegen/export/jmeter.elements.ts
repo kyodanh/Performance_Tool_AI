@@ -105,6 +105,25 @@ export function userDefinedVariables(variables: Variable[]) {
   `
 }
 
+/**
+ * HTTP Request Defaults — JMeter propagates these to every sampler in scope,
+ * so the timeout is set once instead of on each request.
+ */
+export function httpDefaults(timeoutSeconds: number) {
+  const ms = timeoutSeconds * 1000
+
+  return `
+    <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+      <stringProp name="HTTPSampler.connect_timeout">${ms}</stringProp>
+      <stringProp name="HTTPSampler.response_timeout">${ms}</stringProp>
+    </ConfigTestElement>
+    <hashTree/>
+  `
+}
+
 export function cookieManager() {
   return `
     <CookieManager guiclass="CookiePanel" testclass="CookieManager" testname="HTTP Cookie Manager" enabled="true">

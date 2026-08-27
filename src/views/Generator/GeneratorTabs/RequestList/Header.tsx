@@ -1,4 +1,5 @@
-import { Flex, Separator, Switch, Text } from '@radix-ui/themes'
+import { Button, Flex, Separator, Switch, Text } from '@radix-ui/themes'
+import { Undo2Icon } from 'lucide-react'
 
 import { Filter } from '@/components/WebLogView/Filter'
 import { useGeneratorStore } from '@/store/generator'
@@ -30,6 +31,13 @@ export function Header({
     (store) => store.setPreviewOriginalRequests
   )
 
+  const removedCount = useGeneratorStore(
+    (store) => store.excludedRequests.length
+  )
+  const restoreExcludedRequests = useGeneratorStore(
+    (store) => store.restoreExcludedRequests
+  )
+
   return (
     <Flex justify="between" align="center" px="3" py="2" gap="2">
       <Flex gap="2" align="center">
@@ -42,6 +50,19 @@ export function Header({
         />
         <Separator orientation="vertical" size="1" mx="1" />
         <RequestActions />
+        {/* Removing a recorded request only excludes it, so the way back has
+            to stay visible - the rows themselves are gone. */}
+        {removedCount > 0 && (
+          <Button
+            variant="ghost"
+            color="gray"
+            size="1"
+            onClick={restoreExcludedRequests}
+          >
+            <Undo2Icon />
+            Restore {removedCount} removed
+          </Button>
+        )}
       </Flex>
 
       <Flex justify="end" align="center" gap="4">

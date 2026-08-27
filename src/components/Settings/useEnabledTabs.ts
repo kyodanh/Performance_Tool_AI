@@ -8,6 +8,7 @@ import { ErrorAnalysisProviderSettings } from './ErrorAnalysisProviderSettings'
 import { LogsSettings } from './LogsSettings'
 import { ProxySettings } from './ProxySettings'
 import { RecorderSettings } from './RecorderSettings'
+import { ScriptSettings } from './ScriptSettings'
 import { TelemetrySettings } from './TelemetrySettings'
 import { SettingsTabValue } from './types'
 
@@ -28,6 +29,11 @@ const TABS: Array<{
     label: 'Appearance',
     value: 'appearance',
     component: AppearanceSettings,
+  },
+  {
+    label: 'Script',
+    value: 'script',
+    component: ScriptSettings,
   },
   {
     label: 'Logs',

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
+import { DEFAULT_HTTP_TIMEOUT } from '@/schemas/generator'
+
 import * as v1 from './v1'
 import * as v2 from './v2'
 import * as v3 from './v3'
 import * as v4 from './v4'
 
-import { migrate } from '.'
+import { AppSettingsSchema, migrate } from '.'
 
 describe('Settings migration', () => {
   it('should migrate from v1 to latest', () => {
@@ -212,5 +214,25 @@ describe('Settings migration', () => {
       expect(migration.version).toBe('5.0')
       expect('ai' in migration).toBe(false)
     })
+  })
+})
+
+describe('script settings', () => {
+  it('fills in the default http timeout for settings files that predate it', () => {
+    const settings = AppSettingsSchema.parse({
+      version: '5.0',
+      proxy: {
+        mode: 'regular',
+        port: 6000,
+        automaticallyFindPort: true,
+        sslInsecure: false,
+      },
+      recorder: { detectBrowserPath: true },
+      windowState: { width: 1200, height: 800, x: 0, y: 0, isMaximized: true },
+      telemetry: { usageReport: true, errorReport: true },
+      appearance: { theme: 'system' },
+    })
+
+    expect(settings.script.httpTimeout).toBe(DEFAULT_HTTP_TIMEOUT)
   })
 })

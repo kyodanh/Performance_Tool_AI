@@ -1,5 +1,6 @@
 import { DropdownMenu, Flex, IconButton, Tooltip } from '@radix-ui/themes'
 import {
+  ChevronDownIcon,
   CircleCheckBigIcon,
   DownloadIcon,
   EllipsisVerticalIcon,
@@ -12,6 +13,12 @@ import { ButtonWithTooltip } from '@/components/ButtonWithTooltip'
 import { GrafanaIcon } from '@/components/icons/GrafanaIcon'
 import { TITLE_GROUP_MIN_WIDTH } from '@/components/Layout/ViewHeading'
 import { RunInCloudDialog } from '@/components/RunInCloudDialog/RunInCloudDialog'
+import {
+  AiProvider,
+  useAiProvider,
+  useAiProviderStatus,
+  useSetAiProvider,
+} from '@/hooks/useAiProvider'
 import { useDeleteFile } from '@/hooks/useDeleteFile'
 import { useElementWidth } from '@/hooks/useElementWidth'
 import { useProxyStatus } from '@/hooks/useProxyStatus'
@@ -76,12 +83,15 @@ export function GeneratorControls({
   const [isRunInCloudDialogOpen, setIsRunInCloudDialogOpen] = useState(false)
   const proxyStatus = useProxyStatus()
   const isScriptExportable = script.valid && !!script.preview
-  // The wizard configures the test from the recording's requests, so it needs
-  // a selected recording that actually contains some. Raw requests, not the
-  // allowlist-filtered set: before the wizard's hosts step runs, the allowlist
-  // is typically empty.
-  const hasRecording = useGeneratorStore((store) => store.recordingPath !== '')
-  const hasRequests = useGeneratorStore((store) => store.requests.length > 0)
+  // The wizard needs requests to configure the test from, recorded or added
+  // by hand. Raw recorded requests, not the allowlist-filtered set: before the
+  // wizard's hosts step runs, the allowlist is typically empty.
+  const hasRequests = useGeneratorStore(
+    (store) => store.requests.length + store.manualRequests.length > 0
+  )
+  const aiProvider = useAiProvider()
+  const { data: providerStatus } = useAiProviderStatus()
+  const setAiProvider = useSetAiProvider()
 
   // Tooltips should only appear once a button is icon-only. Whether that
   // happened is read back from the CSS outcome (the label span's width), so
@@ -139,20 +149,54 @@ export function GeneratorControls({
             Validate
           </span>
         </ButtonWithTooltip>
-        <ButtonWithTooltip
-          variant="ghost"
-          aria-label="Configure with Assistant"
-          tooltip={getConfigureTooltip(
-            hasRecording,
-            hasRequests,
-            actionsCollapsed
-          )}
-          disabled={!hasRecording || !hasRequests}
-          onClick={onConfigureWithAssistant}
-        >
-          <WandSparklesIcon />
-          <span css={actionLabelStyles}>Configure with Assistant</span>
-        </ButtonWithTooltip>
+        <Flex align="center">
+          <ButtonWithTooltip
+            variant="ghost"
+            aria-label="Configure with Assistant"
+            tooltip={getConfigureTooltip(hasRequests, actionsCollapsed)}
+            disabled={!hasRequests}
+            onClick={onConfigureWithAssistant}
+          >
+            <WandSparklesIcon />
+            <span css={actionLabelStyles}>Configure with Assistant</span>
+          </ButtonWithTooltip>
+          <DropdownMenu.Root>
+            <Tooltip content="Choose AI provider">
+              <DropdownMenu.Trigger>
+                <IconButton
+                  variant="ghost"
+                  color="gray"
+                  aria-label="Choose AI provider"
+                >
+                  <ChevronDownIcon />
+                </IconButton>
+              </DropdownMenu.Trigger>
+            </Tooltip>
+            <DropdownMenu.Content>
+              <DropdownMenu.Label>AI provider</DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                value={aiProvider}
+                onValueChange={(value) =>
+                  setAiProvider.mutate(value as AiProvider)
+                }
+              >
+                <DropdownMenu.RadioItem value="grafana">
+                  Grafana Assistant
+                </DropdownMenu.RadioItem>
+                {/* Configure the endpoint in Settings first; there is nothing
+                    to point the Assistant at until then. */}
+                <DropdownMenu.RadioItem
+                  value="custom"
+                  disabled={!providerStatus?.configured}
+                >
+                  {providerStatus?.configured
+                    ? `Your AI API (${providerStatus.model})`
+                    : 'Your AI API — set up in Settings'}
+                </DropdownMenu.RadioItem>
+              </DropdownMenu.RadioGroup>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </Flex>
         <ButtonWithTooltip
           variant="solid"
           aria-label="Run in Grafana Cloud"

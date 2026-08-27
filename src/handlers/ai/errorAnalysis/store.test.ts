@@ -141,6 +141,7 @@ describe('getErrorAnalysisStatus', () => {
       configured: false,
       baseUrl: null,
       model: null,
+      useForAssistant: false,
     })
   })
 
@@ -161,6 +162,7 @@ describe('getErrorAnalysisStatus', () => {
       configured: true,
       baseUrl: 'https://example.com/v1',
       model: 'gpt-4o-mini',
+      useForAssistant: false,
     })
     expect(status).not.toHaveProperty('apiKey')
   })

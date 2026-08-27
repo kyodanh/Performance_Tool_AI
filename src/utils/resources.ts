@@ -8,6 +8,8 @@ const RESOURCE_INDEX = {
   'replay-script': 'replay.js',
   'entrypoint-script': 'entrypoint.js',
   'k6-testing-shim': 'k6-testing.js',
+  'load-generator-joiner-sh': 'loadGenerator/join.sh',
+  'load-generator-joiner-ps1': 'loadGenerator/join.ps1',
 }
 
 export type ResourceName = keyof typeof RESOURCE_INDEX

@@ -138,4 +138,49 @@ describe('buildFailureAnalysisPrompt', () => {
 
     expect(matches).toHaveLength(20)
   })
+
+  it('asks for a performance review when nothing failed', () => {
+    const requestStats: RequestStats[] = [
+      {
+        method: 'GET',
+        name: 'https://test.k6.io/',
+        status: '200',
+        group: '',
+        count: 10,
+        failed: 0,
+        avg: 120,
+        max: 300,
+      },
+    ]
+
+    const prompt = buildFailureAnalysisPrompt(makeRequest({ requestStats }))
+
+    expect(prompt).toContain('finished without failures')
+    expect(prompt).not.toContain('root cause')
+  })
+
+  it('asks for the answer in Vietnamese', () => {
+    expect(buildFailureAnalysisPrompt(makeRequest())).toContain(
+      'Answer in Vietnamese'
+    )
+  })
+
+  it('asks for a root cause as soon as a request failed', () => {
+    const requestStats: RequestStats[] = [
+      {
+        method: 'GET',
+        name: 'https://test.k6.io/',
+        status: '500',
+        group: '',
+        count: 10,
+        failed: 3,
+        avg: 120,
+        max: 300,
+      },
+    ]
+
+    const prompt = buildFailureAnalysisPrompt(makeRequest({ requestStats }))
+
+    expect(prompt).toContain('root cause')
+  })
 })

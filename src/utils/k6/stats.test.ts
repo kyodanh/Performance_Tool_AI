@@ -81,7 +81,7 @@ describe('RunStatsCollector', () => {
         duration: 20,
         throughput: 2048,
       },
-      { time: 101, vus: 0, requests: 1, failed: 0, duration: 0, throughput: 0 },
+      { time: 101, vus: 2, requests: 1, failed: 0, duration: 0, throughput: 0 },
     ])
     expect(stats.requests).toBe(3)
     expect(stats.avgDuration).toBe(20)
@@ -375,5 +375,51 @@ describe('RunStatsCollector', () => {
         fails: 0,
       },
     ])
+  })
+})
+
+describe('distributed runs', () => {
+  const vus = (time: number, value: number) =>
+    `vus,${time},${value},,,,,,,,,,,,,,,,`
+  const request = (time: number) =>
+    `http_reqs,${time},1,,,,,,GET,https://test.k6.io/,,,,200,,,https://test.k6.io/,,`
+
+  it('sums VUs across generators instead of taking the last one', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(vus(100, 5))
+    collector.push(vus(100, 3), 'lg-01')
+
+    const { buckets, vus: current, vusMax } = collector.snapshot()
+
+    expect(buckets[0]?.vus).toBe(8)
+    expect(current).toBe(8)
+    expect(vusMax).toBe(8)
+  })
+
+  it('keeps each generator VU count separate as they ramp', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(vus(100, 5))
+    collector.push(vus(100, 5), 'lg-01')
+    collector.push(vus(101, 10))
+
+    const buckets = collector.snapshot().buckets
+
+    expect(buckets.find((bucket) => bucket.time === 100)?.vus).toBe(10)
+    expect(buckets.find((bucket) => bucket.time === 101)?.vus).toBe(15)
+  })
+
+  it('shifts a generator with a skewed clock into the right bucket', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(request(100))
+    // Reported 3s behind, so its sample belongs in the same second as the local one.
+    collector.push(request(97), 'lg-01', 3)
+
+    const buckets = collector.snapshot().buckets
+
+    expect(buckets).toHaveLength(1)
+    expect(buckets[0]?.requests).toBe(2)
   })
 })

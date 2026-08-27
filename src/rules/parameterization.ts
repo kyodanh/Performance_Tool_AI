@@ -82,7 +82,7 @@ function getRuleValue(rule: ParameterizationRule, id: number) {
 
   switch (value.type) {
     case 'string':
-      return value.value
+      return interpolateVariables(value.value)
 
     case 'variable':
       return `\${VARS['${value.variableName}']}`
@@ -98,6 +98,19 @@ function getRuleValue(rule: ParameterizationRule, id: number) {
     default:
       return exhaustive(value)
   }
+}
+
+/**
+ * Rewrites `${name}` in a plain text value into a VARS lookup so a variable can
+ * be reused inline (`${user}@ssc.com`) instead of needing its own rule.
+ * ponytail: no allowlist. An unknown name yields `undefined` at runtime, which
+ * is the same failure a typo'd variable name gives anywhere else.
+ */
+function interpolateVariables(value: string) {
+  return value.replace(
+    /\$\{(\w+)\}/g,
+    (_, name: string) => `\${VARS['${name}']}`
+  )
 }
 
 export function getCustomCodeSnippet(code: string, id: number) {

@@ -1,5 +1,5 @@
 import { Box, Button, Flex, ScrollArea } from '@radix-ui/themes'
-import { GlobeIcon } from 'lucide-react'
+import { GlobeIcon, Undo2Icon } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 
 import { EmptyMessage } from '@/components/EmptyMessage'
@@ -84,6 +84,13 @@ export function RequestList({
 
   const recordingError = useGeneratorStore((state) => state.recordingError)
 
+  const hasExcludedRequests = useGeneratorStore(
+    (state) => state.excludedRequests.length > 0
+  )
+  const restoreExcludedRequests = useGeneratorStore(
+    (state) => state.restoreExcludedRequests
+  )
+
   const allowlist = useGeneratorStore((store) => store.allowlist)
 
   const setShowAllowlistDialog = useGeneratorStore(
@@ -138,6 +145,25 @@ export function RequestList({
           <Button onClick={() => setShowAllowlistDialog(true)}>
             <GlobeIcon />
             Select hosts
+          </Button>
+        }
+      />
+    )
+  }
+
+  if (
+    filteredRequests.length === 0 &&
+    filter.trim() === '' &&
+    hasExcludedRequests
+  ) {
+    return (
+      <EmptyMessage
+        px="4"
+        message="Every request was removed from the test"
+        action={
+          <Button onClick={restoreExcludedRequests}>
+            <Undo2Icon />
+            Restore removed requests
           </Button>
         }
       />

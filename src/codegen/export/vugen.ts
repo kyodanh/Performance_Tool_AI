@@ -2,6 +2,7 @@ import { Header, ProxyData } from '@/types'
 import { GeneratorFileData } from '@/types/generator'
 import { ThinkTime } from '@/types/testOptions'
 import { getContentTypeWithCharsetHeader } from '@/utils/headers'
+import * as path from '@/utils/path'
 import { exhaustive } from '@/utils/typescript'
 
 import { generateScriptHeader } from '../codegen.utils'
@@ -50,6 +51,7 @@ export function generateVUGenScript({
     comment([generateScriptHeader(generator.wizardUsed), ...warnings]),
     '#include "web_api.h"',
     'Action()\n{',
+    timeouts(plan.httpTimeout),
     body,
     iterationPause,
     '    return 0;\n}',
@@ -61,9 +63,10 @@ export function generateVUGenScript({
 function parameterNotes({ variables, dataFiles, load }: ExportPlan) {
   return [
     loadProfileNote(load),
-    ...variables.map(
-      ({ name, value }) =>
-        `Declare parameter {${name}} as type Constant with value: ${value}`
+    ...variables.map(({ name, value, file }) =>
+      file
+        ? `Declare parameter {${name}} as type File, reading column "${file.propertyName}" of "${path.basename(file.fileName)}".`
+        : `Declare parameter {${name}} as type Constant with value: ${value}`
     ),
     ...dataFiles.map(
       (file) =>
@@ -166,7 +169,7 @@ function customRequest(
     '"Referer="',
     '"Mode=HTTP"',
     ...(request.content !== null && request.content !== ''
-      ? [`"Body=${escapeC(rewrite(request.content))}"`]
+      ? [bodyArg(rewrite(request.content))]
       : []),
   ]
 
@@ -175,6 +178,17 @@ function customRequest(
     ...args.map((arg) => indent(`${arg},`, 1)),
     indent('LAST);', 1),
   ].join('\n')
+}
+
+function bodyArg(content: string) {
+  // VuGen splits the body into one C string literal per source line. Adjacent
+  // literals concatenate, so this is the same string as a single long line —
+  // it just stays readable in the VuGen editor.
+  const literals = content
+    .split(/(?<=\n)/)
+    .map((line, index) => `"${index === 0 ? 'Body=' : ''}${escapeC(line)}"`)
+
+  return literals.join('\n')
 }
 
 function saveParam(extraction: Extraction) {
@@ -321,11 +335,32 @@ function comment(lines: string[], level = 0) {
 }
 
 function escapeC(value: string) {
-  return value
+  const escaped = value
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
     .replace(/\r/g, '\\r')
     .replace(/\n/g, '\\n')
+
+  // VuGen saves scripts in an ANSI codepage, so a character it can't represent
+  // is written as "?" and then sent as "?" on the wire. Emitting the UTF-8
+  // bytes as escapes keeps the literal pure ASCII, so no codepage can touch it.
+  // Octal, not \x: a C hex escape swallows any hex digit that follows it.
+  return escaped.replace(/[^\u0020-\u007e\t]/gu, (char) =>
+    Array.from(new TextEncoder().encode(char))
+      .map((byte) => `\\${byte.toString(8).padStart(3, '0')}`)
+      .join('')
+  )
+}
+
+/**
+ * VuGen reads these from Runtime Settings > Internet Protocol > Preferences,
+ * which lives in `default.cfg` and is not part of an exported `Action.c` — so
+ * set them in the script instead and the timeout travels with the file.
+ */
+function timeouts(seconds: number): string {
+  return ['CONNECT', 'RECEIVE', 'STEP']
+    .map((type) => indent(`web_set_timeout(${type}, "${seconds}");`, 1))
+    .join('\n')
 }
 
 function indent(text: string, level: number) {

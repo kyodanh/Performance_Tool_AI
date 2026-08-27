@@ -283,3 +283,29 @@ describe('rendezvous', () => {
     )
   })
 })
+
+describe('http timeout', () => {
+  const withTimeout = createGeneratorData({
+    options: { ...createGeneratorData().options, httpTimeout: 45 },
+  })
+
+  it('sets the runtime timeouts in VuGen', () => {
+    const script = generateVUGenScript({ recording, generator: withTimeout })
+
+    expect(script).toContain('web_set_timeout(CONNECT, "45");')
+    expect(script).toContain('web_set_timeout(RECEIVE, "45");')
+    expect(script).toContain('web_set_timeout(STEP, "45");')
+  })
+
+  it('sets the timeout once via HTTP Request Defaults in JMeter', () => {
+    const script = generateJMeterScript({ recording, generator: withTimeout })
+
+    expect(script).toContain(
+      '<stringProp name="HTTPSampler.connect_timeout">45000</stringProp>'
+    )
+    expect(script).toContain(
+      '<stringProp name="HTTPSampler.response_timeout">45000</stringProp>'
+    )
+    expect(script.match(/HTTPSampler\.response_timeout/g)).toHaveLength(1)
+  })
+})

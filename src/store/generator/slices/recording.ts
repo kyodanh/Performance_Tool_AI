@@ -16,6 +16,12 @@ interface State {
   // Groups created by hand that hold no requests yet. Only a place to move
   // requests into, so they are not saved with the generator file.
   emptyGroups: string[]
+  // Recorded requests removed from the test, by `requestKey`. Kept as keys
+  // rather than ids so the removal survives reloading the recording.
+  excludedRequests: string[]
+  // Recorded requests edited by hand, by `requestKey` of the request each one
+  // replaces. Keyed for the same reason as `excludedRequests`.
+  requestOverrides: Record<string, ProxyData>
   recordingPath: string
   recordingError: unknown
   allowlist: string[]
@@ -30,6 +36,10 @@ interface Actions {
   addManualRequest: (request: ProxyData) => void
   updateManualRequest: (id: string, request: ProxyData) => void
   removeManualRequest: (id: string) => void
+  toggleExcludedRequest: (key: string) => void
+  setRequestOverride: (key: string, request: ProxyData) => void
+  clearRequestOverride: (key: string) => void
+  restoreExcludedRequests: () => void
   addGroup: (name: string) => void
   renameGroup: (from: string, to: string) => void
   removeGroup: (name: string) => void
@@ -58,6 +68,8 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   requests: [],
   manualRequests: [],
   emptyGroups: [],
+  excludedRequests: [],
+  requestOverrides: {},
   recordingPath: '',
   recordingError: null,
   allowlist: [],
@@ -117,6 +129,24 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
         (request) => request.id !== id
       )
     }),
+  toggleExcludedRequest: (key: string) =>
+    set((state) => {
+      state.excludedRequests = state.excludedRequests.includes(key)
+        ? state.excludedRequests.filter((excluded) => excluded !== key)
+        : [...state.excludedRequests, key]
+    }),
+  setRequestOverride: (key: string, request: ProxyData) =>
+    set((state) => {
+      state.requestOverrides[key] = request
+    }),
+  clearRequestOverride: (key: string) =>
+    set((state) => {
+      delete state.requestOverrides[key]
+    }),
+  restoreExcludedRequests: () =>
+    set((state) => {
+      state.excludedRequests = []
+    }),
   addGroup: (name: string) =>
     set((state) => {
       if (!state.emptyGroups.includes(name)) {
@@ -135,6 +165,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
 
       state.requests.forEach(rename)
       state.manualRequests.forEach(rename)
+      Object.values(state.requestOverrides).forEach(rename)
       state.emptyGroups = state.emptyGroups.map((group) =>
         group === from ? to : group
       )
@@ -148,6 +179,8 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
       state.requests = []
       state.emptyGroups = []
       state.allowlist = []
+      state.excludedRequests = []
+      state.requestOverrides = {}
       state.recordingPath = ''
     }),
   setAllowlist: (value) =>

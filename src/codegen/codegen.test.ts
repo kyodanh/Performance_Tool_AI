@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createParameterizationRuleInstance } from '@/rules/parameterization'
 import { generateSequentialInt } from '@/rules/utils'
+import { DEFAULT_HTTP_TIMEOUT } from '@/schemas/generator'
 import { createGeneratorData } from '@/test/factories/generator'
 import {
   createProxyData,
@@ -71,6 +72,10 @@ describe('Code generation', () => {
 
       export const options = {}
 
+      // Applies to every request below. Raise it for slow report / export
+      // endpoints, lower it to make a hung server fail fast.
+      const HTTP_TIMEOUT = '120s'
+
       export default function() {
         let params
         let resp
@@ -104,6 +109,7 @@ describe('Code generation', () => {
               },
               rendezvous: {},
               thresholds: [],
+              httpTimeout: DEFAULT_HTTP_TIMEOUT,
               cloud: {
                 loadZones: {
                   distribution: 'even',
@@ -118,6 +124,8 @@ describe('Code generation', () => {
             rules: [],
             allowlist: [],
             manualRequests: [],
+            excludedRequests: [],
+            requestOverrides: {},
             includeStaticAssets: false,
             scriptName: 'my-script.js',
             wizardUsed: false,
@@ -158,6 +166,7 @@ describe('Code generation', () => {
         },
         rendezvous: {},
         thresholds: [],
+        httpTimeout: DEFAULT_HTTP_TIMEOUT,
         cloud: {
           loadZones: {
             distribution: 'even',
@@ -172,6 +181,8 @@ describe('Code generation', () => {
       rules: [],
       allowlist: [],
       manualRequests: [],
+      excludedRequests: [],
+      requestOverrides: {},
       includeStaticAssets: false,
       scriptName: 'my-script.js',
       wizardUsed: false,
@@ -243,6 +254,55 @@ describe('Code generation', () => {
         expectedResult
       )
     })
+
+    it('should declare a file-bound variable as a per-iteration getter', async () => {
+      const variables = [
+        { name: 'realm', value: 'employee' },
+        {
+          name: 'user',
+          value: '',
+          file: {
+            fileName: '/project/Data/users.csv',
+            propertyName: 'username',
+          },
+        },
+      ]
+
+      const expectedResult = await prettify(`
+        const VARS = {
+          "realm": "employee",
+          get "user"() {
+            return getUniqueItem(FILES["users"])["username"]
+          },
+        };`)
+
+      expect(await prettify(generateVariableDeclarations(variables))).toBe(
+        expectedResult
+      )
+    })
+  })
+
+  describe('hand-typed {name} placeholders', () => {
+    it('should interpolate known variables into the request body', () => {
+      const recording = [
+        createProxyData({
+          request: createRequest({
+            method: 'POST',
+            url: 'https://example.com/users/login',
+            content: '{"email":"{user}","password":"{typo}"}',
+            headers: [['content-type', 'application/json']],
+          }),
+        }),
+      ]
+
+      const result = generateVUCode(recording, [], thinkTime, {}, [
+        { name: 'user', value: 'a@b.com' },
+      ])
+
+      expect(result).toContain(
+        '`{"email":"${VARS[\'user\']}","password":"{typo}"}`'
+      )
+    })
   })
 
   describe('generateDataFileDeclarations', () => {
@@ -286,7 +346,8 @@ describe('Code generation', () => {
       }
 
       const expectedResult = `
-        params = { headers: {}, cookies: {} }
+        params = {
+          timeout: HTTP_TIMEOUT, headers: {}, cookies: {} }
         url = http.url\`/api/v1/users\`
         resp = http.request('GET', url, null, params)
       `
@@ -411,6 +472,7 @@ describe('Code generation', () => {
 
         group('one', function () {
           params = {
+          timeout: HTTP_TIMEOUT,
             headers: {}, cookies: {}
           }
 
@@ -434,6 +496,7 @@ describe('Code generation', () => {
           }
 
           params = {
+          timeout: HTTP_TIMEOUT,
             headers: {}, cookies: {}
           }
 
@@ -449,6 +512,7 @@ describe('Code generation', () => {
 
         group('two', function () {
           params = {
+          timeout: HTTP_TIMEOUT,
             headers: {}, cookies: {}
           }
 
@@ -456,6 +520,7 @@ describe('Code generation', () => {
           resp = http.request('GET', url, null, params)
 
           params = {
+          timeout: HTTP_TIMEOUT,
             headers: {}, cookies: {}
           }
 
@@ -487,6 +552,7 @@ describe('Code generation', () => {
 
           group('one', function () {
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {}, cookies: {}
             }
 
@@ -494,6 +560,7 @@ describe('Code generation', () => {
             resp = http.request('POST', url, null, params)
 
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {}, cookies: {}
             }
 
@@ -503,6 +570,7 @@ describe('Code generation', () => {
 
           group('two', function () {
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {}, cookies: {}
             }
 
@@ -510,6 +578,7 @@ describe('Code generation', () => {
             resp = http.request('GET', url, null, params)
 
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {}, cookies: {}
             }
 
@@ -609,6 +678,7 @@ describe('Code generation', () => {
           }
           group('Default group', function () {
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {
                 'content-type': \`application/json\`
               },
@@ -619,6 +689,7 @@ describe('Code generation', () => {
             resp = http.request('POST', url, \`${JSON.stringify({ user_id: 'TEST_ID' })}\`, params)
 
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {},
               cookies: {},
             }
@@ -628,6 +699,7 @@ describe('Code generation', () => {
 
 
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {},
               cookies: {},
             }
@@ -662,6 +734,7 @@ describe('Code generation', () => {
 
           group('Default group', function () {
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {
                 'content-type': \`application/json\`
               },
@@ -672,6 +745,7 @@ describe('Code generation', () => {
             resp = http.request('POST', url, \`${JSON.stringify({ user_id: '333' })}\`, params)
 
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {},
               cookies: {},
             }
@@ -681,6 +755,7 @@ describe('Code generation', () => {
 
 
             params = {
+          timeout: HTTP_TIMEOUT,
               headers: {},
               cookies: {},
             }
@@ -747,6 +822,7 @@ describe('Code generation', () => {
 
       const expectedResult = await prettify(`
         params = {
+          timeout: HTTP_TIMEOUT,
           headers: {
             'content-type': \`application/json\`
           },
@@ -767,6 +843,7 @@ describe('Code generation', () => {
 
       const expectedResult = await prettify(`
         params = {
+          timeout: HTTP_TIMEOUT,
           headers: {
             'content-type': \`application/json\`
           },
@@ -790,6 +867,7 @@ describe('Code generation', () => {
 
       const expectedResult = await prettify(`
         params = {
+          timeout: HTTP_TIMEOUT,
           headers: {
             'content-type': \`application/json\`
           },
@@ -809,6 +887,7 @@ describe('Code generation', () => {
 
       const expectedResult = await prettify(`
         params = {
+          timeout: HTTP_TIMEOUT,
           headers: {
             'content-type': \`application/json\`
           },

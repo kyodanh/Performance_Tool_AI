@@ -62,8 +62,9 @@ export function ErrorAnalysisProviderSettings() {
         <Text size="2" as="label">
           Used by the &quot;Analyze with AI&quot; button in the Validator to
           explain test failures. Works with any OpenAI-compatible endpoint
-          (self-hosted gateway, Azure, LiteLLM, Ollama, etc). This is
-          independent from the Grafana Assistant.
+          (self-hosted gateway, Azure, LiteLLM, Ollama, etc). Once configured it
+          can also drive guided setup instead of the Grafana Assistant — pick it
+          from the dropdown next to &quot;Configure with Assistant&quot;.
         </Text>
       </Flex>
 

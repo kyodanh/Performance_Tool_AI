@@ -5,6 +5,7 @@ import { newSyntheticKey } from '@/utils/zod'
 import {
   describeProfile,
   isRunnableProfile,
+  peakVus,
   profileSeconds,
   toLoadProfile,
   toProfileOverrides,
@@ -149,5 +150,26 @@ describe('profileSeconds', () => {
 
   it('has no duration when nothing is scheduled', () => {
     expect(profileSeconds({ executor: 'ramping-vus', stages: [] })).toBeNull()
+  })
+})
+
+describe('peakVus', () => {
+  it('takes the highest stage target', () => {
+    expect(
+      peakVus({
+        executor: 'ramping-vus',
+        stages: [
+          { key: newSyntheticKey(), duration: '30s', target: 10 },
+          { key: newSyntheticKey(), duration: '30s', target: 50 },
+          { key: newSyntheticKey(), duration: '30s', target: 0 },
+        ],
+      })
+    ).toBe(50)
+  })
+
+  it('takes the VU count for shared iterations', () => {
+    expect(
+      peakVus({ executor: 'shared-iterations', vus: 8, iterations: 100 })
+    ).toBe(8)
   })
 })

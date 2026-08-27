@@ -155,6 +155,27 @@ export interface RunStats {
 }
 
 /**
+ * The run's headline numbers, without the per-sample series — small enough to
+ * hand to an LLM as context.
+ */
+export function runSummary(stats: RunStats | null) {
+  if (stats === null) {
+    return undefined
+  }
+
+  const {
+    buckets: _b,
+    groups: _g,
+    requestStats: _r,
+    checks: _c,
+    errors: _e,
+    ...summary
+  } = stats
+
+  return summary
+}
+
+/**
  * Splits a single CSV record. k6 quotes any field containing a comma or a
  * quote (Go's `encoding/csv`), so a plain `split(',')` mangles URLs and error
  * messages.
@@ -205,6 +226,12 @@ export function parseCsvLine(line: string): string[] {
 
 interface MutableBucket {
   time: number
+  /**
+   * VUs reported by each generator during this second. `vus` is a gauge, so a
+   * distributed run has to sum the sources — overwriting would show only
+   * whichever generator reported last.
+   */
+  vusBySource: Map<string, number>
   vus: number
   requests: number
   failed: number
@@ -236,6 +263,16 @@ interface MutableGroup {
   series: Map<number, { sum: number; count: number }>
 }
 
+function sum(values: Map<string, number>): number {
+  let total = 0
+
+  for (const value of values.values()) {
+    total += value
+  }
+
+  return total
+}
+
 /** k6 reports groups as a `::`-delimited path, e.g. `::checkout::login`. */
 function groupName(raw: string) {
   return raw.replace(/^::/, '').replaceAll('::', ' / ')
@@ -250,6 +287,8 @@ export class RunStatsCollector {
 
   #firstTime: number | null = null
   #lastTime = 0
+  #vusBySource = new Map<string, number>()
+  #vusMaxBySource = new Map<string, number>()
   #vus = 0
   #vusMax = 0
   #requests = 0
@@ -287,8 +326,13 @@ export class RunStatsCollector {
   /**
    * Consumes one line of k6 output. Returns `true` when the line was a metric
    * sample, so callers can skip further parsing.
+   *
+   * `source` identifies the generator the line came from — gauges are summed
+   * per source rather than overwritten. `clockOffset` is added to every
+   * timestamp, so a generator whose clock runs behind still lands in the right
+   * per-second bucket.
    */
-  push(line: string): boolean {
+  push(line: string, source = 'local', clockOffset = 0): boolean {
     const separator = line.indexOf(',')
 
     if (separator === -1) {
@@ -304,7 +348,7 @@ export class RunStatsCollector {
     // ponytail: one full split per sample. Cheaper than JSON.parse but still
     // the hot path — switch to offset scanning if it ever shows up in a profile.
     const columns = parseCsvLine(line)
-    const time = Number(columns[COLUMN.timestamp])
+    const time = Number(columns[COLUMN.timestamp]) + clockOffset
     const value = Number(columns[COLUMN.value])
 
     if (!Number.isFinite(time) || !Number.isFinite(value)) {
@@ -318,13 +362,17 @@ export class RunStatsCollector {
 
     switch (metric) {
       case 'vus':
-        bucket.vus = value
-        this.#vus = value
-        this.#vusMax = Math.max(this.#vusMax, value)
+        bucket.vusBySource.set(source, value)
+        bucket.vus = sum(bucket.vusBySource)
+
+        this.#vusBySource.set(source, value)
+        this.#vus = sum(this.#vusBySource)
+        this.#vusMax = Math.max(this.#vusMax, this.#vus)
         break
 
       case 'vus_max':
-        this.#vusMax = Math.max(this.#vusMax, value)
+        this.#vusMaxBySource.set(source, value)
+        this.#vusMax = Math.max(this.#vusMax, sum(this.#vusMaxBySource))
         break
 
       case 'http_reqs':
@@ -527,7 +575,10 @@ export class RunStatsCollector {
 
     const bucket: MutableBucket = {
       time,
-      vus: 0,
+      // ponytail: vus is a gauge k6 samples ~once a second; seconds a sample
+      // misses inherit the last known value instead of reading as zero VUs.
+      vusBySource: new Map(this.#vusBySource),
+      vus: this.#vus,
       requests: 0,
       failed: 0,
       durationSum: 0,

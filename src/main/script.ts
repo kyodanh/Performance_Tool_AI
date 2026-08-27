@@ -12,6 +12,11 @@ import {
   TEMP_SCRIPT_SUFFIX,
 } from '@/constants/workspace'
 import { ScriptHandler } from '@/handlers/script/types'
+import {
+  abortDistributedRun,
+  startDistributedRun,
+  toProfileFlags,
+} from '@/main/loadGenerator/run'
 import { getProxyArguments } from '@/main/proxy'
 import { ProxySettings } from '@/types/settings'
 import { showOpenDialog } from '@/utils/dialog'
@@ -19,6 +24,7 @@ import { createWriteStream } from '@/utils/fs'
 import { K6Client } from '@/utils/k6/client'
 import { LoadProfileOverrides } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
+import { TestRun } from '@/utils/k6/testRun'
 import { createTrackingServer } from '@/utils/k6/tracking'
 import * as path from '@/utils/path'
 import { readResource } from '@/utils/resources'
@@ -196,6 +202,8 @@ interface RunLoadTestOptions extends LoadProfileOverrides {
   browserWindow: BrowserWindow
   verbose?: boolean
   httpDebug?: boolean
+  /** Whether this machine takes a share of the load. Defaults to on. */
+  useLocalGenerator?: boolean
 }
 
 /**
@@ -216,27 +224,63 @@ export const runLoadTest = async ({
   stages,
   verbose,
   httpDebug,
+  useLocalGenerator = true,
 }: RunLoadTestOptions) => {
   const client = new K6Client()
 
+  // The archive is self-contained, which is exactly what a remote generator
+  // needs — it is served to the pool rather than rebuilt per machine.
   await client.archive({
     scriptPath,
     outputPath: TEMP_K6_LOAD_ARCHIVE_PATH,
     cwd: path.dirname(scriptPath),
   })
 
-  const testRun = client.run({
-    path: TEMP_K6_LOAD_ARCHIVE_PATH,
-    quiet: true,
-    verbose,
-    httpDebug,
-    insecureSkipTLSVerify: true,
-    noUsageReport: !usageReport,
-    metrics: true,
-    vus,
-    iterations,
-    stages,
+  // Bound late: the plan has to be computed before the local k6 starts, but the
+  // sink for remote output is the run that start produces.
+  let run: TestRun | null = null
+
+  const plan = startDistributedRun({
+    archivePath: TEMP_K6_LOAD_ARCHIVE_PATH,
+    profileFlags: toProfileFlags({ vus, iterations, stages }),
+    onLine: (line, source, clockOffset) =>
+      run?.pushRemote(line, source, clockOffset),
+    includeLocal: useLocalGenerator,
+    // A run carried entirely by generators has no local process to end it.
+    onPoolFinished: () => run?.finish(true),
   })
+
+  if (plan.generators.length > 0) {
+    log.info(
+      `distributing load across ${plan.generators.length} generator(s)` +
+        (plan.runsLocally ? ' and this machine' : '')
+    )
+  }
+
+  const testRun = plan.runsLocally
+    ? client.run({
+        path: TEMP_K6_LOAD_ARCHIVE_PATH,
+        quiet: true,
+        verbose,
+        httpDebug,
+        insecureSkipTLSVerify: true,
+        noUsageReport: !usageReport,
+        metrics: true,
+        vus,
+        iterations,
+        stages,
+        executionSegment: plan.local?.segment,
+        executionSegmentSequence: plan.local?.sequence,
+      })
+    : new TestRun(null)
+
+  run = testRun
+
+  // Stopping the run has to reach the whole pool, and so does finishing it: a
+  // generator that lags behind must not keep loading the target after the app
+  // has reported the run as over.
+  testRun.on('abort', abortDistributedRun)
+  testRun.on('stop', abortDistributedRun)
 
   testRun.on('log', ({ entry }) => {
     browserWindow.webContents.send(ScriptHandler.Log, entry)

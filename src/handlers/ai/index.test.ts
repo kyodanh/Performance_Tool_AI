@@ -35,6 +35,7 @@ vi.mock('./a2a/assistantAuth', () => ({
 
 vi.mock('./errorAnalysis', () => ({
   initialize: vi.fn(),
+  getAssistantModelOverride: vi.fn(() => null),
 }))
 
 function createMockEvent() {
@@ -136,6 +137,28 @@ describe('handleStreamChat', () => {
 
     expect(secondItem).not.toHaveProperty('statusCode')
     expect(secondItem).toEqual({ id: '2' })
+  })
+
+  it('runs on the custom provider, without Grafana provider options, when one is selected', async () => {
+    const { streamText } = await import('ai')
+    vi.mocked(streamText).mockClear()
+    vi.mocked(streamText).mockReturnValue({} as never)
+
+    const { streamMessages } = await import('./streamMessages')
+    vi.mocked(streamMessages).mockResolvedValue()
+
+    const customModel = { id: 'custom-model' }
+    const { getAssistantModelOverride } = await import('./errorAnalysis')
+    vi.mocked(getAssistantModelOverride).mockResolvedValue(customModel as never)
+
+    await handleStreamChat(createMockEvent(), createRequest())
+
+    const options = vi.mocked(streamText).mock.calls[0]![0]
+
+    expect(options.model).toBe(customModel)
+    expect(options.providerOptions).toBeUndefined()
+
+    vi.mocked(getAssistantModelOverride).mockResolvedValue(null)
   })
 
   it('rebuilds the renderer-provided tool definitions into a ToolSet', async () => {

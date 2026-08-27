@@ -1,8 +1,11 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { captureException } from '@sentry/electron/main'
-import { generateText } from 'ai'
+import { generateText, streamText } from 'ai'
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
+import { randomUUID } from 'node:crypto'
+
+import { GrafanaAssistantLanguageModel } from '../grafanaAssistantProvider'
 
 import { buildFailureAnalysisPrompt } from './buildPrompt'
 import {
@@ -10,6 +13,7 @@ import {
   getErrorAnalysisConfig,
   getErrorAnalysisStatus,
   saveErrorAnalysisConfig,
+  setUseForAssistant,
 } from './store'
 import {
   AnalyzeFailureRequest,
@@ -21,8 +25,26 @@ import {
   TestConnectionResult,
 } from './types'
 
+/** Sessions live inside the provider, keyed by chatId, so one instance does. */
+const grafanaAssistantModel = new GrafanaAssistantLanguageModel()
+
 const TEST_CONNECTION_TIMEOUT_MS = 15_000
 const ANALYZE_TIMEOUT_MS = 60_000
+
+/**
+ * Pasted values commonly carry a trailing newline or space. An untrimmed key
+ * goes out as an invalid Authorization header, and gateways answer 401
+ * ("invalid or missing token") — indistinguishable from a wrong key.
+ */
+function trimConfig(
+  config: SaveErrorAnalysisConfigInput
+): SaveErrorAnalysisConfigInput {
+  return {
+    baseUrl: config.baseUrl.trim(),
+    model: config.model.trim(),
+    apiKey: config.apiKey?.trim() || undefined,
+  }
+}
 
 function isValidUrl(value: string): boolean {
   try {
@@ -41,6 +63,22 @@ function languageModelFor(config: ErrorAnalysisConfigInput) {
   })
 
   return provider(config.model)
+}
+
+/**
+ * The model the Assistant should run on instead of the Grafana Assistant, or
+ * null to keep using Grafana (not selected, not configured, or key unreadable).
+ */
+export async function getAssistantModelOverride() {
+  const status = await getErrorAnalysisStatus()
+
+  if (!status.useForAssistant) {
+    return null
+  }
+
+  const config = await getErrorAnalysisConfig()
+
+  return config ? languageModelFor(config) : null
 }
 
 /**
@@ -65,8 +103,10 @@ export function initialize() {
     ErrorAnalysisHandler.SaveConfig,
     async (
       _event,
-      config: SaveErrorAnalysisConfigInput
+      input: SaveErrorAnalysisConfigInput
     ): Promise<SaveConfigResult> => {
+      const config = trimConfig(input)
+
       if (!isValidUrl(config.baseUrl)) {
         return { error: 'Base URL must be a valid URL.' }
       }
@@ -87,6 +127,14 @@ export function initialize() {
     }
   )
 
+  ipcMain.handle(
+    ErrorAnalysisHandler.SetUseForAssistant,
+    async (_event, useForAssistant: unknown) => {
+      await setUseForAssistant(useForAssistant === true)
+      return getErrorAnalysisStatus()
+    }
+  )
+
   ipcMain.handle(ErrorAnalysisHandler.ClearConfig, async () => {
     await clearErrorAnalysisConfig()
     return getErrorAnalysisStatus()
@@ -96,8 +144,9 @@ export function initialize() {
     ErrorAnalysisHandler.TestConnection,
     async (
       _event,
-      config: SaveErrorAnalysisConfigInput
+      input: SaveErrorAnalysisConfigInput
     ): Promise<TestConnectionResult> => {
+      const config = trimConfig(input)
       const apiKey = await resolveApiKey(config.apiKey)
 
       if (!apiKey) {
@@ -127,19 +176,26 @@ export function initialize() {
       _event,
       request: AnalyzeFailureRequest
     ): Promise<AnalyzeFailureResult> => {
+      // No custom provider falls back to the Grafana Assistant, which serves
+      // the rest of the app's AI. It throws a sign-in message when unavailable.
       const config = await getErrorAnalysisConfig()
 
-      if (!config) {
-        return { error: 'AI provider is not configured.' }
-      }
-
       try {
-        const { text } = await generateText({
-          model: languageModelFor(config),
+        const { text } = streamText({
+          model: config ? languageModelFor(config) : grafanaAssistantModel,
           prompt: buildFailureAnalysisPrompt(request),
           abortSignal: AbortSignal.timeout(ANALYZE_TIMEOUT_MS),
+          // The Assistant keys its A2A session on this; a fresh id per run
+          // keeps each analysis its own conversation.
+          ...(config
+            ? {}
+            : {
+                providerOptions: {
+                  grafanaAssistant: { chatId: `analysis-${randomUUID()}` },
+                },
+              }),
         })
-        return { text }
+        return { text: await text }
       } catch (error) {
         log.error('[ErrorAnalysis] Analyze failed:', error)
         captureException(error, { tags: { component: 'ai-error-analysis' } })

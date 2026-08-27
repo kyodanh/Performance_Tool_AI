@@ -12,6 +12,7 @@ import {
 import { InfoIcon, PlayIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { LoadGenerators } from '@/components/LoadGenerators'
 import { LoadProfile } from '@/components/TestOptions/LoadProfile'
 import TextSpinner from '@/components/TextSpinner/TextSpinner'
 import { useRunChecks } from '@/hooks/useRunChecks'
@@ -21,6 +22,7 @@ import { LoadProfileExecutorOptions } from '@/types/testOptions'
 import {
   describeProfile,
   isRunnableProfile,
+  peakVus,
   profileSeconds,
   toLoadProfile,
   toProfileOverrides,
@@ -51,6 +53,9 @@ export function LoadTestRunner({
   profile: initialProfile,
 }: LoadTestRunnerProps) {
   const [isRunning, setIsRunning] = useState(false)
+  // Kept here rather than in the generator list because the run needs it, and
+  // the list only needs to render it.
+  const [useLocalGenerator, setUseLocalGenerator] = useState(true)
   const [verbose, setVerbose] = useState(false)
   const [httpDebug, setHttpDebug] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
@@ -122,6 +127,7 @@ export function LoadTestRunner({
         content,
         verbose,
         httpDebug,
+        useLocalGenerator,
         ...(override ? toProfileOverrides(profile) : {}),
       })
       .catch((error: Error) => {
@@ -138,6 +144,7 @@ export function LoadTestRunner({
     resetLogs,
     resetStats,
     scriptPath,
+    useLocalGenerator,
   ])
 
   const handleStop = useCallback(() => {
@@ -147,6 +154,12 @@ export function LoadTestRunner({
 
   return (
     <Flex direction="column" height="100%" minHeight="0">
+      <LoadGenerators
+        peakVus={peakVus(profile)}
+        useLocal={useLocalGenerator}
+        onUseLocalChange={setUseLocalGenerator}
+        disabled={isRunning}
+      />
       <Flex gap="3" align="center" mb="3">
         {isRunning ? (
           <Flex gap="3" align="center">

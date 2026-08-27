@@ -13,6 +13,12 @@ export const GeneratorFileDataSchema = z.object({
   rules: TestRuleSchema.array(),
   allowlist: z.string().array(),
   manualRequests: ManualRequestSchema.array().default([]),
+  // Recorded requests dropped from the test, keyed by `requestKey` since the
+  // requests themselves get fresh ids on every recording load.
+  excludedRequests: z.string().array().default([]),
+  // Recorded requests edited by hand, keyed by the `requestKey` of the
+  // recorded request each one replaces, for the same reason.
+  requestOverrides: z.record(z.string(), ManualRequestSchema).default({}),
   includeStaticAssets: z.boolean(),
   scriptName: z.string().default('my-script.js'),
   // True when the test setup wizard configured this generator, either at

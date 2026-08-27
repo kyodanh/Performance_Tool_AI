@@ -11,6 +11,9 @@ import { SetupWizard } from './SetupWizard'
 vi.mock('@/components/Assistant/AssistantAuthGate', () => ({
   AssistantAuthGate: ({ children }: { children: React.ReactNode }) => children,
 }))
+vi.mock('@/hooks/useAiProvider', () => ({
+  useAiProvider: () => 'grafana',
+}))
 // Monaco does not load in jsdom.
 vi.mock('@/components/Monaco/ReadOnlyEditor', () => ({
   ReadOnlyEditor: () => null,

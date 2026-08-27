@@ -1,13 +1,14 @@
 import { css } from '@emotion/react'
-import { Tabs } from '@radix-ui/themes'
+import { Flex, Separator, Tabs } from '@radix-ui/themes'
 import { useEffect, useMemo, useState } from 'react'
 
 import { useTrackScriptCopy } from '@/hooks/useTrackScriptCopy'
 import { Check, LogEntry } from '@/schemas/k6'
-import { RunStats } from '@/utils/k6/stats'
+import { runSummary, RunStats } from '@/utils/k6/stats'
 
 import { ReadOnlyEditor } from '../Monaco/ReadOnlyEditor'
 
+import { AiAnalysis } from './AiAnalysis'
 import { ChecksSection } from './ChecksSection'
 import { checksFromStats } from './ChecksSection.utils'
 import { FailedSection, hasFailures } from './FailedSection'
@@ -79,7 +80,9 @@ export function ExecutionDetails({
         flex-direction: column;
       `}
     >
-      <Tabs.List
+      <Flex
+        align="center"
+        gap="2"
         css={css`
           flex-shrink: 0;
           align-self: flex-start;
@@ -87,38 +90,56 @@ export function ExecutionDetails({
           padding: var(--space-1);
           border-radius: var(--radius-6);
           background-color: var(--gray-3);
-          box-shadow: none;
-          --tab-inner-border-radius: var(--radius-6);
-
-          /* a pill has no underline indicator */
-          & > button::before {
-            display: none;
-          }
-
-          & > button[data-state='active'] {
-            color: var(--accent-contrast);
-          }
-
-          & > button[data-state='active'] .rt-BaseTabListTriggerInner {
-            background-color: var(--accent-9);
-          }
         `}
       >
-        <Tabs.Trigger value="logs">Logs ({logs.length})</Tabs.Trigger>
-        <Tabs.Trigger value="checks" disabled={resolvedChecks.length === 0}>
-          Checks ({resolvedChecks.length})
-        </Tabs.Trigger>
-        <Tabs.Trigger
-          value="failed"
-          disabled={!hasFailures(resolvedChecks, stats)}
+        <Tabs.List
+          css={css`
+            box-shadow: none;
+            background-color: transparent;
+            --tab-inner-border-radius: var(--radius-6);
+
+            /* a pill has no underline indicator */
+            & > button::before {
+              display: none;
+            }
+
+            & > button[data-state='active'] {
+              color: var(--accent-contrast);
+            }
+
+            & > button[data-state='active'] .rt-BaseTabListTriggerInner {
+              background-color: var(--accent-9);
+            }
+          `}
         >
-          Failed
-        </Tabs.Trigger>
-        <Tabs.Trigger value="metrics">Metrics</Tabs.Trigger>
-        {script !== undefined && (
-          <Tabs.Trigger value="script">Script</Tabs.Trigger>
-        )}
-      </Tabs.List>
+          <Tabs.Trigger value="logs">Logs ({logs.length})</Tabs.Trigger>
+          <Tabs.Trigger value="checks" disabled={resolvedChecks.length === 0}>
+            Checks ({resolvedChecks.length})
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="failed"
+            disabled={!hasFailures(resolvedChecks, stats)}
+          >
+            Failed
+          </Tabs.Trigger>
+          <Tabs.Trigger value="metrics">Metrics</Tabs.Trigger>
+          {script !== undefined && (
+            <Tabs.Trigger value="script">Script</Tabs.Trigger>
+          )}
+        </Tabs.List>
+
+        <Separator orientation="vertical" size="1" />
+
+        <AiAnalysis
+          request={{
+            checks: resolvedChecks.filter((check) => check.fails > 0),
+            errors: stats?.errors ?? [],
+            requestStats: stats?.requestStats ?? [],
+            logs,
+            summary: runSummary(stats),
+          }}
+        />
+      </Flex>
 
       <Tabs.Content
         value="logs"
@@ -159,7 +180,7 @@ export function ExecutionDetails({
           min-height: 0;
         `}
       >
-        <FailedSection checks={resolvedChecks} stats={stats} logs={logs} />
+        <FailedSection checks={resolvedChecks} stats={stats} />
       </Tabs.Content>
       <Tabs.Content
         value="metrics"
