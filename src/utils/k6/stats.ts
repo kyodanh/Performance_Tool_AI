@@ -152,6 +152,40 @@ export interface RunStats {
   requestStats: RequestStats[]
   checks: CheckStats[]
   errors: RunErrorGroup[]
+  /**
+   * Per-machine breakdown of a distributed run: one row per generator that
+   * reported samples, `local` being this machine. A run carried by this machine
+   * alone has a single row.
+   */
+  generators: GeneratorStats[]
+}
+
+/**
+ * Whether the per-machine breakdown says anything the totals do not: more than
+ * one machine reported, or the only one that did was not this machine.
+ */
+export function isDistributedRun(generators: GeneratorStats[]) {
+  return (
+    generators.length > 1 ||
+    generators.some((generator) => generator.source !== LOCAL_SOURCE)
+  )
+}
+
+/** The source tag k6 output from this machine carries. */
+export const LOCAL_SOURCE = 'local'
+
+/** What one load generator contributed to the run. */
+export interface GeneratorStats {
+  /** `local` for this machine, otherwise the generator's hostname. */
+  source: string
+  vus: number
+  vusMax: number
+  requests: number
+  failedRequests: number
+  iterations: number
+  dataReceived: number
+  avgDuration: number
+  maxDuration: number
 }
 
 /**
@@ -263,6 +297,18 @@ interface MutableGroup {
   series: Map<number, { sum: number; count: number }>
 }
 
+interface MutableGenerator {
+  vus: number
+  vusMax: number
+  requests: number
+  failedRequests: number
+  iterations: number
+  dataReceived: number
+  durationSum: number
+  durationCount: number
+  maxDuration: number
+}
+
 function sum(values: Map<string, number>): number {
   let total = 0
 
@@ -284,6 +330,7 @@ export class RunStatsCollector {
   #requestStats = new Map<string, MutableRequest>()
   #checkResults = new Map<string, CheckStats>()
   #errors = new Map<string, RunErrorGroup>()
+  #generators = new Map<string, MutableGenerator>()
 
   #firstTime: number | null = null
   #lastTime = 0
@@ -359,6 +406,7 @@ export class RunStatsCollector {
     this.#lastTime = Math.max(this.#lastTime, time)
 
     const bucket = this.#bucket(time)
+    const generator = this.#generator(source)
 
     switch (metric) {
       case 'vus':
@@ -368,16 +416,22 @@ export class RunStatsCollector {
         this.#vusBySource.set(source, value)
         this.#vus = sum(this.#vusBySource)
         this.#vusMax = Math.max(this.#vusMax, this.#vus)
+
+        generator.vus = value
+        generator.vusMax = Math.max(generator.vusMax, value)
         break
 
       case 'vus_max':
         this.#vusMaxBySource.set(source, value)
         this.#vusMax = Math.max(this.#vusMax, sum(this.#vusMaxBySource))
+
+        generator.vusMax = Math.max(generator.vusMax, value)
         break
 
       case 'http_reqs':
         bucket.requests += value
         this.#requests += value
+        generator.requests += value
         this.#collectError(columns)
         this.#request(columns, (request) => {
           request.count += 1
@@ -388,6 +442,7 @@ export class RunStatsCollector {
         if (value === 1) {
           bucket.failed += 1
           this.#failedRequests += 1
+          generator.failedRequests += 1
           this.#failGroup(columns[COLUMN.group] ?? '')
           this.#request(columns, (request) => {
             request.failed += 1
@@ -401,6 +456,9 @@ export class RunStatsCollector {
         this.#durationSum += value
         this.#durationCount += 1
         this.#maxDuration = Math.max(this.#maxDuration, value)
+        generator.durationSum += value
+        generator.durationCount += 1
+        generator.maxDuration = Math.max(generator.maxDuration, value)
         this.#request(columns, (request) => {
           request.sum += value
           request.max = Math.max(request.max, value)
@@ -410,10 +468,12 @@ export class RunStatsCollector {
       case 'data_received':
         bucket.throughput += value
         this.#dataReceived += value
+        generator.dataReceived += value
         break
 
       case 'iterations':
         this.#iterations += value
+        generator.iterations += value
         break
 
       case 'dropped_iterations':
@@ -563,7 +623,48 @@ export class RunStatsCollector {
         receiving: phaseAvg('receiving'),
       },
       errors: [...this.#errors.values()].sort((a, b) => b.count - a.count),
+      generators: [...this.#generators.entries()]
+        .map<GeneratorStats>(([source, generator]) => ({
+          source,
+          vus: generator.vus,
+          vusMax: generator.vusMax,
+          requests: generator.requests,
+          failedRequests: generator.failedRequests,
+          iterations: generator.iterations,
+          dataReceived: generator.dataReceived,
+          avgDuration: generator.durationCount
+            ? generator.durationSum / generator.durationCount
+            : 0,
+          maxDuration: generator.maxDuration,
+        }))
+        .sort(
+          (a, b) => b.requests - a.requests || a.source.localeCompare(b.source)
+        ),
     }
+  }
+
+  #generator(source: string): MutableGenerator {
+    const existing = this.#generators.get(source)
+
+    if (existing) {
+      return existing
+    }
+
+    const generator: MutableGenerator = {
+      vus: 0,
+      vusMax: 0,
+      requests: 0,
+      failedRequests: 0,
+      iterations: 0,
+      dataReceived: 0,
+      durationSum: 0,
+      durationCount: 0,
+      maxDuration: 0,
+    }
+
+    this.#generators.set(source, generator)
+
+    return generator
   }
 
   #bucket(time: number): MutableBucket {

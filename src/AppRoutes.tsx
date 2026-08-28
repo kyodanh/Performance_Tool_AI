@@ -25,6 +25,11 @@ const Controller = lazy(() =>
     default: module.Controller,
   }))
 )
+const Analysis = lazy(() =>
+  import('@/views/Analysis').then((module) => ({
+    default: module.Analysis,
+  }))
+)
 const FileViewer = lazy(() =>
   import('@/views/FileViewer').then((module) => ({
     default: module.FileViewer,
@@ -42,6 +47,7 @@ const router = createHashRouter(
       <Route path={routeMap.recorder} element={<Recorder />} />
       <Route path={routeMap.controller} element={<Controller />} />
       <Route path={routeMap.controllerFile} element={<Controller />} />
+      <Route path={routeMap.analysis} element={<Analysis />} />
       <Route path={routeMap.file} element={<FileViewer />} />
       <Route path="*" element={<NoRouteFound />} />
     </Route>

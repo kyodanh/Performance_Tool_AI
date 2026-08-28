@@ -8,12 +8,12 @@ import {
   ScrollArea,
   Tabs,
   Text,
-  TextField,
 } from '@radix-ui/themes'
 import { CircleAlertIcon, SendIcon } from 'lucide-react'
 import { ClipboardEvent, useEffect, useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 
+import { ComboBox } from '@/components/ComboBox'
 import { ControlledSelect, FieldGroup } from '@/components/Form'
 import { ReactMonacoEditor } from '@/components/Monaco/ReactMonacoEditor'
 import { ResponseStatusBadge } from '@/components/ResponseStatusBadge'
@@ -65,9 +65,16 @@ export function ApiRequestDialog({
   onSave,
 }: ApiRequestDialogProps) {
   const isEditing = request !== undefined
+  const groupNames = useGroupNames()
+  // The first group in the script, which is not called "Default group" once it
+  // has been renamed.
+  const defaultGroup = groupNames[0] ?? DEFAULT_API_REQUEST.group
   const defaultValues = useMemo(
-    () => (request ? fromProxyData(request) : DEFAULT_API_REQUEST),
-    [request]
+    () =>
+      request
+        ? fromProxyData(request)
+        : { ...DEFAULT_API_REQUEST, group: defaultGroup },
+    [request, defaultGroup]
   )
   const addManualRequest = useGeneratorStore((store) => store.addManualRequest)
   const updateManualRequest = useGeneratorStore(
@@ -84,8 +91,6 @@ export function ApiRequestDialog({
   const variableNames = Object.keys(variables)
   const handleBodyEditorMount = useVariableCompletion(variableNames)
 
-  const groupNames = useGroupNames()
-
   const {
     control,
     register,
@@ -94,10 +99,13 @@ export function ApiRequestDialog({
     reset,
     setValue,
     getValues,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<ApiRequestFormData>({
     resolver: zodResolver(ApiRequestSchema),
     defaultValues,
+    // Sending is optional, so the form has to say whether it can be added
+    // before anything is submitted.
+    mode: 'onTouched',
   })
 
   const method = watch('method')
@@ -107,9 +115,14 @@ export function ApiRequestDialog({
   const hasContent = watch('content').trim() !== ''
 
   // A response only describes the request that was sent, so editing the form
-  // invalidates it.
+  // invalidates it. The group is not part of the request, so picking one keeps
+  // the response, and the sent request picks the group up on its way in.
   useEffect(() => {
-    const subscription = watch(() => {
+    const subscription = watch((_, { name }) => {
+      if (name === 'group') {
+        return
+      }
+
       setSent(null)
       setError(null)
     })
@@ -165,17 +178,17 @@ export function ApiRequestDialog({
     onOpenChange(open)
   }
 
-  function handleAddToScript() {
-    if (sent === null) {
-      return
-    }
+  // Sending only checks the request, so a request that was never sent can be
+  // added too, it just carries no response.
+  const handleAddToScript = handleSubmit((data) => {
+    const proxyData = toProxyData(data, sent?.response, request?.id)
 
     if (onSave) {
-      onSave(sent)
+      onSave(proxyData)
     } else if (isEditing) {
-      updateManualRequest(sent.id, sent)
+      updateManualRequest(proxyData.id, proxyData)
     } else {
-      addManualRequest(sent)
+      addManualRequest(proxyData)
     }
 
     showToast({
@@ -183,7 +196,7 @@ export function ApiRequestDialog({
       status: 'success',
     })
     handleOpenChange(false)
-  }
+  })
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
@@ -194,7 +207,7 @@ export function ApiRequestDialog({
         <Dialog.Description size="2" mb="4" color="gray">
           {isEditing
             ? 'Send the request again to save your changes.'
-            : 'Send a request to check it works, then add it to the script.'}
+            : 'Send the request to check it works, or add it to the script right away.'}
         </Dialog.Description>
 
         <form onSubmit={handleSend}>
@@ -231,18 +244,24 @@ export function ApiRequestDialog({
               Group
             </Text>
             <Box width="240px">
-              <TextField.Root
-                id="api-request-group"
-                size="1"
-                list="api-request-groups"
-                placeholder={DEFAULT_GROUP_NAME}
-                {...register('group')}
+              <Controller
+                control={control}
+                name="group"
+                render={({ field: { value, onChange, onBlur } }) => (
+                  <ComboBox
+                    id="api-request-group"
+                    value={value}
+                    placeholder={DEFAULT_GROUP_NAME}
+                    options={groupNames.map((name) => ({
+                      label: name,
+                      value: name,
+                    }))}
+                    onChange={onChange}
+                    onBlur={onBlur}
+                    portalMenu={false}
+                  />
+                )}
               />
-              <datalist id="api-request-groups">
-                {groupNames.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
             </Box>
             <Text size="1" color="gray">
               Requests in the same group run inside one <code>group()</code> in
@@ -352,7 +371,7 @@ export function ApiRequestDialog({
               Cancel
             </Button>
           </Dialog.Close>
-          <Button disabled={sent === null} onClick={handleAddToScript}>
+          <Button disabled={!isValid} onClick={handleAddToScript}>
             {isEditing ? 'Save changes' : 'Add to script'}
           </Button>
         </Flex>

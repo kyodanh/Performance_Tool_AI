@@ -55,6 +55,9 @@ export interface ProxyData {
   response?: Response
   comment?: string
   group?: string
+  // Set when the request came from an importer that owns its requests, so a
+  // re-import can replace its own without touching hand-added ones.
+  source?: 'vugen'
 }
 
 export type ProxyDataWithResponse = ProxyData & { response: Response }

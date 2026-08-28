@@ -5,7 +5,15 @@ import { AddToastPayload } from '@/types/toast'
 
 import { createListener } from '../utils'
 
-import { GetFilesResponse, MenuItem, MenuState, UIHandler } from './types'
+import {
+  ExportReportPayload,
+  GetFilesResponse,
+  MenuItem,
+  MenuState,
+  RunResult,
+  RunResultSummary,
+  UIHandler,
+} from './types'
 
 export function toggleTheme() {
   ipcRenderer.send(UIHandler.ToggleTheme)
@@ -40,6 +48,28 @@ export function renameFile(file: StudioFile, newFileName: string) {
     file,
     newFileName
   ) as Promise<void>
+}
+
+/** Prints a report to PDF. Resolves with the path written, or null on cancel. */
+export function exportReport(payload: ExportReportPayload) {
+  return ipcRenderer.invoke(UIHandler.ExportReport, payload) as Promise<
+    string | null
+  >
+}
+
+/** Saved load test runs, newest first. */
+export function listResults() {
+  return ipcRenderer.invoke(UIHandler.ListResults) as Promise<
+    RunResultSummary[]
+  >
+}
+
+/** Reads one saved run. Resolves with null when it cannot be read. */
+export function readResult(id: string) {
+  return ipcRenderer.invoke(
+    UIHandler.ReadResult,
+    id
+  ) as Promise<RunResult | null>
 }
 
 export function reportIssue() {

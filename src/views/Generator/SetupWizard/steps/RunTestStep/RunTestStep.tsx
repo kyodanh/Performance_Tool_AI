@@ -336,6 +336,7 @@ function WhatWillRun({
         // Overrides replace requests one for one, so they can't change the
         // count.
         requestOverrides: {},
+        groupRenames: {},
         includeStaticAssets,
         allowlist,
       }).length,

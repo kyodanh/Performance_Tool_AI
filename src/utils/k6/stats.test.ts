@@ -38,6 +38,75 @@ describe('parseCsvLine', () => {
 })
 
 describe('RunStatsCollector', () => {
+  it('breaks the run down per generator', () => {
+    const collector = new RunStatsCollector()
+
+    // Two machines reporting the same second: gauges sum, counters accumulate.
+    collector.push('vus,100,4.000000,,,,,,,,,default,,,,,,,', 'local')
+    collector.push('vus,100,6.000000,,,,,,,,,default,,,,,,,', 'gen-b')
+    collector.push(
+      'http_reqs,100,1.000000,,,,,,GET,/a,,default,,200,,,,,',
+      'local'
+    )
+    collector.push(
+      'http_reqs,100,1.000000,,,,,,GET,/a,,default,,200,,,,,',
+      'gen-b'
+    )
+    collector.push(
+      'http_reqs,100,1.000000,,,,,,GET,/a,,default,,200,,,,,',
+      'gen-b'
+    )
+    collector.push(
+      'http_req_failed,100,1.000000,,,,,,GET,/a,,default,,500,,,,,',
+      'gen-b'
+    )
+    collector.push(
+      'http_req_duration,100,200.000000,,,,,,GET,/a,,default,,200,,,,,',
+      'local'
+    )
+    collector.push(
+      'http_req_duration,100,400.000000,,,,,,GET,/a,,default,,200,,,,,',
+      'gen-b'
+    )
+    collector.push(
+      'data_received,100,1000.000000,,,,,,,,,default,,,,,,,',
+      'gen-b'
+    )
+    collector.push('iterations,100,1.000000,,,,,,,,,default,,,,,,,', 'gen-b')
+
+    const { generators, vus, requests } = collector.snapshot()
+
+    // Totals still merge every machine.
+    expect(vus).toBe(10)
+    expect(requests).toBe(3)
+
+    // Busiest machine first.
+    expect(generators.map((generator) => generator.source)).toEqual([
+      'gen-b',
+      'local',
+    ])
+
+    expect(generators[0]).toMatchObject({
+      source: 'gen-b',
+      vus: 6,
+      requests: 2,
+      failedRequests: 1,
+      iterations: 1,
+      dataReceived: 1000,
+      avgDuration: 400,
+      maxDuration: 400,
+    })
+
+    expect(generators[1]).toMatchObject({
+      source: 'local',
+      vus: 4,
+      requests: 1,
+      failedRequests: 0,
+      dataReceived: 0,
+      avgDuration: 200,
+    })
+  })
+
   it('ignores the header and non-metric output', () => {
     const collector = new RunStatsCollector()
 

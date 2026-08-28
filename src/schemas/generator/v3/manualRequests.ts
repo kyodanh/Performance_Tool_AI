@@ -51,4 +51,6 @@ export const ManualRequestSchema = z.object({
   response: ResponseSchema.optional(),
   comment: z.string().optional(),
   group: z.string().optional(),
+  // Absent in files written before re-import replaced instead of appended.
+  source: z.literal('vugen').optional(),
 })

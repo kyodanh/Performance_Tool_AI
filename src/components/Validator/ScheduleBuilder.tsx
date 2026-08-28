@@ -10,6 +10,8 @@ import {
 } from '@/utils/k6/schedule'
 
 interface ScheduleBuilderProps {
+  /** Peak VUs the run currently schedules, so the form opens on the truth. */
+  vus: number
   onChange: (profile: LoadProfileExecutorOptions) => void
   disabled?: boolean
 }
@@ -37,8 +39,18 @@ function PanelTitle({ children }: { children: React.ReactNode }) {
  * writes the load profile below — that stays the source of truth for the run and
  * can be edited by hand afterwards.
  */
-export function ScheduleBuilder({ onChange, disabled }: ScheduleBuilderProps) {
-  const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE)
+export function ScheduleBuilder({
+  vus,
+  onChange,
+  disabled,
+}: ScheduleBuilderProps) {
+  // Seeded from the run's own peak rather than a fixed default: this field is
+  // what the generator shares are divided from, so showing a number the run is
+  // not going to use makes the share column look wrong.
+  const [schedule, setSchedule] = useState<Schedule>({
+    ...DEFAULT_SCHEDULE,
+    vus: vus > 0 ? vus : DEFAULT_SCHEDULE.vus,
+  })
 
   // Emits on edit rather than from an effect, so the profile the test already
   // declares survives until the user actually touches this form — and once

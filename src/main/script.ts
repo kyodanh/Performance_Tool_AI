@@ -12,6 +12,7 @@ import {
   TEMP_SCRIPT_SUFFIX,
 } from '@/constants/workspace'
 import { ScriptHandler } from '@/handlers/script/types'
+import { saveRunResult } from '@/handlers/ui/results'
 import {
   abortDistributedRun,
   startDistributedRun,
@@ -24,6 +25,7 @@ import { createWriteStream } from '@/utils/fs'
 import { K6Client } from '@/utils/k6/client'
 import { LoadProfileOverrides } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
+import { RunStats } from '@/utils/k6/stats'
 import { TestRun } from '@/utils/k6/testRun'
 import { createTrackingServer } from '@/utils/k6/tracking'
 import * as path from '@/utils/path'
@@ -286,7 +288,13 @@ export const runLoadTest = async ({
     browserWindow.webContents.send(ScriptHandler.Log, entry)
   })
 
+  // The Analysis view opens finished runs, and the live stats go away with the
+  // Controller, so the last snapshot of the run is kept on disk.
+  let lastStats: RunStats | null = null
+
   testRun.on('stats', ({ stats }) => {
+    lastStats = stats
+
     browserWindow.webContents.send(ScriptHandler.Stats, stats)
   })
 
@@ -307,6 +315,13 @@ export const runLoadTest = async ({
 
   testRun.on('stop', () => {
     browserWindow.webContents.send(ScriptHandler.Stopped)
+
+    const stats: RunStats | null = lastStats
+
+    // A run that failed before its first sample has nothing to analyse.
+    if (stats !== null && stats.buckets.length > 0) {
+      void saveRunResult(path.name(scriptPath), stats)
+    }
   })
 
   return testRun

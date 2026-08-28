@@ -19,6 +19,10 @@ export const GeneratorFileDataSchema = z.object({
   // Recorded requests edited by hand, keyed by the `requestKey` of the
   // recorded request each one replaces, for the same reason.
   requestOverrides: z.record(z.string(), ManualRequestSchema).default({}),
+  // Renamed groups, from the name a request carries in the recording to the
+  // name it shows under. Kept as a mapping because reloading the recording
+  // brings the original names back.
+  groupRenames: z.record(z.string(), z.string()).default({}),
   includeStaticAssets: z.boolean(),
   scriptName: z.string().default('my-script.js'),
   // True when the test setup wizard configured this generator, either at

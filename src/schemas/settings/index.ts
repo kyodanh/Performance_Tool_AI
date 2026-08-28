@@ -36,6 +36,7 @@ export function migrate(settings: z.infer<typeof AnySettingSchema>) {
 export const AppSettingsSchema = AnySettingSchema.transform(migrate)
 
 export {
+  DEFAULT_SCRIPT_SETTINGS,
   AppearanceSchema,
   ProxySettingsSchema,
   RecorderSettingsSchema,

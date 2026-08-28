@@ -47,6 +47,38 @@ describe('renameGroup', () => {
     expect(useGeneratorStore.getState().emptyGroups).toEqual(['trans_view'])
   })
 
+  it('keeps the rename after the recording is loaded again', () => {
+    const { setRecording, setAllowlist, renameGroup } =
+      useGeneratorStore.getState()
+
+    setRecording([createProxyData({ id: 'recorded', group: 'Login' })])
+    setAllowlist(['example.com'])
+    renameGroup('Login', 'transaction_login')
+
+    // What opening the generator again does: the recording comes back with the
+    // groups it was recorded with.
+    setRecording([createProxyData({ id: 'recorded', group: 'Login' })])
+
+    expect(selectFilteredRequests(useGeneratorStore.getState())[0]?.group).toBe(
+      'transaction_login'
+    )
+  })
+
+  it('follows a group renamed twice back to the recorded name', () => {
+    const { setRecording, setAllowlist, renameGroup } =
+      useGeneratorStore.getState()
+
+    setRecording([createProxyData({ id: 'recorded', group: 'Login' })])
+    setAllowlist(['example.com'])
+    renameGroup('Login', 'transaction_login')
+    renameGroup('transaction_login', 'trans_login')
+    setRecording([createProxyData({ id: 'recorded', group: 'Login' })])
+
+    expect(selectFilteredRequests(useGeneratorStore.getState())[0]?.group).toBe(
+      'trans_login'
+    )
+  })
+
   it('leaves other groups alone', () => {
     const { addManualRequest, renameGroup } = useGeneratorStore.getState()
 
@@ -167,5 +199,54 @@ describe('setRequestOverride', () => {
     expect(request?.group).toBe('Checkout')
     // The row keeps the recorded id so the rest of the UI still matches it up.
     expect(request?.id).toBe('second-load')
+  })
+})
+
+describe('replaceImportedRequests', () => {
+  function importScript(paths: string[]) {
+    const { replaceImportedRequests } = useGeneratorStore.getState()
+
+    replaceImportedRequests(
+      'vugen',
+      paths.map((path) => ({
+        ...createProxyData({ request: createRequest({ path }) }),
+        group: '1_trans_Login',
+        source: 'vugen' as const,
+      }))
+    )
+  }
+
+  it('replaces the previous import instead of doubling it', () => {
+    importScript(['/dashboard', '/projects'])
+    importScript(['/dashboard', '/projects', '/login'])
+
+    const paths = useGeneratorStore
+      .getState()
+      .manualRequests.map((request) => request.request.path)
+
+    expect(paths).toEqual(['/dashboard', '/projects', '/login'])
+  })
+
+  it('drops a request removed from the re-imported script', () => {
+    importScript(['/dashboard', '/projects'])
+    importScript(['/dashboard'])
+
+    expect(useGeneratorStore.getState().manualRequests).toHaveLength(1)
+  })
+
+  it('keeps requests added by hand', () => {
+    const { addManualRequest } = useGeneratorStore.getState()
+
+    addManualRequest(
+      createProxyData({ request: createRequest({ path: '/by-hand' }) })
+    )
+    importScript(['/dashboard'])
+    importScript(['/dashboard'])
+
+    const paths = useGeneratorStore
+      .getState()
+      .manualRequests.map((request) => request.request.path)
+
+    expect(paths).toEqual(['/by-hand', '/dashboard'])
   })
 })

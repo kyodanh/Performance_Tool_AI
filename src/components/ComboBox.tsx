@@ -1,6 +1,6 @@
 import { Theme } from '@radix-ui/themes'
 import { ChevronDownIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   type DropdownIndicatorProps,
   MenuProps,
@@ -25,6 +25,11 @@ interface ComboBoxProps {
   name?: string
   id?: string
   onBlur?: () => void
+  /**
+   * A modal dialog makes everything outside it inert, so a menu portalled to
+   * the body there can be seen but not clicked. Turn it off inside one.
+   */
+  portalMenu?: boolean
 }
 
 export function ComboBox({
@@ -36,9 +41,19 @@ export function ComboBox({
   id,
   onChange,
   onBlur,
+  portalMenu = true,
 }: ComboBoxProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [inputValue, setInputValue] = useState('')
+  // react-select picks an option on mousedown and blurs right after, both
+  // before React re-renders, so blur has to read the pending text from a ref
+  // instead of the state it captured on the last render.
+  const pendingInput = useRef('')
+
+  function setPendingInput(nextValue: string) {
+    pendingInput.current = nextValue
+    setInputValue(nextValue)
+  }
 
   const selectedValue = value
     ? {
@@ -62,23 +77,41 @@ export function ComboBox({
       onFocus={() => !disabled && setMenuOpen(true)}
       onBlur={() => {
         setMenuOpen(false)
+
+        // ponytail: react-select keeps text typed but never confirmed with
+        // Enter or the "Use ..." option in its input only, so leaving the field
+        // and submitting used to silently keep the previous value.
+        const typed = pendingInput.current.trim()
+
+        setPendingInput('')
+
+        if (typed && typed !== value) {
+          onChange(typed)
+        }
+
         onBlur?.()
       }}
       onMenuOpen={() => setMenuOpen(true)}
       onMenuClose={() => setMenuOpen(false)}
       onInputChange={(nextValue, actionMeta) => {
-        if (actionMeta.action === 'input-change') {
-          setInputValue(nextValue)
-          if (!menuOpen) {
-            setMenuOpen(true)
-          }
+        // Every action is honoured, not just typing: react-select clears the
+        // input by passing '' here after a value is picked, and ignoring that
+        // would leave stale text for the blur above to commit.
+        setPendingInput(nextValue)
+
+        if (actionMeta.action === 'input-change' && !menuOpen) {
+          setMenuOpen(true)
         }
+
         return nextValue
       }}
-      onChange={(option) => onChange(option?.value ?? '')}
+      onChange={(option) => {
+        setPendingInput('')
+        onChange(option?.value ?? '')
+      }}
       onCreateOption={(nextValue) => {
         onChange(nextValue)
-        setInputValue('')
+        setPendingInput('')
         setMenuOpen(false)
       }}
       formatCreateLabel={(inputValue) => `Use "${inputValue}"`}
@@ -89,7 +122,7 @@ export function ComboBox({
         DropdownIndicator,
         Menu,
       }}
-      menuPortalTarget={document.body}
+      menuPortalTarget={portalMenu ? document.body : undefined}
     />
   )
 }

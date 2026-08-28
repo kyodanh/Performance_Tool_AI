@@ -4,8 +4,7 @@ import log from 'electron-log/main'
 import { configureSystemProxy } from '@/services/http'
 import * as path from '@/utils/path'
 
-import { DEFAULT_HTTP_TIMEOUT } from '../schemas/generator'
-import { AppSettingsSchema } from '../schemas/settings'
+import { AppSettingsSchema, DEFAULT_SCRIPT_SETTINGS } from '../schemas/settings'
 import { AppSettings } from '../types/settings'
 import { showOpenDialog } from '../utils/dialog'
 import { getPlatform } from '../utils/electron'
@@ -27,7 +26,7 @@ export const defaultSettings: AppSettings = {
   windowState: { width: 1200, height: 800, x: 0, y: 0, isMaximized: true },
   telemetry: { usageReport: true, errorReport: true },
   appearance: { theme: 'system' },
-  script: { httpTimeout: DEFAULT_HTTP_TIMEOUT },
+  script: DEFAULT_SCRIPT_SETTINGS,
 }
 
 const fileName =

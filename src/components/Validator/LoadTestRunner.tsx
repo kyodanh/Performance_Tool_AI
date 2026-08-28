@@ -9,8 +9,15 @@ import {
   ScrollArea,
   Text,
 } from '@radix-ui/themes'
-import { InfoIcon, PlayIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  ChartColumnIcon,
+  InfoIcon,
+  PlayIcon,
+  SquareIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { LoadGenerators } from '@/components/LoadGenerators'
 import { LoadProfile } from '@/components/TestOptions/LoadProfile'
@@ -18,6 +25,7 @@ import TextSpinner from '@/components/TextSpinner/TextSpinner'
 import { useRunChecks } from '@/hooks/useRunChecks'
 import { useRunLogs } from '@/hooks/useRunLogs'
 import { useRunStats } from '@/hooks/useRunStats'
+import { routeMap } from '@/routeMap'
 import { LoadProfileExecutorOptions } from '@/types/testOptions'
 import {
   describeProfile,
@@ -28,8 +36,10 @@ import {
   toProfileOverrides,
 } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
+import * as path from '@/utils/path'
 
 import { ExecutionDetails } from './ExecutionDetails'
+import { ExportReportButton } from './ExportReportButton'
 import { formatDuration } from './format'
 import { ScheduleBuilder } from './ScheduleBuilder'
 
@@ -59,6 +69,12 @@ export function LoadTestRunner({
   const [verbose, setVerbose] = useState(false)
   const [httpDebug, setHttpDebug] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+  const navigate = useNavigate()
+
+  // Stopping sends SIGTERM, and k6 reports that as an error log entry
+  // ("aborted because k6 received a 'terminated' signal") on every generator.
+  // A deliberate stop is not a failure, so drop errors once one is requested.
+  const stoppingRef = useRef(false)
 
   // A script that declares `scenarios` was scheduled deliberately — possibly
   // several scenarios at once, which a single profile would collapse into one —
@@ -96,7 +112,7 @@ export function LoadTestRunner({
   // error, an invalid option — and k6 reports those as error log entries.
   useEffect(() => {
     return window.studio.script.onScriptLog((entry) => {
-      if (entry.level !== 'error') {
+      if (stoppingRef.current || entry.level !== 'error') {
         return
       }
 
@@ -114,6 +130,8 @@ export function LoadTestRunner({
     if (scriptPath === null) {
       return
     }
+
+    stoppingRef.current = false
 
     resetStats()
     resetLogs()
@@ -148,12 +166,26 @@ export function LoadTestRunner({
   ])
 
   const handleStop = useCallback(() => {
+    stoppingRef.current = true
+
     window.studio.script.stopScript()
     setIsRunning(false)
   }, [])
 
   return (
-    <Flex direction="column" height="100%" minHeight="0">
+    <Flex
+      direction="column"
+      height="100%"
+      minHeight="0"
+      css={css`
+        /* Only the results panel — the last child — takes the squeeze. Without
+           this the generators table and the callouts shrink instead, and a Card
+           clips its own rows mid-row once a run fills the column. */
+        & > *:not(:last-child) {
+          flex-shrink: 0;
+        }
+      `}
+    >
       <LoadGenerators
         peakVus={peakVus(profile)}
         useLocal={useLocalGenerator}
@@ -177,6 +209,22 @@ export function LoadTestRunner({
             <PlayIcon /> Start
           </Button>
         )}
+        {/* The run is saved to the Results folder when it ends, so Analysis
+            opens it — including after the app has moved on. */}
+        {!isRunning && stats !== null && stats.buckets.length > 0 && (
+          <Button
+            variant="soft"
+            radius="full"
+            onClick={() => navigate(routeMap.analysis)}
+          >
+            <ChartColumnIcon /> Analyse run
+          </Button>
+        )}
+        <ExportReportButton
+          stats={stats}
+          testName={scriptPath === null ? 'k6' : path.name(scriptPath)}
+          isRunning={isRunning}
+        />
         <Text as="label" size="2" color="gray">
           <Flex gap="2" align="center">
             <Checkbox
@@ -259,7 +307,12 @@ export function LoadTestRunner({
               padding-right: var(--space-3);
             `}
           >
-            <ScheduleBuilder onChange={setProfile} disabled={isRunning} />
+            <ScheduleBuilder
+              key={scriptPath ?? ''}
+              vus={peakVus(seed)}
+              onChange={setProfile}
+              disabled={isRunning}
+            />
             <Card size="2" mt="3">
               <details
                 css={css`

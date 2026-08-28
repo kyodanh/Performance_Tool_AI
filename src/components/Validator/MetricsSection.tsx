@@ -16,11 +16,12 @@ import {
 import { InfoIcon } from 'lucide-react'
 import { useState } from 'react'
 
-import { RunStats, StatsBucket } from '@/utils/k6/stats'
+import { isDistributedRun, RunStats, StatsBucket } from '@/utils/k6/stats'
 
 import { ChecksTable } from './ChecksTable'
 import { ErrorsTable } from './ErrorsTable'
 import { formatBytes, formatCount, formatDuration, formatTime } from './format'
+import { GeneratorsTable } from './GeneratorsTable'
 import {
   MAX_SERIES,
   MetricPanel,
@@ -388,6 +389,12 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
             The response time chart draws the first {MAX_SERIES} transactions —
             the rest keep their numbers in the table below.
           </Text>
+        )}
+
+        {isDistributedRun(stats.generators) && (
+          <Section title="Load generators">
+            <GeneratorsTable generators={stats.generators} />
+          </Section>
         )}
 
         {stats.groups.length > 0 && (

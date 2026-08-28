@@ -54,6 +54,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
       manualRequests,
       excludedRequests,
       requestOverrides,
+      groupRenames,
       includeStaticAssets,
       scriptName,
       wizardUsed,
@@ -91,6 +92,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         // process still running from before it existed.
         state.excludedRequests = excludedRequests ?? []
         state.requestOverrides = requestOverrides ?? {}
+        state.groupRenames = groupRenames ?? {}
         state.emptyGroups = []
 
         state.includeStaticAssets = includeStaticAssets

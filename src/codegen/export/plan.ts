@@ -34,6 +34,8 @@ export interface Assertion {
 
 export interface PlannedRequest {
   id: string
+  /** `requestKey` of the source request — the key per-request overrides use. */
+  key: string
   name: string
   method: Method
   url: string
@@ -110,6 +112,7 @@ export function buildExportPlan({
       return {
         group: data.group,
         id: data.id,
+        key: requestKey(data),
         name: `${request.method} ${request.path || '/'}`,
         method: request.method,
         url: request.url,

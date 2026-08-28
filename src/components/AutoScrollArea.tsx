@@ -1,8 +1,35 @@
 import { css } from '@emotion/react'
 import { ScrollArea, ScrollAreaProps } from '@radix-ui/themes'
-import { ReactNode, UIEvent, useRef } from 'react'
+import { ReactNode, UIEvent, useRef, useState } from 'react'
 
 import { useAutoScroll } from '@/hooks/useAutoScroll'
+
+const BOTTOM_THRESHOLD = 10
+
+/**
+ * Whether tailing should stay on. Scrolling up away from the bottom means the
+ * user is reading, so tailing pauses; coming back to the bottom resumes it.
+ * Returns the unchanged value while the user is not moving away or back.
+ */
+export function nextPinnedState(
+  pinned: boolean,
+  { scrollTop, previousScrollTop, scrollHeight, clientHeight }: ScrollPosition
+) {
+  const isAtBottom = scrollHeight - scrollTop <= clientHeight + BOTTOM_THRESHOLD
+
+  if (isAtBottom) {
+    return true
+  }
+
+  return scrollTop < previousScrollTop ? false : pinned
+}
+
+interface ScrollPosition {
+  scrollTop: number
+  previousScrollTop: number
+  scrollHeight: number
+  clientHeight: number
+}
 
 interface AutoScrollAreaProps extends Omit<ScrollAreaProps, 'onScroll'> {
   tail?: boolean
@@ -18,7 +45,10 @@ export function AutoScrollArea({
   onScrollBack,
   ...props
 }: AutoScrollAreaProps) {
-  const ref = useAutoScroll(items, tail)
+  // Tailing pauses while the user reads further up, otherwise every new item
+  // yanks the view back to the bottom mid-read.
+  const [pinned, setPinned] = useState(true)
+  const ref = useAutoScroll(items, tail && pinned)
   const scrollTop = useRef<number>(0)
 
   const handleMount = (el: HTMLDivElement | null) => {
@@ -36,12 +66,17 @@ export function AutoScrollArea({
       return
     }
 
-    // If the current scroll position is less than the previous one, the user scrolled up.
-    if (target.scrollTop < scrollTop.current) {
-      const isAtBottom =
-        target.scrollHeight - target.scrollTop <= target.clientHeight + 10
+    const next = nextPinnedState(pinned, {
+      scrollTop: target.scrollTop,
+      previousScrollTop: scrollTop.current,
+      scrollHeight: target.scrollHeight,
+      clientHeight: target.clientHeight,
+    })
 
-      if (!isAtBottom) {
+    if (next !== pinned) {
+      setPinned(next)
+
+      if (!next) {
         onScrollBack?.()
       }
     }

@@ -19,7 +19,9 @@ import { browserWindowFromEvent, sendToast } from '@/utils/electron'
 import { exists, readdir, rename } from '@/utils/fs'
 import * as path from '@/utils/path'
 
-import { MenuState, UIHandler } from './types'
+import { exportReport } from './report'
+import { listRunResults, readRunResult } from './results'
+import { ExportReportPayload, MenuState, UIHandler } from './types'
 
 export function initialize() {
   ipcMain.on(UIHandler.ToggleTheme, () => {
@@ -39,6 +41,27 @@ export function initialize() {
     }
 
     return false
+  })
+
+  ipcMain.handle(
+    UIHandler.ExportReport,
+    async (event, payload: ExportReportPayload) => {
+      console.info(`${UIHandler.ExportReport} event received`)
+
+      return exportReport(browserWindowFromEvent(event), payload)
+    }
+  )
+
+  ipcMain.handle(UIHandler.ListResults, async () => {
+    console.info(`${UIHandler.ListResults} event received`)
+
+    return listRunResults()
+  })
+
+  ipcMain.handle(UIHandler.ReadResult, async (_, id: string) => {
+    console.info(`${UIHandler.ReadResult} event received`)
+
+    return readRunResult(id)
   })
 
   ipcMain.handle(UIHandler.TrashFile, async (_, file: StudioFile) => {

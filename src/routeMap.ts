@@ -4,6 +4,7 @@ const routes = {
   home: '/',
   recorder: '/recorder',
   controller: '/controller',
+  analysis: '/analysis',
   controllerFile: '/controller/:filePath',
   file: '/file/:filePath',
 }
@@ -25,6 +26,7 @@ export const routeMap = {
   home: getRoutePath('home'),
   recorder: getRoutePath('recorder'),
   controller: getRoutePath('controller'),
+  analysis: getRoutePath('analysis'),
   controllerFile: getRoutePath('controllerFile'),
   file: getRoutePath('file'),
 }

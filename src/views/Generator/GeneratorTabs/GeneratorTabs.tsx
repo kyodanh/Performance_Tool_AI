@@ -3,6 +3,7 @@ import { Badge, Box, Flex, Tabs } from '@radix-ui/themes'
 import { CircleXIcon } from 'lucide-react'
 import { useState } from 'react'
 
+import { ExportFormat } from '@/hooks/useExportPreview'
 import { ScriptPreview as ScriptPreviewType } from '@/hooks/useScriptPreview'
 import {
   selectFilteredRequests,
@@ -33,6 +34,17 @@ export function GeneratorTabs({
   onChangeRecording,
 }: GeneratorTabsProps) {
   const [tab, setTab] = useState('requests')
+  // Hand-edited export sources live here, not in the generator: they are one
+  // target's text, nothing can parse them back into rules. Kept above the tabs
+  // so switching tabs does not throw the edit away.
+  const [drafts, setDrafts] = useState<Partial<Record<ExportFormat, string>>>(
+    {}
+  )
+
+  function handleDraftChange(format: ExportFormat, draft: string | undefined) {
+    setDrafts((current) => ({ ...current, [format]: draft }))
+  }
+
   const filteredRequests = useGeneratorStore(selectFilteredRequests)
   const hasRecording = useGeneratorStore(selectHasRecording)
 
@@ -116,7 +128,11 @@ export function GeneratorTabs({
             min-height: 0;
           `}
         >
-          <ExportPreview format="jmeter" />
+          <ExportPreview
+            format="jmeter"
+            draft={drafts.jmeter}
+            onDraftChange={handleDraftChange}
+          />
         </Tabs.Content>
         <Tabs.Content
           value="vugen"
@@ -125,7 +141,11 @@ export function GeneratorTabs({
             min-height: 0;
           `}
         >
-          <ExportPreview format="vugen" />
+          <ExportPreview
+            format="vugen"
+            draft={drafts.vugen}
+            onDraftChange={handleDraftChange}
+          />
         </Tabs.Content>
       </Tabs.Root>
     </Flex>

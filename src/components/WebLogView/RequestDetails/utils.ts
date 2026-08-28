@@ -12,12 +12,15 @@ export function parseParams(request: Request) {
   }
 
   try {
-    if (request.content === '') {
-      return
-    }
-
     const contentType = getContentType(request?.headers ?? [])
     const contentDecoded = safeAtob(request.content ?? '')
+
+    // ponytail: covers '', undefined and null in one check. jsonrepair throws
+    // "Unexpected end of json string at position 0" on an empty body, which
+    // every query-only GET would hit.
+    if (!contentDecoded) {
+      return
+    }
 
     if (contentType === 'multipart/form-data') {
       return contentDecoded
@@ -32,14 +35,21 @@ export function parseParams(request: Request) {
       return stringify(JSON.parse(queryStringToJSONString(contentDecoded)))
     }
 
+    const normalized = parsePythonByteString(
+      wrapTemplateExpressionsInQuotes(contentDecoded)
+    )
+
+    // ponytail: mitmproxy writes an empty body as the python literal b'', which
+    // unwraps to '' here and makes jsonrepair throw. Guard after the transforms,
+    // the only point where the string is really empty.
+    if (!normalized.trim()) {
+      return
+    }
+
     return stringify(
       // TODO: https://github.com/grafana/k6-studio/issues/277
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      JSON.parse(
-        jsonrepair(
-          parsePythonByteString(wrapTemplateExpressionsInQuotes(contentDecoded))
-        )
-      )
+      JSON.parse(jsonrepair(normalized))
     )
   } catch (e) {
     console.info('Failed to parse query parameters', e)

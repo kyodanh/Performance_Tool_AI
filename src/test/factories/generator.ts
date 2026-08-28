@@ -10,6 +10,7 @@ export function createGeneratorData(
   return {
     allowlist: [],
     manualRequests: [],
+    groupRenames: {},
     includeStaticAssets: false,
     options: {
       loadProfile: {
@@ -104,12 +105,14 @@ export function createGeneratorState(
     requests: [],
     manualRequests: [],
     addManualRequest: vi.fn(),
+    replaceImportedRequests: vi.fn(),
     updateManualRequest: vi.fn(),
     removeManualRequest: vi.fn(),
     excludedRequests: [],
     toggleExcludedRequest: vi.fn(),
     restoreExcludedRequests: vi.fn(),
     requestOverrides: {},
+    groupRenames: {},
     setRequestOverride: vi.fn(),
     clearRequestOverride: vi.fn(),
     emptyGroups: [],

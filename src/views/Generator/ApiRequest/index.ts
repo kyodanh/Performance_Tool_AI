@@ -1,5 +1,7 @@
 export * from './AddRequestButton'
 export * from './ApiRequestDialog'
 export * from './ImportPostmanButton'
+export * from './ImportVuGenButton'
+export * from './ImportVuGenDialog'
 export * from './useGroupNames'
 export * from './useImportPostman'

@@ -12,7 +12,11 @@ import { useApplyRules } from '@/store/generator/hooks/useApplyRules'
 import { useHighlightRequestChanges } from '@/store/generator/hooks/useHighlightRequestChanges'
 import { Group, ProxyData } from '@/types'
 
-import { AddRequestButton, ImportPostmanButton } from '../../ApiRequest'
+import {
+  AddRequestButton,
+  ImportPostmanButton,
+  ImportVuGenButton,
+} from '../../ApiRequest'
 import { RecordingSelector } from '../../RecordingSelector'
 
 import { Header } from './Header'
@@ -124,12 +128,13 @@ export function RequestList({
     return (
       <EmptyMessage
         px="4"
-        message="Select a recording from the dropdown, add a request by hand, or import a Postman collection"
+        message="Select a recording from the dropdown, add a request by hand, or import a Postman collection or LoadRunner script"
         action={
           <Flex gap="2" align="center">
             <RecordingSelector onChangeRecording={onChangeRecording} />
             <AddRequestButton variant="soft" />
             <ImportPostmanButton variant="soft" />
+            <ImportVuGenButton variant="soft" />
           </Flex>
         }
       />

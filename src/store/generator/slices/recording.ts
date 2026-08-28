@@ -22,6 +22,9 @@ interface State {
   // Recorded requests edited by hand, by `requestKey` of the request each one
   // replaces. Keyed for the same reason as `excludedRequests`.
   requestOverrides: Record<string, ProxyData>
+  // Group renames, from the name in the recording to the current one. Renaming
+  // a recorded request in place would be undone by the next recording load.
+  groupRenames: Record<string, string>
   recordingPath: string
   recordingError: unknown
   allowlist: string[]
@@ -34,6 +37,10 @@ interface Actions {
   setRecording: (recording: ProxyData[]) => void
   setRecordingError: (error: unknown) => void
   addManualRequest: (request: ProxyData) => void
+  replaceImportedRequests: (
+    source: NonNullable<ProxyData['source']>,
+    requests: ProxyData[]
+  ) => void
   updateManualRequest: (id: string, request: ProxyData) => void
   removeManualRequest: (id: string) => void
   toggleExcludedRequest: (key: string) => void
@@ -70,6 +77,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   emptyGroups: [],
   excludedRequests: [],
   requestOverrides: {},
+  groupRenames: {},
   recordingPath: '',
   recordingError: null,
   allowlist: [],
@@ -112,6 +120,15 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   addManualRequest: (request: ProxyData) =>
     set((state) => {
       state.manualRequests.push(request)
+    }),
+  // Re-importing a script means the script changed, so its previous requests
+  // are stale. Only that importer's own requests go, hand-added ones stay.
+  replaceImportedRequests: (source, requests) =>
+    set((state) => {
+      state.manualRequests = [
+        ...state.manualRequests.filter((request) => request.source !== source),
+        ...requests,
+      ]
     }),
   updateManualRequest: (id: string, request: ProxyData) =>
     set((state) => {
@@ -165,6 +182,14 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
 
       state.requests.forEach(rename)
       state.manualRequests.forEach(rename)
+      // Follow any earlier rename of the same group, so the mapping always
+      // points from the recorded name to the current one.
+      Object.keys(state.groupRenames).forEach((recorded) => {
+        if (state.groupRenames[recorded] === from) {
+          state.groupRenames[recorded] = to
+        }
+      })
+      state.groupRenames[from] = to
       Object.values(state.requestOverrides).forEach(rename)
       state.emptyGroups = state.emptyGroups.map((group) =>
         group === from ? to : group

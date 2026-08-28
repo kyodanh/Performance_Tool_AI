@@ -1,5 +1,5 @@
-import { Text, TextField } from '@radix-ui/themes'
-import { useFormContext } from 'react-hook-form'
+import { Checkbox, Flex, Text, TextField } from '@radix-ui/themes'
+import { Controller, useFormContext } from 'react-hook-form'
 
 import { AppSettings } from '@/types/settings'
 import { stringAsOptionalNumber } from '@/utils/form'
@@ -10,6 +10,7 @@ import { SettingsSection } from './SettingsSection'
 
 export const ScriptSettings = () => {
   const {
+    control,
     register,
     formState: { errors },
   } = useFormContext<AppSettings>()
@@ -40,6 +41,34 @@ export const ScriptSettings = () => {
           <TextField.Slot side="right">s</TextField.Slot>
         </TextField.Root>
       </FieldGroup>
+
+      <Text size="2" color="gray" mt="5" mb="2" as="p">
+        Export preview
+      </Text>
+
+      <Flex gap="2">
+        <Controller
+          control={control}
+          name="script.allowExportEdit"
+          render={({ field }) => (
+            <Text size="2" as="label">
+              <Checkbox
+                {...register('script.allowExportEdit')}
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />{' '}
+              Allow editing in the JMeter / LoadRunner tabs.
+            </Text>
+          )}
+        />
+      </Flex>
+
+      <Text size="1" color="gray" mt="2" as="p">
+        Overview edits are written to the generator, so the k6, JMeter and
+        LoadRunner tabs all update together. Raw XML / C edits apply only to
+        that tab and to the file it exports — nothing can parse them back into
+        rules, so the other tabs keep following the generator.
+      </Text>
     </SettingsSection>
   )
 }

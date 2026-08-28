@@ -131,6 +131,6 @@ export function migrate(
   return {
     ...rest,
     version: '5.0',
-    script: { httpTimeout: DEFAULT_HTTP_TIMEOUT },
+    script: { httpTimeout: DEFAULT_HTTP_TIMEOUT, allowExportEdit: false },
   }
 }

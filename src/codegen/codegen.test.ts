@@ -93,6 +93,7 @@ describe('Code generation', () => {
           scriptPath: '/project/Scripts/my-script.js',
           generator: {
             version: '3.0',
+            groupRenames: {},
             recordingPath: 'test',
             options: {
               loadProfile: {
@@ -150,6 +151,7 @@ describe('Code generation', () => {
   describe('generateImports', () => {
     const generator: GeneratorFileData = {
       version: '3.0',
+      groupRenames: {},
       recordingPath: 'test',
       options: {
         loadProfile: {

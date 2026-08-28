@@ -1,3 +1,4 @@
+import { DEFAULT_GROUP_NAME } from '@/constants'
 import { type GeneratorStore } from '@/store/generator'
 import { GeneratorFileData } from '@/types/generator'
 import { LoadProfileExecutorOptions, TestOptions } from '@/types/testOptions'
@@ -39,6 +40,7 @@ export function selectFilteredRequests(
     | 'includeStaticAssets'
     | 'excludedRequests'
     | 'requestOverrides'
+    | 'groupRenames'
   >
 ) {
   const excluded = new Set(state.excludedRequests)
@@ -58,8 +60,10 @@ export function selectFilteredRequests(
   // the recorded one rather than being appended like a manual request.
   const recordedRequests = filtered.map((request) => {
     const override = state.requestOverrides[requestKey(request)]
+    const stored = override ? { ...override, id: request.id } : request
+    const renamed = state.groupRenames[stored.group || DEFAULT_GROUP_NAME]
 
-    return override ? { ...override, id: request.id } : request
+    return renamed ? { ...stored, group: renamed } : stored
   })
 
   // Manual requests skip the allowlist and static asset filters, they were
@@ -85,6 +89,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     manualRequests,
     excludedRequests,
     requestOverrides,
+    groupRenames,
     includeStaticAssets,
     scriptName,
     wizardUsed,
@@ -111,6 +116,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     manualRequests,
     excludedRequests,
     requestOverrides,
+    groupRenames,
     includeStaticAssets,
     scriptName,
     wizardUsed,
