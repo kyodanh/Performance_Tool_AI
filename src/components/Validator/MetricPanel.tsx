@@ -16,11 +16,24 @@ export const SERIES_COLORS = [
   'var(--tomato-9)',
   'var(--pink-9)',
   'var(--grass-9)',
+  'var(--amber-9)',
+  'var(--cyan-9)',
+  'var(--purple-9)',
+  'var(--brown-9)',
 ]
 
-export const SERIES_DASHES = ['', '10 6', '2 5', '14 5 2 5']
+export const SERIES_DASHES = [
+  '',
+  '10 6',
+  '2 5',
+  '14 5 2 5',
+  '6 3',
+  '1 4',
+  '12 4 4 4',
+  '4 4 1 4',
+]
 
-// ponytail: a 5th line has no colour left that stays legible for CVD readers —
+// ponytail: 8 lines is where colour + dash still tell a chart apart; past that
 // the rest of the transactions keep their numbers in the table below.
 export const MAX_SERIES = SERIES_COLORS.length
 

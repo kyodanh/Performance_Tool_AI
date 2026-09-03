@@ -3,4 +3,5 @@ export enum AppHandler {
   ChangeRoute = 'app:change-route',
   Navigate = 'app:navigate',
   TrackEvent = 'app:track-event',
+  SystemMetrics = 'app:system-metrics',
 }

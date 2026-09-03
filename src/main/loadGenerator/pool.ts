@@ -2,6 +2,7 @@ import EventEmitter from 'events'
 import { nanoid } from 'nanoid'
 
 import { LoadGenerator, LoadGeneratorFacts } from '@/types/loadGenerator'
+import { SystemMetrics } from '@/types/systemMetrics'
 
 /**
  * A generator that misses three heartbeats is treated as gone. The joiner beats
@@ -12,6 +13,8 @@ const OFFLINE_AFTER_MS = 16_000
 interface Entry {
   generator: Omit<LoadGenerator, 'status'>
   lastSeen: number
+  /** Last sample the joiner sent with its heartbeat. */
+  resources?: SystemMetrics
   /** Set by `disconnect`, picked up by the joiner on its next heartbeat. */
   stopping: boolean
 }
@@ -54,7 +57,7 @@ export class LoadGeneratorPool extends EventEmitter<{ change: [void] }> {
   }
 
   /** Returns whether the generator should stop, or null if it is unknown. */
-  beat(id: string): { stop: boolean } | null {
+  beat(id: string, resources?: SystemMetrics): { stop: boolean } | null {
     const entry = this.#entries.get(id)
 
     if (entry === undefined) {
@@ -64,6 +67,13 @@ export class LoadGeneratorPool extends EventEmitter<{ change: [void] }> {
     const wasOffline = Date.now() - entry.lastSeen > OFFLINE_AFTER_MS
 
     entry.lastSeen = Date.now()
+
+    // No change event for a new sample: every beat carries one, and the list is
+    // polled as well as pushed — the poll is what carries the numbers to the
+    // panel, without re-rendering the table twice a second per generator.
+    if (resources !== undefined) {
+      entry.resources = resources
+    }
 
     if (entry.stopping) {
       this.#entries.delete(id)
@@ -117,10 +127,13 @@ export class LoadGeneratorPool extends EventEmitter<{ change: [void] }> {
   list(): LoadGenerator[] {
     const now = Date.now()
 
-    return [...this.#entries.values()].map(({ generator, lastSeen }) => ({
-      ...generator,
-      status: now - lastSeen > OFFLINE_AFTER_MS ? 'offline' : 'ready',
-    }))
+    return [...this.#entries.values()].map(
+      ({ generator, lastSeen, resources }) => ({
+        ...generator,
+        resources,
+        status: now - lastSeen > OFFLINE_AFTER_MS ? 'offline' : 'ready',
+      })
+    )
   }
 }
 

@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron'
 
 import { StudioFile } from '@/types'
 import { AddToastPayload } from '@/types/toast'
+import { RunStats } from '@/utils/k6/stats'
 
 import { createListener } from '../utils'
 
@@ -62,6 +63,25 @@ export function listResults() {
   return ipcRenderer.invoke(UIHandler.ListResults) as Promise<
     RunResultSummary[]
   >
+}
+
+/**
+ * Saves the current run to the Results folder. Re-saving the same run
+ * overwrites it, so it lands in Analysis once. Resolves with the id to read it
+ * back by, or null when the write failed.
+ */
+export function saveResult(testName: string, stats: RunStats, label?: string) {
+  return ipcRenderer.invoke(
+    UIHandler.SaveResult,
+    testName,
+    stats,
+    label
+  ) as Promise<string | null>
+}
+
+/** Moves saved runs to the OS trash. Rejects when one cannot be trashed. */
+export function deleteResults(ids: string[]) {
+  return ipcRenderer.invoke(UIHandler.DeleteResults, ids) as Promise<void>
 }
 
 /** Reads one saved run. Resolves with null when it cannot be read. */

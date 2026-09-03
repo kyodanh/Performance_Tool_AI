@@ -60,7 +60,8 @@ export function AiAnalysis({ request }: AiAnalysisProps) {
     <>
       <Button
         type="button"
-        variant="outline"
+        size="2"
+        variant="soft"
         radius="full"
         loading={analyze.isPending}
         onClick={handleClick}

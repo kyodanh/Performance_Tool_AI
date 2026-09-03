@@ -1,3 +1,5 @@
+import { SystemMetrics } from './systemMetrics'
+
 export type LoadGeneratorOS = 'macos' | 'linux' | 'windows'
 
 /** Facts the joiner script reports about the machine it runs on. */
@@ -35,4 +37,9 @@ export interface LoadGenerator extends LoadGeneratorFacts {
   weight: number
   /** Derived from the last heartbeat rather than stored, so it never goes stale. */
   status: 'ready' | 'offline'
+  /**
+   * CPU and memory as of the last heartbeat. Missing while a generator has yet
+   * to report — an older joiner, or a machine whose tools would not answer.
+   */
+  resources?: SystemMetrics
 }

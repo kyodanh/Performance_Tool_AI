@@ -346,8 +346,23 @@ export function generateRequestParams(
     .map(([name, value]) => `'${name}': \`${escapeTemplateLiteral(value)}\``)
     .join(',')
 
-  const cookies = request.cookies
-    .filter(([, value]) => value.includes('${correlation_vars['))
+  // A recorded request carries its cookies in `cookies`, and k6's jar already
+  // replays everything there that the recording itself set — only a correlated
+  // value has to be pinned. An imported or hand-written request is the other
+  // way round: empty `cookies`, a `Cookie` header nothing put in the jar, and
+  // `shouldIncludeHeaderInScript` drops that header — so read it back here or
+  // the cookie is never sent at all.
+  const cookieHeader = request.headers.find(
+    ([name]) => name.toLowerCase() === 'cookie'
+  )?.[1]
+
+  const cookies = (
+    request.cookies.length === 0 && cookieHeader !== undefined
+      ? parseCookieHeader(cookieHeader)
+      : request.cookies.filter(([, value]) =>
+          value.includes('${correlation_vars[')
+        )
+  )
     .map(
       ([name, value]) =>
         `'${name}': {value: \`${escapeTemplateLiteral(value)}\`, replace: true}`
@@ -370,6 +385,21 @@ export function generateRequestParams(
   return `params = {
     ${params.join(',\n')}
   }`
+}
+
+function parseCookieHeader(header: string): Array<[string, string]> {
+  return header
+    .split(';')
+    .map((pair) => pair.trim())
+    .filter((pair) => pair.includes('='))
+    .map((pair) => {
+      const separator = pair.indexOf('=')
+
+      return [pair.slice(0, separator), pair.slice(separator + 1)] as [
+        string,
+        string,
+      ]
+    })
 }
 
 export function generateParameterizationCustomCode(

@@ -32,11 +32,14 @@ export const REPORT_STYLES = `
   table.data tbody tr:nth-child(even) { background: #f8f9fb; }
   tr, table.definition { break-inside: avoid; }
   .empty { color: #5b6472; font-style: italic; }
+  .filter { margin: 0 0 4px; font-size: 10px; color: #3f4854; }
+  .filter span { font-weight: 600; margin-right: 10px; }
   .description { color: #3f4854; margin-top: 6px; }
   .chart { width: 100%; height: auto; break-inside: avoid; }
   .chart .grid { stroke: #e4e7ec; stroke-width: 1; }
   .chart .axis { stroke: #9aa2ae; stroke-width: 1; }
   .chart .tick { fill: #5b6472; font-size: 11px; }
+  .runs { margin: 4px 0 0; padding-left: 18px; font-size: 11px; }
   .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0; margin: 4px 0 0; }
   .legend li { display: flex; align-items: center; gap: 5px; font-size: 10px; }
   .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

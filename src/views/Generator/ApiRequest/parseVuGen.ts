@@ -47,7 +47,10 @@ export function parseVuGen(source: string): VuGenImport | null {
   // VuGen steps read the state left by the calls above them.
   const autoHeaders = new Map<string, string>()
   let headers: Array<[string, string]> = []
-  let cookies: string[] = []
+  // LoadRunner's `web_add_cookie` writes to the VU's cookie jar, so the cookie
+  // sticks to every later request until `web_cleanup_cookies` — it is not a
+  // per-step header. Keyed by name so a re-add overwrites, like the jar does.
+  const cookieJar = new Map<string, VuGenCookie>()
   let group = DEFAULT_GROUP_NAME
   let rendezvous = false
   // The request a following `lr_think_time` may attach to — only ever one in
@@ -89,10 +92,17 @@ export function parseVuGen(source: string): VuGenImport | null {
         }
         break
 
-      case 'web_add_cookie':
-        if (call.strings[0] !== undefined) {
-          cookies.push(stripCookieAttributes(call.strings[0]))
+      case 'web_add_cookie': {
+        const cookie = parseCookie(call.strings[0] ?? '')
+
+        if (cookie !== null) {
+          cookieJar.set(cookie.name, cookie)
         }
+        break
+      }
+
+      case 'web_cleanup_cookies':
+        cookieJar.clear()
         break
 
       case 'lr_rendezvous':
@@ -126,7 +136,7 @@ export function parseVuGen(source: string): VuGenImport | null {
         const request = toRequest(call, {
           autoHeaders,
           headers,
-          cookies,
+          cookieJar,
           group,
           rendezvous,
         })
@@ -139,7 +149,6 @@ export function parseVuGen(source: string): VuGenImport | null {
         }
 
         headers = []
-        cookies = []
         rendezvous = false
       }
     }
@@ -151,7 +160,7 @@ export function parseVuGen(source: string): VuGenImport | null {
 interface RequestState {
   autoHeaders: Map<string, string>
   headers: Array<[string, string]>
-  cookies: string[]
+  cookieJar: Map<string, VuGenCookie>
   group: string
   rendezvous: boolean
 }
@@ -171,11 +180,20 @@ function toRequest(call: Call, state: RequestState): VuGenRequest | null {
     return null
   }
 
+  const cookies = [...state.cookieJar.values()].filter((cookie) =>
+    appliesToHost(cookie, new URL(url).hostname)
+  )
+
   const headers = [
     ...state.autoHeaders,
     ...state.headers,
-    ...(state.cookies.length > 0
-      ? [['Cookie', state.cookies.join('; ')] as [string, string]]
+    ...(cookies.length > 0
+      ? [
+          [
+            'Cookie',
+            cookies.map(({ name, value }) => `${name}=${value}`).join('; '),
+          ] as [string, string],
+        ]
       : []),
   ].map(([name, value]) => ({ name, value }))
 
@@ -218,9 +236,44 @@ function body(call: Call): string {
     .join('&')
 }
 
-/** Keeps `name=value`, drops `DOMAIN=`, `path=`, `expires=` and friends. */
-function stripCookieAttributes(cookie: string): string {
-  return cookie.split(';')[0]?.trim() ?? ''
+interface VuGenCookie {
+  name: string
+  value: string
+  /** `DOMAIN=` from the `web_add_cookie` string, null when it had none. */
+  domain: string | null
+}
+
+/**
+ * `web_add_cookie("name=value; DOMAIN=host; path=/; expires=...")` — only the
+ * name, the value and the domain survive; k6 has no use for the rest.
+ */
+function parseCookie(cookie: string): VuGenCookie | null {
+  const [pair, ...attributes] = cookie.split(';')
+  const separator = pair?.indexOf('=') ?? -1
+
+  if (pair === undefined || separator <= 0) {
+    return null
+  }
+
+  const domain = attributes
+    .map((attribute) => /^\s*domain\s*=\s*(.+?)\s*$/i.exec(attribute)?.[1])
+    .find((value) => value !== undefined)
+
+  return {
+    name: pair.slice(0, separator).trim(),
+    value: pair.slice(separator + 1).trim(),
+    domain: domain ?? null,
+  }
+}
+
+function appliesToHost(cookie: VuGenCookie, host: string): boolean {
+  if (cookie.domain === null) {
+    return true
+  }
+
+  const domain = cookie.domain.replace(/^\./, '')
+
+  return host === domain || host.endsWith(`.${domain}`)
 }
 
 function isAbsoluteUrl(value: string): boolean {

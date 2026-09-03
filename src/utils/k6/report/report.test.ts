@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { RunStats } from '@/utils/k6/stats'
 
-import { buildReportHtml, reportHeaderText } from './index'
+import { buildReportHtml, reportHeaderLines } from './index'
 
 function makeStats(overrides: Partial<RunStats> = {}): RunStats {
   return {
@@ -56,8 +56,8 @@ function makeStats(overrides: Partial<RunStats> = {}): RunStats {
         std: 8,
         last: 140,
         series: [
-          { time: 1000, value: 132 },
-          { time: 1001, value: 193 },
+          { time: 1000, value: 132, count: 1 },
+          { time: 1001, value: 193, count: 2 },
         ],
       },
     ],
@@ -71,6 +71,10 @@ function makeStats(overrides: Partial<RunStats> = {}): RunStats {
         failed: 1,
         avg: 130,
         max: 200,
+        min: 90,
+        total: 780,
+        std: 30,
+        serverTime: 600,
       },
     ],
     checks: [
@@ -108,18 +112,27 @@ describe('buildReportHtml', () => {
 
     for (const section of [
       'General Details',
+      'Executive Summary',
+      'Conclusions',
+      'Business Process',
+      'Script: Pro360_Performance',
       'Workload Characteristics',
       'Performance Overview',
       'HTTP Responses Summary',
       'Request Layers Breakdown',
       'Transaction Summary',
-      'Worst Requests (by average response time)',
+      'Worst URLs (by average response time)',
+      'Most Resource Consuming URLs',
       'Checks',
       'Errors',
       'Running VUs',
       'Hits per Second',
       'Throughput',
       'Average Transaction Response Time',
+      'Current Results',
+      'Granularity',
+      'k6 Objects',
+      'Graph Information',
       'Terminology',
     ]) {
       expect(html).toContain(section)
@@ -127,7 +140,7 @@ describe('buildReportHtml', () => {
 
     // Charts must plot, not silently fall back to the empty state.
     expect(html).not.toContain('No samples were recorded')
-    expect(html.match(/<svg/g)?.length).toBe(5)
+    expect(html.match(/<svg/g)?.length).toBe(6)
   })
 
   it('adds a load generator page only for a distributed run', () => {
@@ -213,9 +226,43 @@ describe('buildReportHtml', () => {
     expect(buildReportHtml(empty, META)).toContain('No samples were recorded')
   })
 
-  it('stamps the page header with the run date and title', () => {
-    expect(reportHeaderText(makeStats(), META)).toContain(
-      'Report Title: Pro360_Performance_Report'
+  it('stamps the page header with the run date, title and author', () => {
+    expect(reportHeaderLines(makeStats(), META)).toEqual([
+      'Date: 01/01/1970',
+      'Report Title: Pro360_Performance_Report',
+      'Author: QC QA',
+    ])
+  })
+
+  it('splits the author into the first name and surname the cover asks for', () => {
+    const html = buildReportHtml(makeStats(), META)
+
+    expect(html).toContain('First Name')
+    expect(html).toContain('Surname')
+  })
+
+  it('covers several runs, listing them on the cover and naming their pages', () => {
+    const html = buildReportHtml(
+      [
+        { stats: makeStats(), label: 'baseline' },
+        { stats: makeStats(), label: '20 users' },
+      ],
+      META
+    )
+
+    expect(html).toContain('Runs Included')
+    expect(html).toContain('<li>baseline</li>')
+    expect(html).toContain('<li>20 users</li>')
+    expect(html).toContain('Pro360_Performance_Report — baseline')
+    expect(html).toContain('Pro360_Performance_Report — 20 users')
+    // One cover and one glossary, regardless of how many runs are covered.
+    expect(html.match(/class="page cover"/g)).toHaveLength(1)
+    expect(html.match(/Graph Information/g)).toHaveLength(1)
+  })
+
+  it('leaves a single run untouched by the run picker', () => {
+    expect(buildReportHtml([{ stats: makeStats() }], META)).toBe(
+      buildReportHtml(makeStats(), META)
     )
   })
 })

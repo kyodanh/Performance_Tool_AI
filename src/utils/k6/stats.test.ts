@@ -226,6 +226,10 @@ describe('RunStatsCollector', () => {
         failed: 0,
         avg: 30,
         max: 40,
+        min: 20,
+        total: 60,
+        std: 10,
+        serverTime: 0,
       },
       {
         method: 'GET',
@@ -236,6 +240,10 @@ describe('RunStatsCollector', () => {
         failed: 1,
         avg: 0,
         max: 0,
+        min: 0,
+        total: 0,
+        std: 0,
+        serverTime: 0,
       },
     ])
   })
@@ -282,8 +290,8 @@ describe('RunStatsCollector', () => {
         std: 358.0092915,
         last: 142,
         series: [
-          { time: 100, value: 858.018583 },
-          { time: 101, value: 142 },
+          { time: 100, value: 858.018583, count: 1 },
+          { time: 101, value: 142, count: 1 },
         ],
       },
       {
@@ -295,7 +303,7 @@ describe('RunStatsCollector', () => {
         min: 275.958875,
         std: 0,
         last: 275.958875,
-        series: [{ time: 101, value: 275.958875 }],
+        series: [{ time: 101, value: 275.958875, count: 1 }],
       },
     ])
   })
@@ -307,11 +315,11 @@ describe('RunStatsCollector', () => {
     collector.push('group_duration,100,300.000000,,,,,::t,,,,default,,,,,,,')
 
     expect(collector.snapshot().groups[0]?.series).toEqual([
-      { time: 100, value: 200 },
+      { time: 100, value: 200, count: 2 },
     ])
   })
 
-  it('attributes failed requests and checks to their group', () => {
+  it('counts a failed request and its failed check as one group failure', () => {
     const collector = new RunStatsCollector()
 
     collector.push(
@@ -332,14 +340,48 @@ describe('RunStatsCollector', () => {
     expect(group).toEqual({
       name: '1_Trans_TrangChu',
       count: 1,
-      failed: 2,
+      failed: 1,
       avg: 120,
       max: 120,
       min: 120,
       std: 0,
       last: 120,
-      series: [{ time: 100, value: 120 }],
+      series: [{ time: 100, value: 120, count: 1 }],
     })
+  })
+
+  it('takes the larger of failed requests and failed checks per group', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'group_duration,100,120.000000,,,,,::1_Trans_TrangChu,,,,default,,,,,,,'
+    )
+    collector.push(
+      'http_req_failed,100,1.000000,,,,false,::1_Trans_TrangChu,GET,https://a/,,default,,500,,,https://a/,,'
+    )
+    collector.push(
+      'checks,100,0.000000,status is 200,,,,::1_Trans_TrangChu,,,,default,,,,,,,'
+    )
+    collector.push(
+      'checks,100,0.000000,body contains x,,,,::1_Trans_TrangChu,,,,default,,,,,,,'
+    )
+
+    expect(collector.snapshot().groups[0]?.failed).toBe(2)
+  })
+
+  it('reports peak concurrency, ignoring the preallocated vus_max pool', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push('vus_max,100,100,,,,,,,,,,,,,,,,')
+    collector.push('vus,100,7,,,,,,,,,,,,,,,,')
+    collector.push('vus,101,12,,,,,,,,,,,,,,,,')
+    collector.push('vus,102,1,,,,,,,,,,,,,,,,')
+
+    const { vus, vusMax } = collector.snapshot()
+
+    // Shutdown tail for `vus`, peak of the run for `vusMax`.
+    expect(vus).toBe(1)
+    expect(vusMax).toBe(12)
   })
 
   it('reports elapsed seconds between the first and newest sample', () => {

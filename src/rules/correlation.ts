@@ -170,15 +170,27 @@ function applyRule({
 }
 
 // ponytail: extraction runs against live responses, which may differ from the
-// recording (empty body, non-JSON, missing header). Without this the extractor
-// throws and aborts the whole group/iteration, e.g. `resp.json()` on an empty
-// body raises "cannot parse json ... unexpected end of JSON input". Swallow it
-// so the correlation variable stays unset and the failure is visible as a log.
-const wrapExtractionSnippet = (snippet: string, variableName: string) => `
+// recording (empty body, non-JSON, missing header). Without the try/catch the
+// extractor throws with an opaque message, e.g. `resp.json()` on an empty body
+// raises "cannot parse json ... unexpected end of JSON input".
+//
+// The iteration is then stopped on purpose: an unset variable interpolates as
+// the string "undefined" into every request that references it, so one failed
+// extraction turns into a run of 401s that look like real API failures and
+// skew the response-time metrics. Failing here points at the actual cause.
+const wrapExtractionSnippet = (snippet: string, variableName: string) => {
+  // The name is sanitized to [A-Za-z0-9_] so it is safe to quote inline.
+  const target = `correlation_vars['${variableName}']`
+
+  return `
     try {${snippet}
     } catch (error) {
       console.warn(${JSON.stringify(`Failed to extract correlation variable '${variableName}': `)} + error)
+    }
+    if (${target} === undefined || ${target} === null) {
+      throw new Error(${JSON.stringify(`Correlation variable '${variableName}' was not extracted, stopping the iteration to avoid sending "undefined" downstream`)})
     }`
+}
 
 const noCorrelationResult = {
   extractedValue: undefined,
@@ -611,6 +623,14 @@ correlation_vars['correlation_${generatedUniqueId}'] = resp.json()${json_path}`
 if (import.meta.vitest) {
   const { it, expect } = import.meta.vitest
 
+  // Whitespace-stripped extraction snippet for a given variable + expression,
+  // so the assertions below don't repeat the guard emitted after every extractor.
+  const expectedExtraction = (name: string, expression: string) =>
+    wrapExtractionSnippet(
+      `correlation_vars['${name}'] = ${expression}`,
+      name
+    ).replace(/\s/g, '')
+
   const generateResponse = (content: string): Response => {
     return {
       statusCode: 200,
@@ -924,7 +944,7 @@ correlation_vars['correlation_1'] = resp.json().user_id`
     )
 
     expect(requestSnippets[0]?.after[0]?.replace(/\s/g, '')).toBe(
-      `try{correlation_vars['correlation_0']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'correlation_0':"+error)}`
+      expectedExtraction('correlation_0', 'resp.json().user_id')
     )
     expect(ruleInstance.state.extractedValue).toBe('444')
     expect(requestSnippets[1]?.after).toEqual([])
@@ -962,7 +982,7 @@ correlation_vars['correlation_1'] = resp.json().user_id`
     })
 
     expect(snippet.after[0]?.replace(/\s/g, '')).toBe(
-      `try{correlation_vars['user_id']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'user_id':"+error)}`
+      expectedExtraction('user_id', 'resp.json().user_id')
     )
   })
 
@@ -1009,10 +1029,10 @@ correlation_vars['correlation_1'] = resp.json().user_id`
     )
 
     expect(requestSnippets[0]?.after[0]?.replace(/\s/g, '')).toBe(
-      `try{correlation_vars['correlation_0']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'correlation_0':"+error)}`
+      expectedExtraction('correlation_0', 'resp.json().user_id')
     )
     expect(requestSnippets[1]?.after[0]?.replace(/\s/g, '')).toBe(
-      `try{correlation_vars['correlation_0']=resp.json().user_id}catch(error){console.warn("Failedtoextractcorrelationvariable'correlation_0':"+error)}`
+      expectedExtraction('correlation_0', 'resp.json().user_id')
     )
     expect(ruleInstance.state.extractedValue).toBe('777')
   })

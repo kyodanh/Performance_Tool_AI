@@ -28,13 +28,15 @@ export function createVerificationRuleInstance(
         data: { response, id },
       } = requestSnippetSchema
 
-      if (!response) {
+      const value = getValueFromRule(rule, response)
+
+      // Null when the rule needs a recorded response the request doesn't have.
+      if (value === null) {
         return requestSnippetSchema
       }
 
       state.matchedRequestIds = [...state.matchedRequestIds, id]
 
-      const value = getValueFromRule(rule, response)
       const checkDescription = getCheckDescription(rule, value)
       const checkExpression = getCheckExpression(rule, value)
 

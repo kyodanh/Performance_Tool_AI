@@ -1,7 +1,17 @@
 import { describeCode, describeError } from '@/components/Validator/format'
 import { isDistributedRun, LOCAL_SOURCE, RunStats } from '@/utils/k6/stats'
 
-import { bytes, count, decimal, escapeHtml, seconds } from './format'
+import { SERIES_COLORS, stackedBar } from './charts'
+import {
+  bytes,
+  count,
+  decimal,
+  escapeHtml,
+  percentile,
+  seconds,
+  summarize,
+  timestamp,
+} from './format'
 
 /** The data tables of the performance report, each returning an HTML string. */
 
@@ -39,6 +49,11 @@ function table(headers: string[], rows: string[][]) {
   return `<table class="data"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
 }
 
+/** The `Filter` line an analysis report prints above a filtered table. */
+function filterLine(text: string) {
+  return `<p class="filter"><span>Filter</span>${escapeHtml(text)}</p>`
+}
+
 /** Groups are k6's transactions, so pass/fail is derived the way the UI does. */
 export function transactionCounts(stats: RunStats) {
   const passed = stats.groups.reduce(
@@ -61,6 +76,100 @@ export function weightedResponseTime(stats: RunStats) {
     stats.groups.reduce((sum, group) => sum + group.avg * group.count, 0) /
     samples
   )
+}
+
+/**
+ * Transactions that completed during each second of the run, summed across
+ * groups — the series behind the "Total Transactions per Second" summary.
+ */
+export function transactionsPerSecond(stats: RunStats) {
+  const perSecond = new Map<number, number>()
+
+  for (const group of stats.groups) {
+    for (const sample of group.series) {
+      perSecond.set(
+        sample.time,
+        (perSecond.get(sample.time) ?? 0) + sample.count
+      )
+    }
+  }
+
+  return [...perSecond.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, value]) => value)
+}
+
+export function executiveSummarySection(stats: RunStats) {
+  const { passed, failed, total } = transactionCounts(stats)
+  const errors = stats.errors.reduce((sum, error) => sum + error.count, 0)
+  const rate = total === 0 ? 0 : (passed / total) * 100
+
+  const conclusions = [
+    `The run replayed ${count(stats.iterations)} iteration(s) with up to ${count(stats.vusMax)} concurrent VUs, issuing ${count(stats.requests)} requests over ${count(stats.groups.length)} transaction(s).`,
+    `${count(passed)} transaction execution(s) passed and ${count(failed)} failed, a success rate of ${decimal(rate)}%.`,
+    `The weighted average transaction response time was ${seconds(weightedResponseTime(stats))} s, with ${count(stats.failedRequests)} failed request(s) and ${count(errors)} error(s) recorded.`,
+  ]
+
+  return `<h2>Executive Summary</h2><h3>Conclusions</h3>${conclusions
+    .map((line) => `<p class="description">${escapeHtml(line)}</p>`)
+    .join('')}`
+}
+
+interface RunNames {
+  /** The run the report covers — the analysis report's `Run Name`. */
+  runName: string
+  /** The script that was replayed. */
+  scriptName: string
+}
+
+/**
+ * The scenario the run executed, in the shape a controller reports it. Think
+ * time and pacing are omitted: k6 keeps no run-level record of either, and a
+ * placeholder would read as a measurement.
+ */
+export function businessProcessSection(stats: RunStats, names: RunNames) {
+  const elapsed = Math.max(1, stats.elapsed)
+  const { passed } = transactionCounts(stats)
+  const start = stats.buckets[0]?.time ?? 0
+
+  const rows = [
+    [
+      names.runName,
+      names.scriptName,
+      names.scriptName,
+      count(stats.vusMax),
+      '100',
+      decimal((passed / elapsed) * 3600),
+      timestamp(start),
+    ],
+    ['Total:', '', '', count(stats.vusMax), '100%', '', ''],
+  ]
+
+  return `<h2>Business Process</h2>${table(
+    [
+      'Run Name',
+      'Group Name',
+      'Script Name',
+      'Concurrent VUs',
+      '% of Total VUs',
+      'Transactions per Hour',
+      'Start Time',
+    ],
+    rows
+  )}`
+}
+
+/** The transactions the script declares, numbered the way the report lists them. */
+export function scriptTransactionsSection(stats: RunStats, names: RunNames) {
+  const rows = stats.groups.map((group, index) => [
+    String(index + 1),
+    group.name,
+  ])
+
+  return `<h3>Script: ${escapeHtml(names.scriptName)}</h3>${table(
+    ['#', 'Transaction'],
+    rows
+  )}`
 }
 
 export function workloadSection(stats: RunStats) {
@@ -89,12 +198,88 @@ export function workloadSection(stats: RunStats) {
   ])
 }
 
-export function overviewSection(stats: RunStats) {
+export interface MeasurementRow {
+  /** Index into the series palette, so the swatch matches the chart line. */
+  color: number
+  /** The graph the series belongs to. Omitted on a single-graph page. */
+  graph?: string
+  measurement: string
+  values: number[]
+  digits?: number
+  /** Divides every value before printing, e.g. ms → s. */
+  scale?: number
+}
+
+/**
+ * The `Color / Scale / Measurement / Minimum / Average / …` block every graph
+ * in an analysis report carries.
+ */
+export function measurementTable(rows: MeasurementRow[]) {
+  const withGraph = rows.some((row) => row.graph !== undefined)
+
+  const headers = [
+    'Color',
+    ...(withGraph ? ['Graph'] : []),
+    'Scale',
+    'Measurement',
+    'Minimum',
+    'Average',
+    'Maximum',
+    'Median',
+    'Std. Deviation',
+  ]
+
+  const head = headers.map((header) => `<th>${header}</th>`).join('')
+  const body = rows
+    .map((row) => {
+      const stats = summarize(
+        row.values.map((value) => value / (row.scale ?? 1))
+      )
+      const format = (value: number) => decimal(value, row.digits ?? 3)
+      const swatch = `<span class="swatch" style="background:${SERIES_COLORS[row.color % SERIES_COLORS.length]}"></span>`
+
+      return `<tr>
+        <td>${swatch}</td>
+        ${withGraph ? `<td>${escapeHtml(row.graph ?? '')}</td>` : ''}
+        <td>1</td>
+        <td>${escapeHtml(row.measurement)}</td>
+        <td>${format(stats.min)}</td>
+        <td>${format(stats.avg)}</td>
+        <td>${format(stats.max)}</td>
+        <td>${format(stats.median)}</td>
+        <td>${format(stats.std)}</td>
+      </tr>`
+    })
+    .join('')
+
+  return `<table class="data"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
+}
+
+/** The two-series summary the report prints under Workload Characteristics. */
+export function workloadSummaryTable(stats: RunStats) {
+  return measurementTable([
+    {
+      color: 0,
+      graph: 'Running VUs',
+      measurement: 'Run',
+      values: stats.buckets.map((bucket) => bucket.vus),
+    },
+    {
+      color: 1,
+      graph: 'Total Transactions per Second',
+      measurement: 'All',
+      values: transactionsPerSecond(stats),
+    },
+  ])
+}
+
+export function overviewSection(stats: RunStats, names: RunNames) {
   const elapsed = Math.max(1, stats.elapsed)
   const { passed, failed, total } = transactionCounts(stats)
   const errors = stats.errors.reduce((sum, error) => sum + error.count, 0)
 
   return definitionTable('Performance Overview', [
+    { label: 'Run Name', value: names.runName },
     {
       label: 'Weighted Average of Transaction Response Time',
       value: `${seconds(weightedResponseTime(stats))} s`,
@@ -144,59 +329,126 @@ export function httpResponsesSection(stats: RunStats) {
   )}`
 }
 
-export function transactionSummarySection(stats: RunStats) {
+export function transactionSummarySection(stats: RunStats, names: RunNames) {
   const rows = [...stats.groups]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((group) => [
+      names.runName,
       group.name,
       seconds(group.min),
       seconds(group.avg),
       seconds(group.max),
       seconds(group.std),
+      // ponytail: p90 of the per-second averages, the only distribution k6's
+      // CSV keeps. Switch to the raw samples if a true p90 is ever needed.
+      seconds(
+        percentile(
+          group.series.map((sample) => sample.value),
+          0.9
+        )
+      ),
       count(Math.max(0, group.count - group.failed)),
       count(group.failed),
+      // k6 never stops a transaction mid-flight, so the column is always zero.
+      '0',
     ])
 
-  return `<h2>Transaction Summary</h2>${table(
+  return `<h2>Transaction Summary</h2>${filterLine(
+    'Transaction End Status = (Pass, Fail)'
+  )}${table(
     [
+      'Run Name',
       'Transaction Name',
       'Minimum',
       'Average',
       'Maximum',
       'Std. Deviation',
+      '90%',
       'Pass Count',
       'Fail Count',
+      'Stop Count',
     ],
     rows
   )}`
 }
 
-export function worstRequestsSection(stats: RunStats, limit = 15) {
+/** Columns shared by the URL rankings, all in seconds. */
+function urlRow(request: RunStats['requestStats'][number]) {
+  return [
+    request.name,
+    request.group === '' ? '—' : request.group,
+    count(request.count),
+    seconds(request.total),
+    seconds(request.min),
+    seconds(request.max),
+    seconds(request.avg),
+    seconds(request.std),
+  ]
+}
+
+const URL_HEADERS = [
+  'URL name',
+  'Parent transaction name',
+  'Count',
+  'Total',
+  'Min',
+  'Max',
+  'Avg',
+  'StdDev',
+]
+
+export function worstUrlsSection(stats: RunStats, limit = 15) {
   const rows = [...stats.requestStats]
     .sort((a, b) => b.avg - a.avg)
     .slice(0, limit)
+    .map(urlRow)
+
+  return `<h2>Worst URLs (by average response time)</h2>${table(
+    URL_HEADERS,
+    rows
+  )}${layersBreakdownChart(stats)}`
+}
+
+/** The stacked bar under the URL table: where the average response time goes. */
+function layersBreakdownChart(stats: RunStats) {
+  return stackedBar(
+    [
+      {
+        label: 'DNS Resolution / Blocked',
+        value: stats.timings.blocked / 1000,
+      },
+      { label: 'Connection', value: stats.timings.connecting / 1000 },
+      { label: 'SSL Handshaking', value: stats.timings.tlsHandshaking / 1000 },
+      { label: 'Sending', value: stats.timings.sending / 1000 },
+      { label: 'First Buffer', value: stats.timings.waiting / 1000 },
+      { label: 'Receive', value: stats.timings.receiving / 1000 },
+    ],
+    'seconds'
+  )
+}
+
+export function resourceConsumingUrlsSection(stats: RunStats, limit = 15) {
+  const rows = [...stats.requestStats]
+    .sort((a, b) => b.serverTime - a.serverTime)
+    .slice(0, limit)
     .map((request) => [
-      `${request.method} ${request.name}`,
+      request.name,
       request.group === '' ? '—' : request.group,
-      request.status,
       count(request.count),
-      seconds(request.avg),
-      seconds(request.max),
-      count(request.failed),
+      seconds(request.serverTime),
+      seconds(request.count === 0 ? 0 : request.serverTime / request.count),
     ])
 
-  return `<h2>Worst Requests (by average response time)</h2>${table(
+  return `<h2>Most Resource Consuming URLs</h2>${table(
     [
-      'Request',
-      'Parent transaction',
-      'Status',
+      'URL name',
+      'Parent transaction name',
       'Count',
-      'Average',
-      'Maximum',
-      'Failed',
+      'Total server time',
+      'Average server time',
     ],
     rows
-  )}`
+  )}<p class="description">Ranks URLs by the time the server itself spent before sending the first byte, so a slow endpoint is separated from a slow connection.</p>`
 }
 
 export function timingsSection(stats: RunStats) {

@@ -201,6 +201,8 @@ export const runScript = async ({
 interface RunLoadTestOptions extends LoadProfileOverrides {
   scriptPath: string
   usageReport: boolean
+  /** Name for the saved result. Defaults to the script's own file name. */
+  name?: string
   browserWindow: BrowserWindow
   verbose?: boolean
   httpDebug?: boolean
@@ -221,6 +223,7 @@ export const runLoadTest = async ({
   scriptPath,
   usageReport,
   browserWindow,
+  name,
   vus,
   iterations,
   stages,
@@ -320,7 +323,7 @@ export const runLoadTest = async ({
 
     // A run that failed before its first sample has nothing to analyse.
     if (stats !== null && stats.buckets.length > 0) {
-      void saveRunResult(path.name(scriptPath), stats)
+      void saveRunResult(name ?? path.name(scriptPath), stats)
     }
   })
 

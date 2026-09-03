@@ -9,23 +9,15 @@ import {
   ScrollArea,
   Text,
 } from '@radix-ui/themes'
-import {
-  ChartColumnIcon,
-  InfoIcon,
-  PlayIcon,
-  SquareIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { InfoIcon, PlayIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { LoadGenerators } from '@/components/LoadGenerators'
 import { LoadProfile } from '@/components/TestOptions/LoadProfile'
 import TextSpinner from '@/components/TextSpinner/TextSpinner'
-import { useRunChecks } from '@/hooks/useRunChecks'
-import { useRunLogs } from '@/hooks/useRunLogs'
-import { useRunStats } from '@/hooks/useRunStats'
-import { routeMap } from '@/routeMap'
+import { useLoadRunStore } from '@/store/loadRun'
+import { MachineSample } from '@/types/systemMetrics'
 import { LoadProfileExecutorOptions } from '@/types/testOptions'
 import {
   describeProfile,
@@ -41,6 +33,7 @@ import * as path from '@/utils/path'
 import { ExecutionDetails } from './ExecutionDetails'
 import { ExportReportButton } from './ExportReportButton'
 import { formatDuration } from './format'
+import { SaveRunButton } from './SaveRunButton'
 import { ScheduleBuilder } from './ScheduleBuilder'
 
 interface LoadTestRunnerProps {
@@ -48,6 +41,11 @@ interface LoadTestRunnerProps {
   options: K6TestOptions
   /** Source to write before running, for scripts generated on the fly. */
   content?: string
+  /**
+   * What to call the run in the saved result and the report. `scriptPath` is a
+   * random temp file for a generator, so it makes a useless label.
+   */
+  name?: string
   /** Profile to seed the form with, when the caller knows it (a generator). */
   profile?: LoadProfileExecutorOptions
 }
@@ -60,21 +58,71 @@ export function LoadTestRunner({
   scriptPath,
   options,
   content,
+  name,
   profile: initialProfile,
 }: LoadTestRunnerProps) {
-  const [isRunning, setIsRunning] = useState(false)
+  // The run itself lives in the main process, so its state lives in a store
+  // that outlives this panel — see `@/store/loadRun`.
+  const isRunning = useLoadRunStore((state) => state.isRunning)
+  const stats = useLoadRunStore((state) => state.stats)
+  const logs = useLoadRunStore((state) => state.logs)
+  const checks = useLoadRunStore((state) => state.checks)
+  const errors = useLoadRunStore((state) => state.errors)
+  const startRun = useLoadRunStore((state) => state.startRun)
+  const stopRun = useLoadRunStore((state) => state.stopRun)
+  const failRun = useLoadRunStore((state) => state.failRun)
+  const resources = useLoadRunStore((state) => state.resources)
+  const sampleResources = useLoadRunStore((state) => state.sampleResources)
+
+  // Sampled here rather than inside the metrics panel so switching tabs does
+  // not interrupt the run's CPU peak. Stops with the run: the last sample and
+  // the peaks stay on screen once it is over.
+  const { data: local } = useQuery({
+    queryKey: ['system-metrics'],
+    enabled: isRunning,
+    refetchInterval: 2000,
+    queryFn: () => window.studio.app.getSystemMetrics(),
+  })
+
+  // Remote machines report theirs on their heartbeat, so this only reads the
+  // pool — the same query the generators table above already keeps warm.
+  const { data: generators = [] } = useQuery({
+    queryKey: ['load-generators'],
+    queryFn: () => window.studio.loadGenerator.getLoadGenerators(),
+  })
+
+  useEffect(() => {
+    if (!isRunning) {
+      return
+    }
+
+    const samples: MachineSample[] = [
+      ...(local === undefined
+        ? []
+        : [{ id: 'local', name: 'This machine', ...local }]),
+      ...generators.flatMap((generator) =>
+        generator.resources === undefined
+          ? []
+          : [
+              {
+                id: generator.id,
+                name: generator.hostname,
+                ...generator.resources,
+              },
+            ]
+      ),
+    ]
+
+    if (samples.length > 0) {
+      sampleResources(samples)
+    }
+  }, [generators, isRunning, local, sampleResources])
+
   // Kept here rather than in the generator list because the run needs it, and
   // the list only needs to render it.
   const [useLocalGenerator, setUseLocalGenerator] = useState(true)
   const [verbose, setVerbose] = useState(false)
   const [httpDebug, setHttpDebug] = useState(false)
-  const [errors, setErrors] = useState<string[]>([])
-  const navigate = useNavigate()
-
-  // Stopping sends SIGTERM, and k6 reports that as an error log entry
-  // ("aborted because k6 received a 'terminated' signal") on every generator.
-  // A deliberate stop is not a failure, so drop errors once one is requested.
-  const stoppingRef = useRef(false)
 
   // A script that declares `scenarios` was scheduled deliberately — possibly
   // several scenarios at once, which a single profile would collapse into one —
@@ -104,53 +152,27 @@ export function LoadTestRunner({
   // show progress against.
   const planned = profileSeconds(profile)
 
-  const { stats, resetStats } = useRunStats()
-  const { logs, resetLogs } = useRunLogs()
-  const { checks, resetChecks } = useRunChecks()
-
-  // A run can fail before it produces a single metric — archiving, a syntax
-  // error, an invalid option — and k6 reports those as error log entries.
-  useEffect(() => {
-    return window.studio.script.onScriptLog((entry) => {
-      if (stoppingRef.current || entry.level !== 'error') {
-        return
-      }
-
-      setErrors((previous) => [...previous, entry.error ?? entry.msg])
-    })
-  }, [])
-
-  useEffect(() => {
-    return window.studio.script.onScriptStopped(() => {
-      setIsRunning(false)
-    })
-  }, [])
+  const testName = name ?? (scriptPath === null ? 'k6' : path.name(scriptPath))
 
   const handleStart = useCallback(async () => {
     if (scriptPath === null) {
       return
     }
 
-    stoppingRef.current = false
-
-    resetStats()
-    resetLogs()
-    resetChecks()
-    setErrors([])
-    setIsRunning(true)
+    startRun()
 
     await window.studio.script
       .runLoadTest({
         path: scriptPath,
         content,
+        name: testName,
         verbose,
         httpDebug,
         useLocalGenerator,
         ...(override ? toProfileOverrides(profile) : {}),
       })
       .catch((error: Error) => {
-        setIsRunning(false)
-        setErrors((previous) => [...previous, error.message])
+        failRun(error.message)
       })
   }, [
     content,
@@ -158,19 +180,17 @@ export function LoadTestRunner({
     profile,
     verbose,
     httpDebug,
-    resetChecks,
-    resetLogs,
-    resetStats,
+    failRun,
+    startRun,
     scriptPath,
+    testName,
     useLocalGenerator,
   ])
 
   const handleStop = useCallback(() => {
-    stoppingRef.current = true
-
     window.studio.script.stopScript()
-    setIsRunning(false)
-  }, [])
+    stopRun()
+  }, [stopRun])
 
   return (
     <Flex
@@ -209,20 +229,12 @@ export function LoadTestRunner({
             <PlayIcon /> Start
           </Button>
         )}
-        {/* The run is saved to the Results folder when it ends, so Analysis
-            opens it — including after the app has moved on. */}
         {!isRunning && stats !== null && stats.buckets.length > 0 && (
-          <Button
-            variant="soft"
-            radius="full"
-            onClick={() => navigate(routeMap.analysis)}
-          >
-            <ChartColumnIcon /> Analyse run
-          </Button>
+          <SaveRunButton testName={testName} stats={stats} />
         )}
         <ExportReportButton
           stats={stats}
-          testName={scriptPath === null ? 'k6' : path.name(scriptPath)}
+          testName={testName}
           isRunning={isRunning}
         />
         <Text as="label" size="2" color="gray">
@@ -400,6 +412,7 @@ export function LoadTestRunner({
             logs={logs}
             checks={checks}
             stats={stats}
+            resources={resources}
             defaultTab="metrics"
           />
         </Flex>

@@ -240,6 +240,7 @@ export function GeneratorControls({
           />
           <ValidatorDialog
             script={script.preview}
+            name={file.fileName}
             open={isValidatorDialogOpen}
             onOpenChange={setIsValidatorDialogOpen}
           />

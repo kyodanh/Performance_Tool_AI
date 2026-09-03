@@ -17,10 +17,16 @@ import { getBrowserPath } from '@/utils/browser'
 import { reportNewIssue } from '@/utils/bugReport'
 import { browserWindowFromEvent, sendToast } from '@/utils/electron'
 import { exists, readdir, rename } from '@/utils/fs'
+import { RunStats } from '@/utils/k6/stats'
 import * as path from '@/utils/path'
 
 import { exportReport } from './report'
-import { listRunResults, readRunResult } from './results'
+import {
+  deleteRunResults,
+  listRunResults,
+  readRunResult,
+  saveRunResult,
+} from './results'
 import { ExportReportPayload, MenuState, UIHandler } from './types'
 
 export function initialize() {
@@ -56,6 +62,23 @@ export function initialize() {
     console.info(`${UIHandler.ListResults} event received`)
 
     return listRunResults()
+  })
+
+  ipcMain.handle(
+    UIHandler.SaveResult,
+    async (_, testName: string, stats: RunStats, label?: string) => {
+      console.info(`${UIHandler.SaveResult} event received`)
+
+      const filePath = await saveRunResult(testName, stats, label)
+
+      return filePath === null ? null : path.basename(filePath)
+    }
+  )
+
+  ipcMain.handle(UIHandler.DeleteResults, async (_, ids: string[]) => {
+    console.info(`${UIHandler.DeleteResults} event received`)
+
+    return deleteRunResults(ids)
   })
 
   ipcMain.handle(UIHandler.ReadResult, async (_, id: string) => {

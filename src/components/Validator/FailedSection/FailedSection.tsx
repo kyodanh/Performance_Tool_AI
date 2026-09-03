@@ -21,16 +21,27 @@ export function hasFailures(checks: Check[], stats: RunStats | null): boolean {
   )
 }
 
+/** The rows the section renders — what the Failed tab counts. */
+function failures(stats: RunStats | null) {
+  return {
+    // The metric stream carries the request and group each check ran in; the
+    // stdout summary does not, so prefer it when both are available.
+    failedCheckStats: (stats?.checks ?? []).filter((check) => check.fails > 0),
+    errors: stats?.errors ?? [],
+    failedRequests: (stats?.requestStats ?? []).filter(
+      (request) => request.failed > 0
+    ),
+  }
+}
+
+export function failureCount(stats: RunStats | null): number {
+  const { failedCheckStats, errors, failedRequests } = failures(stats)
+
+  return failedCheckStats.length + errors.length + failedRequests.length
+}
+
 export function FailedSection({ checks, stats }: FailedSectionProps) {
-  // The metric stream carries the request and group each check ran in; the
-  // stdout summary does not, so prefer it when both are available.
-  const failedCheckStats = (stats?.checks ?? []).filter(
-    (check) => check.fails > 0
-  )
-  const errors = stats?.errors ?? []
-  const failedRequests = (stats?.requestStats ?? []).filter(
-    (request) => request.failed > 0
-  )
+  const { failedCheckStats, errors, failedRequests } = failures(stats)
 
   if (!hasFailures(checks, stats)) {
     return <NoFailuresMessage />

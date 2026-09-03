@@ -48,6 +48,7 @@ const router = createHashRouter(
       <Route path={routeMap.controller} element={<Controller />} />
       <Route path={routeMap.controllerFile} element={<Controller />} />
       <Route path={routeMap.analysis} element={<Analysis />} />
+      <Route path={routeMap.analysisProject} element={<Analysis />} />
       <Route path={routeMap.file} element={<FileViewer />} />
       <Route path="*" element={<NoRouteFound />} />
     </Route>

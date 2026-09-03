@@ -93,6 +93,7 @@ export function Controller() {
             key={file.path}
             scriptPath={test?.path ?? null}
             content={test?.content}
+            name={file.displayName}
             options={test?.options ?? {}}
             profile={test?.profile}
           />

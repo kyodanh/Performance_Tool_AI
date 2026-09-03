@@ -24,6 +24,7 @@ interface ThinkTimeFormProps {
 export function ThinkTimeForm({ data, onClear }: ThinkTimeFormProps) {
   const key = requestKey(data)
   const override = useGeneratorStore((state) => state.thinkTimeOverrides[key])
+  const sleepType = useGeneratorStore((state) => state.sleepType)
   const setThinkTimeOverride = useGeneratorStore(
     (state) => state.setThinkTimeOverride
   )
@@ -53,6 +54,14 @@ export function ThinkTimeForm({ data, onClear }: ThinkTimeFormProps) {
       <Text as="p" size="1" color="gray" mb="2">
         Wait after this request, instead of the think time in Test options.
       </Text>
+
+      {sleepType !== 'requests' && (
+        <Text as="p" size="1" color="orange" mb="2">
+          Not applied: Test options wait after each{' '}
+          {sleepType === 'groups' ? 'group' : 'iteration'}. A wait here would
+          run inside the group and count into its measured duration.
+        </Text>
+      )}
 
       <RadioGroup.Root
         value={draft.type}

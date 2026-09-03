@@ -375,12 +375,38 @@ describe('Code generation', () => {
 
       const result = generateRequestSnippetsFromSchemas(schemas, {
         ...thinkTime,
+        sleepType: 'requests',
         overrides: { 'GET /api/v1/users': { type: 'fixed', value: 3 } },
       })
 
       expect(result[0]?.snippet).toContain('sleep(3)')
-      expect(result[1]?.snippet).not.toContain('sleep')
+      expect(result[1]?.snippet).toContain('sleep(1)')
     })
+
+    // A sleep between requests is emitted inside the group, so honouring the
+    // override here would add its seconds to `group_duration` — the
+    // transaction would report the wait as response time.
+    it.each(['groups', 'iterations'] as const)(
+      'ignores a think time override when the sleep is placed after each %s',
+      (sleepType) => {
+        const schema = {
+          data: createProxyData({
+            request: createRequest({ method: 'GET', url: '/api/v1/users' }),
+          }),
+          before: [],
+          after: [],
+          checks: [],
+        }
+
+        const result = generateRequestSnippetsFromSchemas([schema], {
+          ...thinkTime,
+          sleepType,
+          overrides: { 'GET /api/v1/users': { type: 'fixed', value: 3 } },
+        })
+
+        expect(result[0]?.snippet).not.toContain('sleep')
+      }
+    )
 
     it('meets before the marked request only', () => {
       const schemas = ['/api/v1/users', '/api/v1/orders'].map((url) => ({
@@ -492,11 +518,17 @@ describe('Code generation', () => {
           } catch (error) {
             console.warn("Failed to extract correlation variable 'correlation_0': " + error)
           }
+          if (correlation_vars['correlation_0'] === undefined || correlation_vars['correlation_0'] === null) {
+            throw new Error("Correlation variable 'correlation_0' was not extracted, stopping the iteration to avoid sending \\"undefined\\" downstream")
+          }
 
           try {
             correlation_vars['correlation_1'] = resp.json().is_admin
           } catch (error) {
             console.warn("Failed to extract correlation variable 'correlation_1': " + error)
+          }
+          if (correlation_vars['correlation_1'] === undefined || correlation_vars['correlation_1'] === null) {
+            throw new Error("Correlation variable 'correlation_1' was not extracted, stopping the iteration to avoid sending \\"undefined\\" downstream")
           }
 
           params = {
@@ -511,6 +543,9 @@ describe('Code generation', () => {
             correlation_vars['correlation_2'] = resp.json().user_id
           } catch (error) {
             console.warn("Failed to extract correlation variable 'correlation_2': " + error)
+          }
+          if (correlation_vars['correlation_2'] === undefined || correlation_vars['correlation_2'] === null) {
+            throw new Error("Correlation variable 'correlation_2' was not extracted, stopping the iteration to avoid sending \\"undefined\\" downstream")
           }
         })
 
@@ -838,12 +873,40 @@ describe('Code generation', () => {
       )
     })
 
-    it('generate request params with cookie header', async () => {
+    // An imported or hand-written request has a Cookie header and no parsed
+    // cookies. Nothing put those in k6's jar, so dropping the header meant the
+    // cookie never reached the server at all.
+    it('pins cookies from a Cookie header when none were recorded', async () => {
+      const headers: Header[] = [
+        ['content-type', 'application/json'],
+        ['Cookie', 'redirect_url=/dashboard; hello=world'],
+      ]
+      const request = generateRequest(headers, [])
+
+      const expectedResult = await prettify(`
+        params = {
+          timeout: HTTP_TIMEOUT,
+          headers: {
+            'content-type': \`application/json\`
+          },
+          cookies: {
+            'redirect_url': {value: \`/dashboard\`, replace: true},
+            'hello': {value: \`world\`, replace: true}
+          }
+        }
+      `)
+      expect(await prettify(generateRequestParams(request))).toBe(
+        expectedResult
+      )
+    })
+
+    it('leaves recorded uncorrelated cookies to the k6 jar', async () => {
       const headers: Header[] = [
         ['content-type', 'application/json'],
         ['Cookie', 'hello=world'],
       ]
-      const request = generateRequest(headers)
+      const cookies: Cookie[] = [['hello', 'world']]
+      const request = generateRequest(headers, cookies)
 
       const expectedResult = await prettify(`
         params = {

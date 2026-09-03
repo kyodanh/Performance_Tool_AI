@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
 
 import { UsageEvent } from '@/services/usageTracking/types'
+import { SystemMetrics } from '@/types/systemMetrics'
 
 import { createListener } from '../utils'
 
@@ -22,6 +23,10 @@ export function changeRoute(route: string) {
 
 export function trackEvent(event: UsageEvent) {
   return ipcRenderer.send(AppHandler.TrackEvent, event)
+}
+
+export function getSystemMetrics() {
+  return ipcRenderer.invoke(AppHandler.SystemMetrics) as Promise<SystemMetrics>
 }
 
 let pendingDeepLink: string | null = null

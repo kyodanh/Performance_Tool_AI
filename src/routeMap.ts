@@ -5,6 +5,7 @@ const routes = {
   recorder: '/recorder',
   controller: '/controller',
   analysis: '/analysis',
+  analysisProject: '/analysis/:project',
   controllerFile: '/controller/:filePath',
   file: '/file/:filePath',
 }
@@ -27,6 +28,7 @@ export const routeMap = {
   recorder: getRoutePath('recorder'),
   controller: getRoutePath('controller'),
   analysis: getRoutePath('analysis'),
+  analysisProject: getRoutePath('analysisProject'),
   controllerFile: getRoutePath('controllerFile'),
   file: getRoutePath('file'),
 }
@@ -35,6 +37,13 @@ export function getViewPath(filePath: string) {
   const encodedFilePath = encodeURIComponent(filePath)
 
   return getRoutePath('file', { filePath: encodedFilePath })
+}
+
+/** Where clicking a saved-run project in the sidebar goes. */
+export function getAnalysisPath(project: string) {
+  return getRoutePath('analysisProject', {
+    project: encodeURIComponent(project),
+  })
 }
 
 export function getControllerPath(filePath: string) {

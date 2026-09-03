@@ -4,6 +4,7 @@ import { trackEvent } from '@/services/usageTracking'
 import { UsageEvent } from '@/services/usageTracking/types'
 import { browserWindowFromEvent } from '@/utils/electron'
 
+import { getSystemMetrics } from './systemMetrics'
 import { AppHandler } from './types'
 
 export function initialize() {
@@ -26,4 +27,6 @@ export function initialize() {
   ipcMain.on(AppHandler.TrackEvent, (_, event: UsageEvent) => {
     trackEvent(event)
   })
+
+  ipcMain.handle(AppHandler.SystemMetrics, () => getSystemMetrics())
 }

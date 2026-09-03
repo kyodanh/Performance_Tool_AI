@@ -6,6 +6,7 @@ import {
   ServerResponse,
 } from 'node:http'
 import { networkInterfaces } from 'os'
+import { z } from 'zod'
 
 import { LoadGeneratorFacts } from '@/types/loadGenerator'
 import { getArch, getPlatform, findOpenPort } from '@/utils/electron'
@@ -75,6 +76,38 @@ function readBody(request: IncomingMessage): Promise<string> {
     request.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
     request.on('error', reject)
   })
+}
+
+const SystemMetricsSchema = z.object({
+  cpuPercent: z.number().min(0),
+  cpuCount: z.number().int().min(0),
+  memUsedBytes: z.number().min(0),
+  memTotalBytes: z.number().min(0),
+})
+
+/**
+ * A heartbeat carries the machine's CPU and memory, when the joiner could read
+ * them. Anything that does not parse is dropped rather than failing the beat:
+ * losing a sample matters far less than dropping the generator.
+ */
+async function readMetrics(request: IncomingMessage) {
+  const body = await readBody(request).catch(() => '')
+
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(body === '' ? '{}' : body)
+  } catch {
+    return undefined
+  }
+
+  const result = SystemMetricsSchema.safeParse(parsed)
+
+  if (!result.success) {
+    return undefined
+  }
+
+  return { ...result.data, cpuPercent: Math.min(100, result.data.cpuPercent) }
 }
 
 function json(response: ServerResponse, status: number, body: unknown) {
@@ -217,7 +250,7 @@ async function handle(
     }
 
     if (second === 'beat') {
-      const result = pool.beat(first)
+      const result = pool.beat(first, await readMetrics(request))
 
       // A generator we no longer know about is told to stop rather than left
       // beating into a void — the user most likely restarted the controller.

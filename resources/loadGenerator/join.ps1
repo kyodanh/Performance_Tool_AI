@@ -98,6 +98,29 @@ if (-not $K6Version_Reported) {
 
 $K6Build = "k6 $K6Version_Reported"
 
+# CPU busy percentage and memory in use, sent with every heartbeat so the app can
+# tell a saturated generator from a slow target.
+function Get-Resources {
+  try {
+    $load = (Get-CimInstance Win32_Processor |
+      Measure-Object -Property LoadPercentage -Average).Average
+    $osInfo = Get-CimInstance Win32_OperatingSystem
+    $total = [int64]$osInfo.TotalVisibleMemorySize * 1024
+
+    return @{
+      cpuPercent    = [int]$load
+      cpuCount      = [Environment]::ProcessorCount
+      memUsedBytes  = $total - [int64]$osInfo.FreePhysicalMemory * 1024
+      memTotalBytes = $total
+    } | ConvertTo-Json -Compress
+  }
+  catch {
+    # A machine whose counters will not answer still beats - it just reports
+    # nothing, which the app shows as no reading rather than as an idle machine.
+    return '{}'
+  }
+}
+
 # Called again if the controller forgets us - it restarts far more often than a
 # generator does, and re-running the one-liner by hand for that would be a poor
 # trade.
@@ -198,7 +221,8 @@ function Invoke-Test {
         $lastBeat = [DateTime]::UtcNow
 
         try {
-          $beat = Invoke-RestMethod -Method Post -Uri "$Controller/gen/$($joined.id)/beat"
+          $beat = Invoke-RestMethod -Method Post -ContentType 'application/json' `
+            -Body (Get-Resources) -Uri "$Controller/gen/$($joined.id)/beat"
 
           if ($beat.abort) {
             Write-Host 'stopped by the controller'
@@ -236,7 +260,8 @@ function Invoke-Test {
 try {
   while ($true) {
     try {
-      $beat = Invoke-RestMethod -Method Post -Uri "$Controller/gen/$($joined.id)/beat"
+      $beat = Invoke-RestMethod -Method Post -ContentType 'application/json' `
+        -Body (Get-Resources) -Uri "$Controller/gen/$($joined.id)/beat"
 
       if ($beat.stop) {
         Write-Host 'disconnected by the controller'

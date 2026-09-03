@@ -1,11 +1,17 @@
-import { css } from '@emotion/react'
-import { Flex, IconButton, Tooltip } from '@radix-ui/themes'
+import { css, keyframes } from '@emotion/react'
+import { Box, Flex, IconButton, Tooltip } from '@radix-ui/themes'
 import { ReactNode } from 'react'
+
+const pulse = keyframes`
+  50% { opacity: 0.25; }
+`
 
 interface VerticalTabButtonProps {
   icon: ReactNode
   active?: boolean
   tooltip: string
+  /** Pulsing dot on the icon, for work still going on in that tab's view. */
+  badge?: boolean
   ref?: React.Ref<HTMLButtonElement>
   onClick?: () => void
 }
@@ -14,6 +20,7 @@ export function VerticalTabButton({
   icon,
   tooltip,
   active,
+  badge,
   ref,
   onClick,
 }: VerticalTabButtonProps) {
@@ -53,7 +60,23 @@ export function VerticalTabButton({
           `}
           onClick={onClick}
         >
-          {icon}
+          <Flex position="relative">
+            {icon}
+            {badge && (
+              <Box
+                position="absolute"
+                width="8px"
+                height="8px"
+                top="-1px"
+                right="-1px"
+                css={css`
+                  background-color: var(--green-9);
+                  border-radius: 50%;
+                  animation: ${pulse} 1.6s ease-in-out infinite;
+                `}
+              />
+            )}
+          </Flex>
         </IconButton>
       </Flex>
     </Tooltip>

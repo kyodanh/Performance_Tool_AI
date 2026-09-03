@@ -109,3 +109,34 @@ describe('parseVuGen', () => {
     expect(urls.some((url) => url.includes('not a call'))).toBe(false)
   })
 })
+
+describe('cookies', () => {
+  // Regression: web_add_cookie is a cookie-jar write, so it has to stick to
+  // later steps. Dropping it after one step made every request that relied on
+  // it fail server-side (500 on an endpoint reading `redirect_url`).
+  it('keeps a cookie on later steps and scopes it to its domain', () => {
+    const result = parseVuGen(`
+      web_add_cookie("redirect_url=/dashboard; DOMAIN=pro360-test.fis.vn");
+
+      web_url("first", "URL=https://pro360-test.fis.vn/a", LAST);
+      web_url("second", "URL=https://pro360-test.fis.vn/b", LAST);
+      web_url("other host", "URL=https://example.com/c", LAST);
+
+      web_cleanup_cookies();
+
+      web_url("after cleanup", "URL=https://pro360-test.fis.vn/d", LAST);
+    `)
+
+    const cookieHeaders = result?.requests.map(
+      (request) =>
+        request.headers.find(({ name }) => name === 'Cookie')?.value ?? null
+    )
+
+    expect(cookieHeaders).toEqual([
+      'redirect_url=/dashboard',
+      'redirect_url=/dashboard',
+      null,
+      null,
+    ])
+  })
+})

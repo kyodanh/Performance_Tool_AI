@@ -21,7 +21,7 @@ const PERFORMANCE_INTENT = [
 
 function summaryLines(summary: RunSummary): string[] {
   return [
-    `- VUs: ${summary.vus} running / ${summary.vusMax} max`,
+    `- VUs: ${summary.vus} running / ${summary.vusMax} peak`,
     `- Elapsed: ${summary.elapsed}s, ${summary.iterations} iterations (${summary.droppedIterations} dropped)`,
     `- Requests: ${summary.requests} (${summary.failedRequests} failed)`,
     `- Checks: ${summary.checksPassed} passed / ${summary.checksFailed} failed`,

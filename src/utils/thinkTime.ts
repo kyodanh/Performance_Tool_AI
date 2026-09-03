@@ -22,16 +22,24 @@ export function requestKey({ request }: Pick<ProxyData, 'request'>): string {
 
 /**
  * The think time to wait after a single request: its own override when set,
- * otherwise the global one, and only when that is placed between requests.
+ * otherwise the global one.
+ *
+ * Only ever returns something in `requests` mode. A sleep between requests is
+ * emitted inside the `group()` the request belongs to, so in `groups` or
+ * `iterations` mode it would land in the middle of a transaction and k6 would
+ * count it into `group_duration` — the transaction would report the wait as
+ * response time, which is not what a controller reports and not what the user
+ * asked for by placing think time outside the group.
  */
 export function resolveThinkTime(
   thinkTime: ThinkTime,
   data: Pick<ProxyData, 'request'>
 ): Timing | null {
-  return (
-    thinkTime.overrides?.[requestKey(data)] ??
-    (thinkTime.sleepType === 'requests' ? thinkTime.timing : null)
-  )
+  if (thinkTime.sleepType !== 'requests') {
+    return null
+  }
+
+  return thinkTime.overrides?.[requestKey(data)] ?? thinkTime.timing
 }
 
 /** Short label for the request row, e.g. `1s` or `1-3s`. */

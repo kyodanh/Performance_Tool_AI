@@ -36,6 +36,23 @@ describe('LoadGeneratorPool', () => {
     expect(pool.join(FACTS, '10.0.0.7').clockOffset).toBe(3)
   })
 
+  it('keeps the machine load of the last heartbeat that carried one', () => {
+    const pool = new LoadGeneratorPool()
+    const { id } = pool.join(FACTS, '10.0.0.7')
+
+    pool.beat(id, {
+      cpuPercent: 64,
+      cpuCount: 8,
+      memUsedBytes: 4_000,
+      memTotalBytes: 8_000,
+    })
+    // An older joiner sends no body, which must not wipe what it reported
+    // before it — the panel would flicker between a reading and none.
+    pool.beat(id)
+
+    expect(pool.list()[0]?.resources?.cpuPercent).toBe(64)
+  })
+
   it('replaces the previous entry when the same joiner rejoins', () => {
     const pool = new LoadGeneratorPool()
 

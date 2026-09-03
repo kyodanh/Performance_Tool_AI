@@ -16,6 +16,7 @@ import {
 import { InfoIcon } from 'lucide-react'
 import { useState } from 'react'
 
+import { MachineResources } from '@/types/systemMetrics'
 import { isDistributedRun, RunStats, StatsBucket } from '@/utils/k6/stats'
 
 import { ChecksTable } from './ChecksTable'
@@ -28,6 +29,7 @@ import {
   PanelSeries,
   seriesStyle,
 } from './MetricPanel'
+import { ResourcesTable } from './ResourcesTable'
 import { Sparkline } from './Sparkline'
 import { TransactionsTable } from './TransactionsTable'
 
@@ -55,15 +57,17 @@ function hitsPerSecond(buckets: StatsBucket[], window = 60) {
 const SERIES: Array<{
   label: string
   select: (bucket: StatsBucket) => number
+  /** Headline number for the card; defaults to the newest sample. */
+  headline?: (values: number[], stats: RunStats) => number
   format: (value: number, stats: RunStats) => string
 }> = [
   {
-    label: 'Running VUs',
+    label: 'Peak VUs',
     select: (b) => b.vus,
     // The last gauge tick of a finished run catches VUs shutting down, so the
-    // headline alone reads lower than the run ever was — pair it with the peak.
-    format: (value, stats) =>
-      `${formatCount(value)} / ${formatCount(stats.vusMax)}`,
+    // newest sample reads ~1 however big the run was — headline the peak.
+    headline: (_values, stats) => stats.vusMax,
+    format: formatCount,
   },
   { label: 'Requests/s', select: (b) => b.requests, format: formatCount },
   { label: 'Response time', select: (b) => b.duration, format: formatTime },
@@ -92,9 +96,11 @@ type Detail = 'transactions' | 'errors'
 
 interface MetricsSectionProps {
   stats: RunStats | null
+  /** Left out by views of a saved run, which has no live machine to sample. */
+  resources?: MachineResources[]
 }
 
-export function MetricsSection({ stats }: MetricsSectionProps) {
+export function MetricsSection({ stats, resources = [] }: MetricsSectionProps) {
   const [detail, setDetail] = useState<Detail | null>(null)
 
   if (stats === null || stats.buckets.length === 0) {
@@ -164,7 +170,7 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
           gap="3"
           align="start"
         >
-          {SERIES.map(({ label, select, format }) => {
+          {SERIES.map(({ label, select, headline = currentValue, format }) => {
             const values = stats.buckets.map(select)
 
             return (
@@ -172,7 +178,7 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
                 key={label}
                 label={label}
                 values={values}
-                value={format(currentValue(values), stats)}
+                value={format(headline(values, stats), stats)}
                 from={formatDuration(0)}
                 to={formatDuration(span)}
               />
@@ -190,10 +196,8 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
               <SectionTitle>Summary</SectionTitle>
               <DataList.Root size="1" orientation="horizontal">
                 <DataList.Item>
-                  <DataList.Label minWidth="88px">Running VUs</DataList.Label>
-                  <DataList.Value>
-                    {stats.vus} / {stats.vusMax}
-                  </DataList.Value>
+                  <DataList.Label minWidth="88px">Peak VUs</DataList.Label>
+                  <DataList.Value>{formatCount(stats.vusMax)}</DataList.Value>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.Label minWidth="88px">Elapsed time</DataList.Label>
@@ -389,6 +393,12 @@ export function MetricsSection({ stats }: MetricsSectionProps) {
             The response time chart draws the first {MAX_SERIES} transactions —
             the rest keep their numbers in the table below.
           </Text>
+        )}
+
+        {resources.length > 0 && (
+          <Section title="Machine resources">
+            <ResourcesTable resources={resources} />
+          </Section>
         )}
 
         {isDistributedRun(stats.generators) && (

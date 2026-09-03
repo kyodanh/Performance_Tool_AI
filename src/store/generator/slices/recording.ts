@@ -1,5 +1,6 @@
 import { DEFAULT_GROUP_NAME } from '@/constants'
 import { ProxyData } from '@/types'
+import { requestKey } from '@/utils/thinkTime'
 import { ImmerStateCreator } from '@/utils/typescript'
 
 import {
@@ -130,8 +131,18 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   // are stale. Only that importer's own requests go, hand-added ones stay.
   replaceImportedRequests: (source, requests) =>
     set((state) => {
+      // Generators saved before requests carried `source` hold untagged rows a
+      // previous import left behind, and dropping every untagged row would
+      // take the hand-written ones with it. A row the incoming script imports
+      // again is the stale copy by definition, so match those by key.
+      const imported = new Set(requests.map(requestKey))
+
       state.manualRequests = [
-        ...state.manualRequests.filter((request) => request.source !== source),
+        ...state.manualRequests.filter(
+          (request) =>
+            request.source !== source &&
+            !(request.source === undefined && imported.has(requestKey(request)))
+        ),
         ...requests,
       ]
     }),

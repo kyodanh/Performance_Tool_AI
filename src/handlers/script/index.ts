@@ -26,7 +26,22 @@ import {
 } from './types'
 
 export function initialize() {
-  let currentTestRun: TestRun | null
+  let currentTestRun: TestRun | null = null
+
+  /**
+   * Only one run is tracked at a time, so starting a second without stopping
+   * the first orphans it: it keeps loading the target with nothing left to stop
+   * it from the UI.
+   */
+  async function stopCurrentTestRun() {
+    const run = currentTestRun
+
+    currentTestRun = null
+
+    await run?.stop().catch((error) => {
+      log.error('Failed to stop the test run', error)
+    })
+  }
 
   ipcMain.handle(ScriptHandler.Select, async (event) => {
     console.info(`${ScriptHandler.Select} event received`)
@@ -56,6 +71,7 @@ export function initialize() {
       const browserWindow = browserWindowFromEvent(event)
 
       try {
+        await stopCurrentTestRun()
         await waitForProxy()
 
         const absolute = path.isAbsolute(scriptPath)
@@ -98,6 +114,7 @@ export function initialize() {
       {
         path: scriptPath,
         content,
+        name,
         vus,
         iterations,
         stages,
@@ -111,6 +128,8 @@ export function initialize() {
       const browserWindow = browserWindowFromEvent(event)
 
       try {
+        await stopCurrentTestRun()
+
         const absolute = path.isAbsolute(scriptPath)
         const resolvedScriptPath = absolute
           ? scriptPath
@@ -124,6 +143,7 @@ export function initialize() {
           browserWindow,
           scriptPath: resolvedScriptPath,
           usageReport: k6StudioState.appSettings.telemetry.usageReport,
+          name,
           vus,
           iterations,
           stages,
@@ -172,6 +192,7 @@ export function initialize() {
         // `runScript`), so starting before it is online sends every request to
         // a dead port: `resp.body` is null and `resp.json()` throws a GoError
         // that names no request.
+        await stopCurrentTestRun()
         await waitForProxy()
 
         await writeFile(path, content)
@@ -212,13 +233,8 @@ export function initialize() {
 
   ipcMain.on(ScriptHandler.Stop, () => {
     console.info(`${ScriptHandler.Stop} event received`)
-    if (currentTestRun) {
-      currentTestRun.stop().catch((error) => {
-        log.error('Failed to stop the test run', error)
-      })
 
-      currentTestRun = null
-    }
+    void stopCurrentTestRun()
   })
 
   ipcMain.handle(

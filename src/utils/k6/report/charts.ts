@@ -144,6 +144,63 @@ function legend(entries: Array<{ label: string; color?: string }>) {
   return `<ul class="legend">${items.join('')}</ul>`
 }
 
+export interface Segment {
+  label: string
+  value: number
+}
+
+/**
+ * A single horizontal bar split into its parts — the layers breakdown an
+ * analysis report draws under the URL tables.
+ */
+export function stackedBar(segments: Segment[], unit: string) {
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0)
+
+  if (total <= 0) {
+    return '<p class="empty">No timing samples were recorded.</p>'
+  }
+
+  const height = 92
+  const barY = 18
+  const barHeight = 26
+  const plotWidth = WIDTH - PAD.left - PAD.right
+  const maxValue = niceMax(total)
+
+  let offset = 0
+
+  const parts = segments.map((segment, index) => {
+    const width = (segment.value / maxValue) * plotWidth
+    const x = PAD.left + offset
+
+    offset += width
+
+    return `<rect x="${x.toFixed(1)}" y="${barY}" width="${width.toFixed(1)}" height="${barHeight}" fill="${SERIES_COLORS[index % SERIES_COLORS.length]}" />`
+  })
+
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+    const x = PAD.left + ratio * plotWidth
+
+    return `
+      <line x1="${x}" y1="${barY}" x2="${x}" y2="${barY + barHeight + 4}" class="grid" />
+      <text x="${x}" y="${barY + barHeight + 18}" class="tick" text-anchor="middle">${axisLabel(maxValue * ratio)}</text>
+    `
+  })
+
+  return `
+    <svg class="chart" viewBox="0 0 ${WIDTH} ${height}" role="img">
+      ${ticks.join('')}
+      ${parts.join('')}
+      <text x="${PAD.left + plotWidth / 2}" y="${height - 6}" class="tick" text-anchor="middle">${escapeHtml(unit)}</text>
+    </svg>
+    ${legend(
+      segments.map((segment, index) => ({
+        label: segment.label,
+        color: SERIES_COLORS[index % SERIES_COLORS.length],
+      }))
+    )}
+  `
+}
+
 export interface Bar {
   label: string
   passed: number

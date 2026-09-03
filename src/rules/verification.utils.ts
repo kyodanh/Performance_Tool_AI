@@ -6,7 +6,14 @@ import { exhaustive } from '@/utils/typescript'
 
 const NEWLINE_REGEX = /(?:\r\n|\r|\n)/g
 
-export function getValueFromRule(rule: VerificationRule, response: Response) {
+/**
+ * Null means the rule can't produce a check for this request: the recorded
+ * body it would compare against doesn't exist.
+ */
+export function getValueFromRule(
+  rule: VerificationRule,
+  response: Response | undefined
+) {
   const { type } = rule.value
 
   switch (type) {
@@ -73,12 +80,18 @@ export function getCheckDescription(
 
 function getRecordedValue(
   target: VerificationRule['target'],
-  response: Response
+  response: Response | undefined
 ) {
   switch (target) {
     case 'status':
-      return response.statusCode
+      // Manual and imported (Postman) requests carry no recorded response, but
+      // a status check is still what the rule is asking for — assume 200.
+      return response?.statusCode ?? 200
     case 'body': {
+      if (!response) {
+        return null
+      }
+
       // Remove newlines when comparing the body to a recorded value
       const singleLineContent = (response.content ?? '').replace(
         NEWLINE_REGEX,

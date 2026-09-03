@@ -1,13 +1,21 @@
 import { css } from '@emotion/react'
 import { Flex, Separator } from '@radix-ui/themes'
-import { BugPlay, GaugeIcon, HammerIcon, VideoIcon } from 'lucide-react'
+import {
+  BugPlay,
+  ChartColumnIcon,
+  GaugeIcon,
+  HammerIcon,
+  VideoIcon,
+} from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import k6LogoDark from '@/assets/logo-dark.svg'
 import k6Logo from '@/assets/logo.svg'
 import { ThemeSwitcher } from '@/components/ThemeSwitcher'
+import { formatDuration } from '@/components/Validator/format'
 import { useTheme } from '@/hooks/useTheme'
-import { getRoutePath } from '@/routeMap'
+import { getRoutePath, routeMap } from '@/routeMap'
+import { useLoadRunStore } from '@/store/loadRun'
 
 import { SidebarTab } from '../Layout.types'
 
@@ -27,6 +35,11 @@ interface ActivityBarProps {
 export function ActivityBar({ activeTab, onTabChange }: ActivityBarProps) {
   const theme = useTheme()
   const navigate = useNavigate()
+
+  // A load test keeps running while the app is on another view, so the tab it
+  // belongs to says so — otherwise the only sign is the target under load.
+  const isRunning = useLoadRunStore((state) => state.isRunning)
+  const elapsed = useLoadRunStore((state) => state.stats?.elapsed ?? 0)
 
   return (
     <Flex
@@ -75,11 +88,25 @@ export function ActivityBar({ activeTab, onTabChange }: ActivityBarProps) {
         />
         <VerticalTabButton
           icon={<GaugeIcon />}
-          tooltip="Controller"
+          tooltip={
+            isRunning
+              ? `Controller — running (${formatDuration(elapsed)})`
+              : 'Controller'
+          }
+          badge={isRunning}
           active={activeTab === 'controller'}
           onClick={() => {
             onTabChange('controller')
             navigate(getRoutePath('controller'))
+          }}
+        />
+        <VerticalTabButton
+          icon={<ChartColumnIcon />}
+          tooltip="Analysis"
+          active={activeTab === 'analysis'}
+          onClick={() => {
+            onTabChange('analysis')
+            navigate(routeMap.analysis)
           }}
         />
       </Flex>

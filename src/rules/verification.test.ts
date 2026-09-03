@@ -60,6 +60,34 @@ describe('createVerificationRuleInstance', () => {
       })
     })
 
+    it('verifies status 200 for a manual request with no recorded response', () => {
+      const instance = createInstance()
+      const mockRequestSnippet: RequestSnippetSchema = {
+        ...createMockRequestSnippet(),
+        data: { ...createMockRequestSnippet().data, response: undefined },
+      }
+
+      const result = instance.apply(mockRequestSnippet)
+
+      expect(result.checks).toHaveLength(1)
+      expect(result.checks[0]).toMatchObject({
+        description: 'status equals 200',
+        expression: '(r) => r.status === 200',
+      })
+    })
+
+    it('skips body verification when there is no recorded response', () => {
+      const instance = createInstance(
+        createMockVerificationRule({ target: 'body' })
+      )
+      const mockRequestSnippet: RequestSnippetSchema = {
+        ...createMockRequestSnippet(),
+        data: { ...createMockRequestSnippet().data, response: undefined },
+      }
+
+      expect(instance.apply(mockRequestSnippet).checks).toHaveLength(0)
+    })
+
     it('skips verification when request does not match filter', () => {
       const instance = createInstance(
         createMockVerificationRule({

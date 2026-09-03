@@ -92,6 +92,49 @@ fi
 # version-pinned name we gave it — so only the version itself is useful.
 K6_BUILD="k6 $("$BIN" version | cut -d' ' -f2)"
 
+# CPU busy percentage and memory in use, sent with every heartbeat so the app can
+# tell a saturated generator from a slow target. Both platforms need a window to
+# measure CPU across; the second of wall clock costs the run nothing, because
+# neither `iostat` nor a second read of /proc/stat spends CPU waiting.
+cpu_ticks() {
+  awk '/^cpu /{ total = 0; for (i = 2; i <= NF; i++) total += $i; print total, $5 }' /proc/stat
+}
+
+sample_resources() {
+  if [ "$OS" = linux ]; then
+    cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0)"
+    before="$(cpu_ticks)"
+    sleep 1
+    cpu="$(printf '%s %s' "$before" "$(cpu_ticks)" | awk '{
+      total = $3 - $1
+      idle = $4 - $2
+      printf "%d", (total > 0 ? (1 - idle / total) * 100 + 0.5 : 0)
+    }')"
+    # `MemAvailable` is the kernel's own estimate of what a new workload could
+    # claim, so reclaimable cache does not read as used.
+    mem="$(awk '/^MemTotal:/{ total = $2 } /^MemAvailable:/{ available = $2 }
+      END { printf "%d %d", (total - available) * 1024, total * 1024 }' /proc/meminfo)"
+  else
+    cores="$(sysctl -n hw.ncpu 2>/dev/null || echo 0)"
+    cpu="$(iostat -c 2 -w 1 -n 0 2>/dev/null | tail -1 | awk '{ printf "%d", 100 - $3 }')"
+    total="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+    # Inactive and speculative pages are cache the kernel hands back on demand,
+    # which is what Linux calls available.
+    mem="$(vm_stat 2>/dev/null | awk -v total="$total" '
+      /page size of/ { size = $8 }
+      /Pages free/ { free = $3 }
+      /Pages inactive/ { inactive = $3 }
+      /Pages speculative/ { speculative = $3 }
+      END { printf "%d %d", total - (free + inactive + speculative) * size, total }')"
+  fi
+
+  # A machine whose tools are missing still beats — it just reports zeroes,
+  # which the app shows as no reading rather than as an idle machine.
+  printf '{"cpuPercent":%s,"cpuCount":%s,"memUsedBytes":%s,"memTotalBytes":%s}' \
+    "${cpu:-0}" "${cores:-0}" "$(printf '%s' "${mem:-0 0}" | cut -d' ' -f1)" \
+    "$(printf '%s' "${mem:-0 0}" | cut -d' ' -f2)"
+}
+
 # Sets ID and IP. Called again if the controller forgets us — it restarts far
 # more often than a generator does, and re-running the one-liner by hand for that
 # would be a poor trade.
@@ -175,7 +218,8 @@ run_test() {
   k6=$!
 
   while kill -0 "$k6" 2>/dev/null; do
-    reply="$(curl -fsS -X POST "$CONTROLLER/gen/$ID/beat" 2>/dev/null || true)"
+    reply="$(curl -fsS -X POST -H 'content-type: application/json' \
+      -d "$(sample_resources)" "$CONTROLLER/gen/$ID/beat" 2>/dev/null || true)"
 
     case "$reply" in
     *'"abort":true'*)
@@ -201,6 +245,7 @@ while true; do
   # The status is read rather than relying on `-f`, because a 404 means something
   # specific: the controller no longer knows this generator.
   status="$(curl -sS -o "$BEAT" -w '%{http_code}' -X POST \
+    -H 'content-type: application/json' -d "$(sample_resources)" \
     "$CONTROLLER/gen/$ID/beat" 2>/dev/null || echo 000)"
   reply="$(cat "$BEAT" 2>/dev/null || true)"
 

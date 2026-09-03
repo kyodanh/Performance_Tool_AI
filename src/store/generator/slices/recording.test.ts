@@ -283,13 +283,18 @@ describe('setRequestOverride', () => {
 })
 
 describe('replaceImportedRequests', () => {
+  // `requestKey` reads the URL, which the factory pins unless it is set.
+  function at(path: string) {
+    return { path, url: `http://example.com${path}` }
+  }
+
   function importScript(paths: string[]) {
     const { replaceImportedRequests } = useGeneratorStore.getState()
 
     replaceImportedRequests(
       'vugen',
       paths.map((path) => ({
-        ...createProxyData({ request: createRequest({ path }) }),
+        ...createProxyData({ request: createRequest(at(path)) }),
         group: '1_trans_Login',
         source: 'vugen' as const,
       }))
@@ -314,11 +319,31 @@ describe('replaceImportedRequests', () => {
     expect(useGeneratorStore.getState().manualRequests).toHaveLength(1)
   })
 
+  it('replaces an untagged import saved before requests carried a source', () => {
+    const { addManualRequest } = useGeneratorStore.getState()
+
+    // What a generator file written by an older build holds: imported rows
+    // with no `source` at all.
+    addManualRequest(
+      createProxyData({
+        request: createRequest(at('/dashboard')),
+        group: '1_trans_Login',
+      })
+    )
+    importScript(['/dashboard'])
+
+    const paths = useGeneratorStore
+      .getState()
+      .manualRequests.map((request) => request.request.path)
+
+    expect(paths).toEqual(['/dashboard'])
+  })
+
   it('keeps requests added by hand', () => {
     const { addManualRequest } = useGeneratorStore.getState()
 
     addManualRequest(
-      createProxyData({ request: createRequest({ path: '/by-hand' }) })
+      createProxyData({ request: createRequest(at('/by-hand')) })
     )
     importScript(['/dashboard'])
     importScript(['/dashboard'])

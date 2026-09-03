@@ -65,6 +65,17 @@ export interface RequestStats {
   failed: number
   avg: number
   max: number
+  /** Fastest `http_req_duration` sample, in milliseconds. */
+  min: number
+  /** Sum of `http_req_duration`, in milliseconds — the report's "Total". */
+  total: number
+  /** Population standard deviation of `http_req_duration`, in milliseconds. */
+  std: number
+  /**
+   * Sum of `http_req_waiting` (time to first byte) in milliseconds — the time
+   * the server itself spent, which the report ranks URLs by.
+   */
+  serverTime: number
 }
 
 export interface CheckStats {
@@ -87,6 +98,8 @@ export interface GroupSample {
   time: number
   /** Average `group_duration` during that second, in milliseconds. */
   value: number
+  /** Executions of the group that finished during that second. */
+  count: number
 }
 
 export interface GroupStats {
@@ -94,9 +107,11 @@ export interface GroupStats {
   /** Completed executions of the group — `group_duration` samples. */
   count: number
   /**
-   * Failed requests and checks tagged with this group. k6 has no per-execution
-   * verdict for a group, so this is an attribution, not an exact failure count:
-   * one execution failing three requests counts as three.
+   * Failed executions attributed to this group. k6 has no per-execution verdict
+   * for a group, so this is an attribution, not an exact count: it is the
+   * larger of the failed requests and the failed checks tagged with the group,
+   * because a failing request normally fails its check too and summing the two
+   * would report every failure twice.
    */
   failed: number
   avg: number
@@ -130,7 +145,12 @@ export interface RunStats {
   buckets: StatsBucket[]
   /** Seconds between the first and the newest sample seen. */
   elapsed: number
+  /** Newest `vus` gauge tick — on a finished run, the shutdown tail. */
   vus: number
+  /**
+   * Peak concurrency actually observed. Deliberately not k6's `vus_max`, which
+   * is the preallocated pool size and stays flat at the configured ceiling.
+   */
   vusMax: number
   requests: number
   failedRequests: number
@@ -283,6 +303,10 @@ interface MutableRequest {
   failed: number
   sum: number
   max: number
+  min: number
+  /** Sum of squares, so the standard deviation needs no sample history. */
+  squares: number
+  waiting: number
 }
 
 interface MutableGroup {
@@ -293,7 +317,8 @@ interface MutableGroup {
   max: number
   min: number
   last: number
-  failed: number
+  failedRequests: number
+  failedChecks: number
   series: Map<number, { sum: number; count: number }>
 }
 
@@ -335,7 +360,6 @@ export class RunStatsCollector {
   #firstTime: number | null = null
   #lastTime = 0
   #vusBySource = new Map<string, number>()
-  #vusMaxBySource = new Map<string, number>()
   #vus = 0
   #vusMax = 0
   #requests = 0
@@ -421,13 +445,6 @@ export class RunStatsCollector {
         generator.vusMax = Math.max(generator.vusMax, value)
         break
 
-      case 'vus_max':
-        this.#vusMaxBySource.set(source, value)
-        this.#vusMax = Math.max(this.#vusMax, sum(this.#vusMaxBySource))
-
-        generator.vusMax = Math.max(generator.vusMax, value)
-        break
-
       case 'http_reqs':
         bucket.requests += value
         this.#requests += value
@@ -443,7 +460,7 @@ export class RunStatsCollector {
           bucket.failed += 1
           this.#failedRequests += 1
           generator.failedRequests += 1
-          this.#failGroup(columns[COLUMN.group] ?? '')
+          this.#failGroup(columns[COLUMN.group] ?? '', 'request')
           this.#request(columns, (request) => {
             request.failed += 1
           })
@@ -461,7 +478,9 @@ export class RunStatsCollector {
         generator.maxDuration = Math.max(generator.maxDuration, value)
         this.#request(columns, (request) => {
           request.sum += value
+          request.squares += value * value
           request.max = Math.max(request.max, value)
+          request.min = Math.min(request.min, value)
         })
         break
 
@@ -503,6 +522,9 @@ export class RunStatsCollector {
       case 'http_req_waiting':
         this.#timingSums.waiting += value
         this.#timingCounts.waiting += 1
+        this.#request(columns, (request) => {
+          request.waiting += value
+        })
         break
 
       case 'http_req_receiving':
@@ -515,7 +537,7 @@ export class RunStatsCollector {
           this.#checksPassed += 1
         } else {
           this.#checksFailed += 1
-          this.#failGroup(columns[COLUMN.group] ?? '')
+          this.#failGroup(columns[COLUMN.group] ?? '', 'check')
         }
 
         this.#collectCheck(columns, value === 1)
@@ -550,7 +572,7 @@ export class RunStatsCollector {
         return {
           name,
           count: group.count,
-          failed: group.failed,
+          failed: Math.max(group.failedRequests, group.failedChecks),
           avg,
           max: group.max,
           min: group.count ? group.min : 0,
@@ -565,25 +587,42 @@ export class RunStatsCollector {
             .map<GroupSample>(([time, bucket]) => ({
               time,
               value: bucket.sum / bucket.count,
+              count: bucket.count,
             })),
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
 
     const requestStats = [...this.#requestStats.values()]
-      .map<RequestStats>((request) => ({
-        method: request.method,
-        name: request.name,
-        status: request.status,
-        group: request.group,
-        count: request.count,
-        failed: request.failed,
+      .map<RequestStats>((request) => {
         // `http_reqs` and `http_req_duration` are emitted per request, so the
         // duration sample count matches `count` — except for a request still in
         // flight when the snapshot is taken.
-        avg: request.count ? request.sum / request.count : 0,
-        max: request.max,
-      }))
+        const avg = request.count ? request.sum / request.count : 0
+
+        return {
+          method: request.method,
+          name: request.name,
+          status: request.status,
+          group: request.group,
+          count: request.count,
+          failed: request.failed,
+          avg,
+          max: request.max,
+          // `min` only moves on a duration sample, which a request that never
+          // got a response never emits — `count` alone is not proof of one.
+          min: Number.isFinite(request.min) ? request.min : 0,
+          total: request.sum,
+          // Rounding can push the variance a hair below zero on a constant
+          // series, and `sqrt` of that is NaN.
+          std: request.count
+            ? Math.sqrt(
+                Math.max(0, request.squares / request.count - avg * avg)
+              )
+            : 0,
+          serverTime: request.waiting,
+        }
+      })
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 
     const checks = [...this.#checkResults.values()].sort(
@@ -802,6 +841,9 @@ export class RunStatsCollector {
       failed: 0,
       sum: 0,
       max: 0,
+      min: Infinity,
+      squares: 0,
+      waiting: 0,
     }
 
     update(request)
@@ -839,14 +881,20 @@ export class RunStatsCollector {
     })
   }
 
-  #failGroup(rawName: string) {
+  #failGroup(rawName: string, kind: 'request' | 'check') {
     const name = groupName(rawName)
 
     if (name === '') {
       return
     }
 
-    this.#group(name).failed += 1
+    const group = this.#group(name)
+
+    if (kind === 'request') {
+      group.failedRequests += 1
+    } else {
+      group.failedChecks += 1
+    }
   }
 
   #group(name: string): MutableGroup {
@@ -863,7 +911,8 @@ export class RunStatsCollector {
       max: 0,
       min: Infinity,
       last: 0,
-      failed: 0,
+      failedRequests: 0,
+      failedChecks: 0,
       series: new Map(),
     }
 
@@ -875,7 +924,6 @@ export class RunStatsCollector {
 
 const KNOWN_METRICS = new Set([
   'vus',
-  'vus_max',
   'http_reqs',
   'http_req_failed',
   'http_req_duration',

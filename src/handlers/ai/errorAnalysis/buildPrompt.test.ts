@@ -55,6 +55,10 @@ describe('buildFailureAnalysisPrompt', () => {
         failed: 0,
         avg: 50,
         max: 60,
+        min: 40,
+        total: 250,
+        std: 5,
+        serverTime: 200,
       },
       {
         method: 'POST',
@@ -65,6 +69,10 @@ describe('buildFailureAnalysisPrompt', () => {
         failed: 5,
         avg: 4000,
         max: 5000,
+        min: 3200,
+        total: 20000,
+        std: 400,
+        serverTime: 16000,
       },
     ]
 
@@ -150,6 +158,10 @@ describe('buildFailureAnalysisPrompt', () => {
         failed: 0,
         avg: 120,
         max: 300,
+        min: 96,
+        total: 1200,
+        std: 12,
+        serverTime: 960,
       },
     ]
 
@@ -176,6 +188,10 @@ describe('buildFailureAnalysisPrompt', () => {
         failed: 3,
         avg: 120,
         max: 300,
+        min: 96,
+        total: 1200,
+        std: 12,
+        serverTime: 960,
       },
     ]
 

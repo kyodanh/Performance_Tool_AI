@@ -13,6 +13,7 @@ import {
 } from '@/components/primitives/ResizablePanel'
 import { useDelayedVisibility } from '@/hooks/useDelayedVisibility'
 import { useListenDeepLinks } from '@/hooks/useListenDeepLinks'
+import { routeMap } from '@/routeMap'
 
 import { ActivityBar } from './ActivityBar'
 import { SidebarTab } from './Layout.types'
@@ -64,6 +65,15 @@ export function Layout() {
   useEffect(() => {
     window.studio.app.changeRoute(location.pathname)
   }, [location.pathname])
+
+  // Analysis is opened from the route too — the Controller's Save button, a
+  // deep link — so the sidebar follows it instead of leaving the previous
+  // tab's list up, which then navigates somewhere else entirely.
+  useEffect(() => {
+    if (location.pathname.startsWith(routeMap.analysis)) {
+      setActiveTab('analysis')
+    }
+  }, [location.pathname, setActiveTab])
 
   return (
     <Flex height="100dvh">

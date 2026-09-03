@@ -69,6 +69,21 @@ export function duration(totalSeconds: number) {
   return parts.join(' and ')
 }
 
+/**
+ * Nearest-rank percentile, the way an analysis report prints its `90%` column.
+ * Returns 0 for an empty series.
+ */
+export function percentile(values: number[], ratio: number) {
+  if (values.length === 0) {
+    return 0
+  }
+
+  const sorted = [...values].sort((a, b) => a - b)
+  const rank = Math.ceil(ratio * sorted.length) - 1
+
+  return sorted[Math.min(sorted.length - 1, Math.max(0, rank))] ?? 0
+}
+
 export interface SeriesSummary {
   min: number
   avg: number
