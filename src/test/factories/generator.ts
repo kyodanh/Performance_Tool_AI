@@ -11,6 +11,7 @@ export function createGeneratorData(
     allowlist: [],
     manualRequests: [],
     groupRenames: {},
+    groupOrder: [],
     includeStaticAssets: false,
     options: {
       loadProfile: {
@@ -116,6 +117,8 @@ export function createGeneratorState(
     setRequestOverride: vi.fn(),
     clearRequestOverride: vi.fn(),
     emptyGroups: [],
+    groupOrder: [],
+    setGroupOrder: vi.fn(),
     addGroup: vi.fn(),
     renameGroup: vi.fn(),
     removeGroup: vi.fn(),

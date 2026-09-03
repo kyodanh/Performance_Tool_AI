@@ -55,6 +55,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
       excludedRequests,
       requestOverrides,
       groupRenames,
+      groupOrder,
       includeStaticAssets,
       scriptName,
       wizardUsed,
@@ -93,6 +94,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         state.excludedRequests = excludedRequests ?? []
         state.requestOverrides = requestOverrides ?? {}
         state.groupRenames = groupRenames ?? {}
+        state.groupOrder = groupOrder ?? []
         state.emptyGroups = []
 
         state.includeStaticAssets = includeStaticAssets

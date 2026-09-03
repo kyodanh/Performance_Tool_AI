@@ -11,6 +11,7 @@ import { useGeneratorStore } from '@/store/generator'
 import { useApplyRules } from '@/store/generator/hooks/useApplyRules'
 import { useHighlightRequestChanges } from '@/store/generator/hooks/useHighlightRequestChanges'
 import { Group, ProxyData } from '@/types'
+import { sortByGroupOrder } from '@/utils/groups'
 
 import {
   AddRequestButton,
@@ -57,6 +58,8 @@ export function RequestList({
 
   const usedGroups = useProxyDataGroups(requests)
   const emptyGroups = useGeneratorStore((state) => state.emptyGroups)
+  const groupOrder = useGeneratorStore((state) => state.groupOrder)
+  const setGroupOrder = useGeneratorStore((state) => state.setGroupOrder)
   const removeGroup = useGeneratorStore((state) => state.removeGroup)
   const renameGroup = useGeneratorStore((state) => state.renameGroup)
 
@@ -65,16 +68,22 @@ export function RequestList({
   const [editedGroup, setEditedGroup] = useState<string | null>(null)
 
   // Groups created by hand only show up while they hold no requests, after
-  // that the requests themselves put them in the list.
+  // that the requests themselves put them in the list. The requests arrive
+  // sorted by `groupOrder`, but those empty groups are added here, so the
+  // order has to be applied to the whole list.
   const groups = useMemo(
     () =>
-      [
-        ...usedGroups,
-        ...emptyGroups
-          .filter((name) => !usedGroups.some((group) => group.id === name))
-          .map((name) => ({ id: name, name })),
-      ].map((group) => ({ ...group, isEditing: group.id === editedGroup })),
-    [usedGroups, emptyGroups, editedGroup]
+      sortByGroupOrder(
+        [
+          ...usedGroups,
+          ...emptyGroups
+            .filter((name) => !usedGroups.some((group) => group.id === name))
+            .map((name) => ({ id: name, name })),
+        ],
+        groupOrder,
+        (group) => group.id
+      ).map((group) => ({ ...group, isEditing: group.id === editedGroup })),
+    [usedGroups, emptyGroups, groupOrder, editedGroup]
   )
 
   // `id` is the current name, so a differing `name` means it was renamed.
@@ -211,6 +220,7 @@ export function RequestList({
             groupVariant="card"
             onUpdateGroup={handleUpdateGroup}
             onRemoveGroup={({ name }) => removeGroup(name)}
+            onReorderGroups={setGroupOrder}
             ListComponent={ListComponent}
           />
         </Box>

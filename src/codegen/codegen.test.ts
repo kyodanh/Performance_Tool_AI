@@ -94,6 +94,7 @@ describe('Code generation', () => {
           generator: {
             version: '3.0',
             groupRenames: {},
+            groupOrder: [],
             recordingPath: 'test',
             options: {
               loadProfile: {
@@ -152,6 +153,7 @@ describe('Code generation', () => {
     const generator: GeneratorFileData = {
       version: '3.0',
       groupRenames: {},
+      groupOrder: [],
       recordingPath: 'test',
       options: {
         loadProfile: {

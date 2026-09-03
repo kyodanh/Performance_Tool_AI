@@ -10,6 +10,23 @@ import { toNativePath } from '../utils/path'
 let watcher: FSWatcher
 
 /**
+ * The DevTools frontend automatically issues CDP commands from domains that
+ * Electron's Chromium doesn't implement (e.g. `Autofill.enable`,
+ * `Autofill.setAddresses`). Each rejection is mirrored into our logs via
+ * `spyRendererConsole`, adding noise with no diagnostic value. Match and drop
+ * those lines.
+ */
+const DEVTOOLS_NOISE_PATTERNS = [/Request Autofill\.\w+ failed/]
+
+function isDevToolsNoise(data: unknown[]): boolean {
+  return data.some(
+    (entry) =>
+      typeof entry === 'string' &&
+      DEVTOOLS_NOISE_PATTERNS.some((pattern) => pattern.test(entry))
+  )
+}
+
+/**
  * Recursively unwraps an AggregateError into its constituent errors. A new line
  * will be added between each error for better readability in the logs.
  */
@@ -53,6 +70,10 @@ export function initializeLogger() {
   }
 
   log.hooks.push((msg) => {
+    if (isDevToolsNoise(msg.data)) {
+      return false
+    }
+
     const hasAggregateError = msg.data.some(
       (data) => data instanceof AggregateError
     )

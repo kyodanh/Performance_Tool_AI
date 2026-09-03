@@ -91,6 +91,86 @@ describe('renameGroup', () => {
   })
 })
 
+describe('setGroupOrder', () => {
+  function setUpRecording() {
+    const { setRecording, setAllowlist } = useGeneratorStore.getState()
+
+    setRecording([
+      createProxyData({ id: 'dashboard', group: 'Dashboard' }),
+      createProxyData({
+        id: 'login',
+        group: 'Login',
+        request: createRequest({ url: 'http://example.com/login' }),
+      }),
+      createProxyData({
+        id: 'dashboard-2',
+        group: 'Dashboard',
+        request: createRequest({ url: 'http://example.com/dashboard' }),
+      }),
+    ])
+    setAllowlist(['example.com'])
+  }
+
+  const filteredIds = () =>
+    selectFilteredRequests(useGeneratorStore.getState()).map(
+      (request) => request.id
+    )
+
+  it('keeps the recorded order until the groups are reordered', () => {
+    setUpRecording()
+
+    expect(filteredIds()).toEqual(['dashboard', 'login', 'dashboard-2'])
+  })
+
+  it('runs the groups in the order they were dragged into', () => {
+    setUpRecording()
+
+    useGeneratorStore.getState().setGroupOrder(['Login', 'Dashboard'])
+
+    expect(filteredIds()).toEqual(['login', 'dashboard', 'dashboard-2'])
+  })
+
+  it('leaves groups missing from the order last', () => {
+    setUpRecording()
+    useGeneratorStore
+      .getState()
+      .addManualRequest(createProxyData({ id: 'manual', group: 'Checkout' }))
+
+    useGeneratorStore.getState().setGroupOrder(['Login'])
+
+    expect(filteredIds()).toEqual([
+      'login',
+      'dashboard',
+      'dashboard-2',
+      'manual',
+    ])
+  })
+
+  it('follows a group through a rename', () => {
+    setUpRecording()
+    useGeneratorStore.getState().setGroupOrder(['Login', 'Dashboard'])
+
+    useGeneratorStore.getState().renameGroup('Login', 'trans_login')
+
+    expect(useGeneratorStore.getState().groupOrder).toEqual([
+      'trans_login',
+      'Dashboard',
+    ])
+    expect(filteredIds()).toEqual(['login', 'dashboard', 'dashboard-2'])
+  })
+
+  it('drops a group that was removed', () => {
+    const { addGroup, setGroupOrder, removeGroup } =
+      useGeneratorStore.getState()
+
+    addGroup('Checkout')
+    setGroupOrder(['Checkout', 'Login'])
+    removeGroup('Checkout')
+
+    expect(useGeneratorStore.getState().groupOrder).toEqual(['Login'])
+  })
+})
+
 describe('toggleExcludedRequest', () => {
   it('drops the excluded request from the filtered set and puts it back', () => {
     const { setRecording, setAllowlist, toggleExcludedRequest } =

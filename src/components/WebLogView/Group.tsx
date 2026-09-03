@@ -29,6 +29,8 @@ interface GroupProps {
    * stack of groups reads as separate blocks instead of one continuous list.
    */
   variant?: 'plain' | 'card'
+  /** Rendered at the start of the header, next to the collapse trigger. */
+  dragHandle?: React.ReactNode
   onUpdate?: (group: GroupType) => void
   onRemove?: (group: GroupType) => void
 }
@@ -39,6 +41,7 @@ export function Group({
   length,
   children,
   variant = 'plain',
+  dragHandle,
   onUpdate,
   onRemove,
 }: GroupProps) {
@@ -132,6 +135,7 @@ export function Group({
     <Box css={isCard && cardCss}>
       <Collapsible.Root defaultOpen>
         <Collapsible.Header ref={headerRef} css={isCard && cardHeaderCss}>
+          {dragHandle}
           {group.isEditing && (
             <Collapsible.Heading>
               <InlineForm onSubmit={handleSubmit(submit)}>

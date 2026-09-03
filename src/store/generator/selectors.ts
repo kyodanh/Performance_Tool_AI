@@ -2,6 +2,7 @@ import { DEFAULT_GROUP_NAME } from '@/constants'
 import { type GeneratorStore } from '@/store/generator'
 import { GeneratorFileData } from '@/types/generator'
 import { LoadProfileExecutorOptions, TestOptions } from '@/types/testOptions'
+import { sortByGroupOrder } from '@/utils/groups'
 import { isNonStaticAssetResponse } from '@/utils/staticAssets'
 import { requestKey } from '@/utils/thinkTime'
 import { exhaustive } from '@/utils/typescript'
@@ -41,6 +42,7 @@ export function selectFilteredRequests(
     | 'excludedRequests'
     | 'requestOverrides'
     | 'groupRenames'
+    | 'groupOrder'
   >
 ) {
   const excluded = new Set(state.excludedRequests)
@@ -68,7 +70,15 @@ export function selectFilteredRequests(
 
   // Manual requests skip the allowlist and static asset filters, they were
   // added on purpose so they always belong in the script.
-  return [...recordedRequests, ...state.manualRequests]
+  const requests = [...recordedRequests, ...state.manualRequests]
+
+  // Sorting here rather than in the view so the script, the exports and the
+  // request list all run the groups in the same order.
+  return sortByGroupOrder(
+    requests,
+    state.groupOrder,
+    (request) => request.group || DEFAULT_GROUP_NAME
+  )
 }
 
 export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
@@ -90,6 +100,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     excludedRequests,
     requestOverrides,
     groupRenames,
+    groupOrder,
     includeStaticAssets,
     scriptName,
     wizardUsed,
@@ -117,6 +128,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     excludedRequests,
     requestOverrides,
     groupRenames,
+    groupOrder,
     includeStaticAssets,
     scriptName,
     wizardUsed,

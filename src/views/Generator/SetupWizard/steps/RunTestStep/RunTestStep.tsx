@@ -337,6 +337,8 @@ function WhatWillRun({
         // count.
         requestOverrides: {},
         groupRenames: {},
+        // Only the count is needed here, and reordering groups can't change it.
+        groupOrder: [],
         includeStaticAssets,
         allowlist,
       }).length,

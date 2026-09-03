@@ -34,3 +34,29 @@ describe('wizardUsed round-trip', () => {
     )
   })
 })
+
+describe('groupOrder round-trip', () => {
+  it('starts out empty', () => {
+    expect(
+      selectGeneratorData(useGeneratorStore.getState()).groupOrder
+    ).toEqual([])
+  })
+
+  it('saves the order the groups were dragged into', () => {
+    useGeneratorStore.getState().setGroupOrder(['Login', 'Dashboard'])
+
+    expect(
+      selectGeneratorData(useGeneratorStore.getState()).groupOrder
+    ).toEqual(['Login', 'Dashboard'])
+  })
+
+  it('survives loading and saving a generator file', () => {
+    useGeneratorStore
+      .getState()
+      .setGeneratorFile(createGeneratorData({ groupOrder: ['Login'] }))
+
+    expect(
+      selectGeneratorData(useGeneratorStore.getState()).groupOrder
+    ).toEqual(['Login'])
+  })
+})

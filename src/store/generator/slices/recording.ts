@@ -16,6 +16,9 @@ interface State {
   // Groups created by hand that hold no requests yet. Only a place to move
   // requests into, so they are not saved with the generator file.
   emptyGroups: string[]
+  // The order groups run in, by name. Set by dragging groups in the request
+  // list; groups missing from it keep the order their requests give them.
+  groupOrder: string[]
   // Recorded requests removed from the test, by `requestKey`. Kept as keys
   // rather than ids so the removal survives reloading the recording.
   excludedRequests: string[]
@@ -50,6 +53,7 @@ interface Actions {
   addGroup: (name: string) => void
   renameGroup: (from: string, to: string) => void
   removeGroup: (name: string) => void
+  setGroupOrder: (order: string[]) => void
   resetRecording: () => void
   setAllowlist: (value: string[]) => void
   setIncludeStaticAssets: (value: boolean) => void
@@ -75,6 +79,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   requests: [],
   manualRequests: [],
   emptyGroups: [],
+  groupOrder: [],
   excludedRequests: [],
   requestOverrides: {},
   groupRenames: {},
@@ -194,15 +199,24 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
       state.emptyGroups = state.emptyGroups.map((group) =>
         group === from ? to : group
       )
+      state.groupOrder = state.groupOrder.map((group) =>
+        group === from ? to : group
+      )
     }),
   removeGroup: (name: string) =>
     set((state) => {
       state.emptyGroups = state.emptyGroups.filter((group) => group !== name)
+      state.groupOrder = state.groupOrder.filter((group) => group !== name)
+    }),
+  setGroupOrder: (order: string[]) =>
+    set((state) => {
+      state.groupOrder = order
     }),
   resetRecording: () =>
     set((state) => {
       state.requests = []
       state.emptyGroups = []
+      state.groupOrder = []
       state.allowlist = []
       state.excludedRequests = []
       state.requestOverrides = {}

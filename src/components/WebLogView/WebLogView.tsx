@@ -1,3 +1,19 @@
+import {
+  closestCenter,
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import { Box } from '@radix-ui/themes'
 import { ComponentType, memo, useMemo } from 'react'
 import { useDeepCompareEffect } from 'react-use'
@@ -7,6 +23,7 @@ import { Group as GroupType, ProxyDataWithMatches } from '@/types'
 
 import { Group } from './Group'
 import { Row, RowProps } from './Row'
+import { SortableGroup } from './SortableGroup'
 
 interface WebLogViewProps {
   requests: ProxyDataWithMatches[]
@@ -15,6 +32,8 @@ interface WebLogViewProps {
   onSelectRequest: (data: ProxyDataWithMatches | null) => void
   onUpdateGroup?: (group: GroupType) => void
   onRemoveGroup?: (group: GroupType) => void
+  /** Enables dragging groups into another order. Receives the new order. */
+  onReorderGroups?: (order: string[]) => void
   filter?: string
   groupVariant?: 'plain' | 'card'
   RowComponent?: ComponentType<RowProps>
@@ -29,11 +48,19 @@ export const WebLogView = memo(function WebLogView({
   onSelectRequest,
   onUpdateGroup,
   onRemoveGroup,
+  onReorderGroups,
   filter,
   groupVariant = 'plain',
   RowComponent = Row,
   ListComponent = RequestList,
 }: WebLogViewProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
   const selectedRequest = useMemo(
     () => requests.find((data) => data.id === selectedRequestId),
     [requests, selectedRequestId]
@@ -60,6 +87,48 @@ export const WebLogView = memo(function WebLogView({
       }),
     [requests, groups]
   )
+  const groupIds = useMemo(
+    () => grouped.map((item) => item.group.id),
+    [grouped]
+  )
+
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) {
+      return
+    }
+
+    const from = groupIds.indexOf(String(active.id))
+    const to = groupIds.indexOf(String(over.id))
+
+    if (from === -1 || to === -1) {
+      return
+    }
+
+    onReorderGroups?.(arrayMove(groupIds, from, to))
+  }
+
+  const GroupComponent = onReorderGroups ? SortableGroup : Group
+
+  const content = grouped.map((item) => (
+    <GroupComponent
+      key={item.group.id}
+      group={item.group}
+      groups={groups}
+      length={item.requests.length}
+      variant={groupVariant}
+      onUpdate={onUpdateGroup}
+      onRemove={onRemoveGroup}
+    >
+      <ListComponent
+        requests={item.requests}
+        selectedRequestId={selectedRequestId}
+        onSelectRequest={onSelectRequest}
+        filter={filter}
+        RowComponent={RowComponent}
+      />
+    </GroupComponent>
+  ))
+
   return (
     <Box
       mb="2"
@@ -71,25 +140,23 @@ export const WebLogView = memo(function WebLogView({
         }
       }
     >
-      {grouped.map((item) => (
-        <Group
-          key={item.group.id}
-          group={item.group}
-          groups={groups}
-          length={item.requests.length}
-          variant={groupVariant}
-          onUpdate={onUpdateGroup}
-          onRemove={onRemoveGroup}
+      {onReorderGroups ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleDragEnd}
         >
-          <ListComponent
-            requests={item.requests}
-            selectedRequestId={selectedRequestId}
-            onSelectRequest={onSelectRequest}
-            filter={filter}
-            RowComponent={RowComponent}
-          />
-        </Group>
-      ))}
+          <SortableContext
+            items={groupIds}
+            strategy={verticalListSortingStrategy}
+          >
+            {content}
+          </SortableContext>
+        </DndContext>
+      ) : (
+        content
+      )}
     </Box>
   )
 })

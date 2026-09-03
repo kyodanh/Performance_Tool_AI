@@ -16,6 +16,7 @@ export function createNewGeneratorFile(
     excludedRequests: [],
     requestOverrides: {},
     groupRenames: {},
+    groupOrder: [],
     options: {
       loadProfile: {
         executor: 'ramping-vus',

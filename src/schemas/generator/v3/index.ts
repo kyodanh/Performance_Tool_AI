@@ -23,6 +23,9 @@ export const GeneratorFileDataSchema = z.object({
   // name it shows under. Kept as a mapping because reloading the recording
   // brings the original names back.
   groupRenames: z.record(z.string(), z.string()).default({}),
+  // The order groups run in, by name. Groups left out of the list follow the
+  // order their requests have in the recording.
+  groupOrder: z.string().array().default([]),
   includeStaticAssets: z.boolean(),
   scriptName: z.string().default('my-script.js'),
   // True when the test setup wizard configured this generator, either at
