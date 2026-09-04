@@ -48,3 +48,43 @@ export function formatTiming(timing: Timing): string {
     ? `${timing.value ?? 0}s`
     : `${timing.value.min}-${timing.value.max}s`
 }
+
+/**
+ * Key used to remove a single recorded request. A recording usually repeats
+ * identical requests, so `requestKey` alone would remove every twin along with
+ * the row the user clicked. The occurrence index is stable across recording
+ * reloads, unlike the request id.
+ */
+export function exclusionKeys(
+  requests: Pick<ProxyData, 'request'>[]
+): string[] {
+  const seen = new Map<string, number>()
+
+  return requests.map((request) => {
+    const key = requestKey(request)
+    const occurrence = seen.get(key) ?? 0
+
+    seen.set(key, occurrence + 1)
+
+    return `${key}#${occurrence}`
+  })
+}
+
+/** The `exclusionKeys` entry for one recorded request, by id. */
+export function exclusionKeyById(
+  requests: ProxyData[],
+  id: string
+): string | null {
+  const index = requests.findIndex((request) => request.id === id)
+
+  if (index === -1) {
+    return null
+  }
+
+  const key = requestKey(requests[index]!)
+  const occurrence = requests
+    .slice(0, index)
+    .filter((request) => requestKey(request) === key).length
+
+  return `${key}#${occurrence}`
+}

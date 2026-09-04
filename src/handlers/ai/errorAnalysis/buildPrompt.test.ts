@@ -93,6 +93,7 @@ describe('buildFailureAnalysisPrompt', () => {
         url: 'https://api.example.com/checkout',
         group: '::checkout',
         count: 12,
+        dataRows: ['users=3'],
       },
     ]
 

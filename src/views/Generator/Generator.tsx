@@ -12,9 +12,11 @@ import { HttpRequestDetails } from '@/components/WebLogView/HttpRequestDetails'
 import { GeneratorContent } from '@/handlers/fs/types'
 import { useSaveFile } from '@/hooks/useSaveFile'
 import { useScriptPreview } from '@/hooks/useScriptPreview'
+import { useUndoRedoHandler } from '@/hooks/useUndoRedo'
 import { useUnsavedChangesPrompt } from '@/hooks/useUnsavedChangesPrompt'
 import { getViewPath } from '@/routeMap'
 import { useGeneratorStore, selectGeneratorData } from '@/store/generator'
+import { useGeneratorHistory } from '@/store/generator/hooks/useGeneratorHistory'
 import { useToast } from '@/store/ui/useToast'
 import { StudioFile, ProxyData } from '@/types'
 import { GeneratorFileData } from '@/types/generator'
@@ -136,6 +138,10 @@ export function Generator({ file, content }: GeneratorProps) {
   useEffect(() => {
     setGeneratorFile(content.data)
   }, [content.data, setGeneratorFile])
+
+  // Declared after the effect above so the load itself is not undoable.
+  const handleEditAction = useGeneratorHistory(content.data)
+  useUndoRedoHandler(handleEditAction)
 
   useEffect(() => {
     if (recording !== undefined) {

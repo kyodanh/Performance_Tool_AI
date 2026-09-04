@@ -7,3 +7,19 @@ export function validateExternalUrl(url: string): string {
   }
   return url
 }
+
+/**
+ * Path + query exactly as written, unlike `new URL().pathname` which
+ * percent-encodes template markers (`/contacts/{token}` → `/contacts/%7Btoken%7D`).
+ */
+export function rawPath(url: string): string {
+  const start = url.indexOf('/', url.indexOf('://') + 3)
+
+  if (start === -1) {
+    return '/'
+  }
+
+  const hash = url.indexOf('#', start)
+
+  return hash === -1 ? url.slice(start) : url.slice(start, hash)
+}

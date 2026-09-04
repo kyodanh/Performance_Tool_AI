@@ -15,7 +15,7 @@ import { PopoverDialog } from '@/components/PopoverDialogs'
 import { useGeneratorStore } from '@/store/generator'
 import { useToast } from '@/store/ui/useToast'
 import { ProxyData } from '@/types'
-import { requestKey } from '@/utils/thinkTime'
+import { exclusionKeyById, requestKey } from '@/utils/thinkTime'
 
 import { ApiRequestDialog, useGroupNames } from '../../ApiRequest'
 
@@ -66,6 +66,11 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
     store.requests.find((request) => request.id === data.id)
   )
   const overrideKey = recorded ? requestKey(recorded) : null
+  // Removal is per occurrence, so it cannot share `key` - a recording often
+  // repeats the same request and only the clicked row should go.
+  const excludedKey = useGeneratorStore((store) =>
+    exclusionKeyById(store.requests, data.id)
+  )
   const override = useGeneratorStore((store) =>
     overrideKey ? store.requestOverrides[overrideKey] : undefined
   )
@@ -116,11 +121,18 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
       return
     }
 
-    toggleExcludedRequest(key)
+    if (excludedKey === null) {
+      return
+    }
+
+    toggleExcludedRequest(excludedKey)
     showToast({
       title: 'Request removed from the test',
       action: (
-        <Button variant="ghost" onClick={() => toggleExcludedRequest(key)}>
+        <Button
+          variant="ghost"
+          onClick={() => toggleExcludedRequest(excludedKey)}
+        >
           Undo
         </Button>
       ),

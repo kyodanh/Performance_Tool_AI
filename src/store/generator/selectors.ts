@@ -4,7 +4,7 @@ import { GeneratorFileData } from '@/types/generator'
 import { LoadProfileExecutorOptions, TestOptions } from '@/types/testOptions'
 import { sortByGroupOrder } from '@/utils/groups'
 import { isNonStaticAssetResponse } from '@/utils/staticAssets'
-import { requestKey } from '@/utils/thinkTime'
+import { exclusionKeys, requestKey } from '@/utils/thinkTime'
 import { exhaustive } from '@/utils/typescript'
 
 export function selectRuleById(state: GeneratorStore, id?: string) {
@@ -46,10 +46,14 @@ export function selectFilteredRequests(
   >
 ) {
   const excluded = new Set(state.excludedRequests)
+  const keys = exclusionKeys(state.requests)
 
-  const allowedRequests = state.requests.filter((request) => {
+  const allowedRequests = state.requests.filter((request, index) => {
     return (
       state.allowlist.includes(request.request.host) &&
+      !excluded.has(keys[index]!) &&
+      // Generators saved before exclusions were per occurrence hold a bare
+      // `requestKey`, which still removes every identical request.
       !excluded.has(requestKey(request))
     )
   })

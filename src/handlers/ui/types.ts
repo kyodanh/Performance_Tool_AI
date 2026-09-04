@@ -60,12 +60,17 @@ export enum UIHandler {
   Toast = 'ui:toast',
   SetMenuState = 'ui:set-menu-state',
   RequestSave = 'ui:request-save',
+  RequestUndo = 'ui:request-undo',
+  NativeEdit = 'ui:native-edit',
   ExportReport = 'ui:export-report',
   ListResults = 'ui:list-results',
   ReadResult = 'ui:read-result',
   SaveResult = 'ui:save-result',
   DeleteResults = 'ui:delete-results',
 }
+
+/** Edit ▸ Undo / Redo, which the view handles rather than the menu. */
+export type EditAction = 'undo' | 'redo'
 
 export type MenuItemTuple = ['save', 'saveAs', 'exportScript']
 export type MenuItem = MenuItemTuple[number]

@@ -14,6 +14,7 @@ import {
   CorrelationState,
   CorrelationRuleInstance,
   HeaderNameSelector,
+  ExtractorSelector,
 } from '@/types/rules'
 import { exhaustive } from '@/utils/typescript'
 
@@ -160,13 +161,31 @@ function applyRule({
             `correlation_vars['correlation_${generatedUniqueId}']`,
             `correlation_vars['${correlationVariableName(rule, generatedUniqueId)}']`
           ),
-          correlationVariableName(rule, generatedUniqueId)
+          correlationVariableName(rule, generatedUniqueId),
+          rule.extractor.selector,
+          requestSnippetSchema.data
         ),
       ],
     }
   }
 
   return snippetSchemaReturnValue
+}
+
+/** Where the value was meant to come from, in the rule's own terms. */
+const describeExtractor = (selector: ExtractorSelector) => {
+  switch (selector.type) {
+    case 'json':
+      return `JSON path '${selector.path}' in the response body`
+    case 'regex':
+      return `regex /${selector.regex}/ against the response ${selector.from}`
+    case 'begin-end':
+      return `text between '${selector.begin}' and '${selector.end}' in the response ${selector.from}`
+    case 'header-name':
+      return `response header '${selector.name}'`
+    default:
+      return exhaustive(selector)
+  }
 }
 
 // ponytail: extraction runs against live responses, which may differ from the
@@ -178,17 +197,40 @@ function applyRule({
 // the string "undefined" into every request that references it, so one failed
 // extraction turns into a run of 401s that look like real API failures and
 // skew the response-time metrics. Failing here points at the actual cause.
-const wrapExtractionSnippet = (snippet: string, variableName: string) => {
+//
+// The message carries what the rule expected (selector + recorded request)
+// alongside what the live response actually was, since the stack trace only
+// ever points at a line of generated script.
+const wrapExtractionSnippet = (
+  snippet: string,
+  variableName: string,
+  selector: ExtractorSelector,
+  data: ProxyData
+) => {
   // The name is sanitized to [A-Za-z0-9_] so it is safe to quote inline.
   const target = `correlation_vars['${variableName}']`
 
+  const expected = `Expected ${describeExtractor(selector)}`
+  const source = `Source request: ${data.request.method} ${data.request.url}${
+    data.response ? ` (recorded ${data.response.statusCode})` : ''
+  }`
+
   return `
+    var extractionError = undefined
     try {${snippet}
     } catch (error) {
-      console.warn(${JSON.stringify(`Failed to extract correlation variable '${variableName}': `)} + error)
+      extractionError = error
     }
     if (${target} === undefined || ${target} === null) {
-      throw new Error(${JSON.stringify(`Correlation variable '${variableName}' was not extracted, stopping the iteration to avoid sending "undefined" downstream`)})
+      throw new Error(
+        ${JSON.stringify(`Correlation variable '${variableName}' was not extracted from the live response.`)} +
+        ${JSON.stringify(`\n  ${expected}`)} +
+        ${JSON.stringify(`\n  ${source}`)} +
+        '\\n  Live response: status ' + resp.status + ', ' + String(resp.body || '').length + ' bytes' +
+        '\\n  Body (first 200 chars): ' + String(resp.body || '').slice(0, 200) +
+        (extractionError ? '\\n  Extractor threw: ' + extractionError : '') +
+        ${JSON.stringify('\n  Iteration stopped to avoid sending "undefined" downstream. Fix the correlation rule, or check whether the source request above actually succeeded under load.')}
+      )
     }`
 }
 
@@ -625,10 +667,22 @@ if (import.meta.vitest) {
 
   // Whitespace-stripped extraction snippet for a given variable + expression,
   // so the assertions below don't repeat the guard emitted after every extractor.
-  const expectedExtraction = (name: string, expression: string) =>
+  const jsonSelector: ExtractorSelector = {
+    type: 'json',
+    from: 'body',
+    path: 'user_id',
+  }
+
+  const expectedExtraction = (
+    name: string,
+    expression: string,
+    data: ProxyData = createProxyData()
+  ) =>
     wrapExtractionSnippet(
       `correlation_vars['${name}'] = ${expression}`,
-      name
+      name,
+      jsonSelector,
+      data
     ).replace(/\s/g, '')
 
   const generateResponse = (content: string): Response => {
@@ -1032,7 +1086,9 @@ correlation_vars['correlation_1'] = resp.json().user_id`
       expectedExtraction('correlation_0', 'resp.json().user_id')
     )
     expect(requestSnippets[1]?.after[0]?.replace(/\s/g, '')).toBe(
-      expectedExtraction('correlation_0', 'resp.json().user_id')
+      // The guard names the request it extracted from, so the second snippet
+      // carries the second recording's URL rather than the first's.
+      expectedExtraction('correlation_0', 'resp.json().user_id', recording[1])
     )
     expect(ruleInstance.state.extractedValue).toBe('777')
   })

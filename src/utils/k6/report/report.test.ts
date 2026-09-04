@@ -93,6 +93,7 @@ function makeStats(overrides: Partial<RunStats> = {}): RunStats {
         url: 'https://example.test/api',
         group: '',
         count: 1,
+        dataRows: [],
       },
     ],
     ...overrides,

@@ -34,6 +34,7 @@ import {
   generateImports,
   generateParameterizationCustomCode,
   generateRequestSnippetsFromSchemas,
+  generateDataRowTag,
   isBinaryContent,
 } from './codegen'
 
@@ -334,6 +335,23 @@ describe('Code generation', () => {
     })
   })
 
+  describe('generateDataRowTag', () => {
+    it('tags the row each data file contributes to the iteration', () => {
+      expect(
+        generateDataRowTag([
+          { name: '/project/Data/users.csv' },
+          { name: '/project/Data/products.json' },
+        ])
+      ).toBe(
+        "execution.vu.tags['data_row'] = 'users=' + (execution.scenario.iterationInTest % FILES['users'].length) + ';' + 'products=' + (execution.scenario.iterationInTest % FILES['products'].length)"
+      )
+    })
+
+    it('emits nothing without data files, since there is no row to name', () => {
+      expect(generateDataRowTag([])).toBe('')
+    })
+  })
+
   describe('generateRequestSnippetsFromSchemas', () => {
     it('should generate request snippets', () => {
       const schema = {
@@ -509,6 +527,7 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/foo\`
           resp = http.request('POST', url, null, params)
 
+          var extractionError = undefined
           try {
             regex = new RegExp("project_id=(.*)$");
             match = resp.headers["Project"].match(regex);
@@ -516,19 +535,36 @@ describe('Code generation', () => {
               correlation_vars["correlation_0"] = match[1];
             }
           } catch (error) {
-            console.warn("Failed to extract correlation variable 'correlation_0': " + error)
+            extractionError = error
           }
           if (correlation_vars['correlation_0'] === undefined || correlation_vars['correlation_0'] === null) {
-            throw new Error("Correlation variable 'correlation_0' was not extracted, stopping the iteration to avoid sending \\"undefined\\" downstream")
+            throw new Error(
+              "Correlation variable 'correlation_0' was not extracted from the live response." +
+              "\\n  Expected regex /project_id=(.*)$/ against the response headers" +
+              "\\n  Source request: POST http://test.k6.io/api/v1/foo (recorded 200)" +
+              '\\n  Live response: status ' + resp.status + ', ' + String(resp.body || '').length + ' bytes' +
+              '\\n  Body (first 200 chars): ' + String(resp.body || '').slice(0, 200) +
+              (extractionError ? '\\n  Extractor threw: ' + extractionError : '') +
+              '\\n  Iteration stopped to avoid sending "undefined" downstream. Fix the correlation rule, or check whether the source request above actually succeeded under load.'
+            )
           }
 
+          var extractionError = undefined
           try {
             correlation_vars['correlation_1'] = resp.json().is_admin
           } catch (error) {
-            console.warn("Failed to extract correlation variable 'correlation_1': " + error)
+            extractionError = error
           }
           if (correlation_vars['correlation_1'] === undefined || correlation_vars['correlation_1'] === null) {
-            throw new Error("Correlation variable 'correlation_1' was not extracted, stopping the iteration to avoid sending \\"undefined\\" downstream")
+            throw new Error(
+              "Correlation variable 'correlation_1' was not extracted from the live response." +
+              "\\n  Expected JSON path 'is_admin' in the response body" +
+              "\\n  Source request: POST http://test.k6.io/api/v1/foo (recorded 200)" +
+              '\\n  Live response: status ' + resp.status + ', ' + String(resp.body || '').length + ' bytes' +
+              '\\n  Body (first 200 chars): ' + String(resp.body || '').slice(0, 200) +
+              (extractionError ? '\\n  Extractor threw: ' + extractionError : '') +
+              '\\n  Iteration stopped to avoid sending "undefined" downstream. Fix the correlation rule, or check whether the source request above actually succeeded under load.'
+            )
           }
 
           params = {
@@ -539,13 +575,22 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/login?project_id=\${correlation_vars['correlation_0']}\`
           resp = http.request('POST', url, null, params)
 
+          var extractionError = undefined
           try {
             correlation_vars['correlation_2'] = resp.json().user_id
           } catch (error) {
-            console.warn("Failed to extract correlation variable 'correlation_2': " + error)
+            extractionError = error
           }
           if (correlation_vars['correlation_2'] === undefined || correlation_vars['correlation_2'] === null) {
-            throw new Error("Correlation variable 'correlation_2' was not extracted, stopping the iteration to avoid sending \\"undefined\\" downstream")
+            throw new Error(
+              "Correlation variable 'correlation_2' was not extracted from the live response." +
+              "\\n  Expected JSON path 'user_id' in the response body" +
+              "\\n  Source request: POST http://test.k6.io/api/v1/login?project_id=555 (recorded 200)" +
+              '\\n  Live response: status ' + resp.status + ', ' + String(resp.body || '').length + ' bytes' +
+              '\\n  Body (first 200 chars): ' + String(resp.body || '').slice(0, 200) +
+              (extractionError ? '\\n  Extractor threw: ' + extractionError : '') +
+              '\\n  Iteration stopped to avoid sending "undefined" downstream. Fix the correlation rule, or check whether the source request above actually succeeded under load.'
+            )
           }
         })
 

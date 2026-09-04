@@ -183,6 +183,7 @@ describe('RunStatsCollector', () => {
         url: 'http://a/',
         group: '',
         count: 2,
+        dataRows: [],
       },
       {
         code: '1101',
@@ -190,6 +191,7 @@ describe('RunStatsCollector', () => {
         url: 'http://b/',
         group: '',
         count: 1,
+        dataRows: [],
       },
     ])
     expect(stats.failedRequests).toBe(1)
@@ -262,8 +264,43 @@ describe('RunStatsCollector', () => {
         url: 'http://b/',
         group: '3_Trans_Broken',
         count: 1,
+        dataRows: [],
       },
     ])
+  })
+
+  it('collects the data-file rows an error hit, without splitting the group', () => {
+    const collector = new RunStatsCollector()
+
+    // `extra_tags` (last but one column) is where k6 puts the VU tags that
+    // `generateDataRowTag` sets — same error, three different rows.
+    const failedRow = (row: number) =>
+      `http_reqs,100,1.000000,,dial: connection refused,1212,false,,GET,http://a/,,default,,0,,,http://a/,data_row=users=${row},`
+
+    collector.push(failedRow(0))
+    collector.push(failedRow(1))
+    collector.push(failedRow(1))
+
+    expect(collector.snapshot().errors).toEqual([
+      {
+        code: '1212',
+        message: 'dial: connection refused',
+        url: 'http://a/',
+        group: '',
+        count: 3,
+        dataRows: ['users=0', 'users=1'],
+      },
+    ])
+  })
+
+  it('ignores other tags sharing the extra_tags field', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'http_reqs,100,1.000000,,dial: connection refused,1212,false,,GET,http://a/,,default,,0,,,http://a/,other=1&data_row=users=2&more=3,'
+    )
+
+    expect(collector.snapshot().errors[0]?.dataRows).toEqual(['users=2'])
   })
 
   it('reports group duration per transaction', () => {
@@ -305,6 +342,22 @@ describe('RunStatsCollector', () => {
         last: 275.958875,
         series: [{ time: 101, value: 275.958875, count: 1 }],
       },
+    ])
+  })
+
+  it('keeps transactions in execution order, not alphabetical', () => {
+    const collector = new RunStatsCollector()
+
+    for (const group of ['Trans_Login', 'Trans_TrangChu', 'Trans_ThemMoi']) {
+      collector.push(
+        `group_duration,100,100.000000,,,,,::${group},,,,default,,,,,,,`
+      )
+    }
+
+    expect(collector.snapshot().groups.map((group) => group.name)).toEqual([
+      'Trans_Login',
+      'Trans_TrangChu',
+      'Trans_ThemMoi',
     ])
   })
 

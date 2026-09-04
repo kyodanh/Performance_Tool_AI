@@ -13,8 +13,36 @@ import { AiAnalysis } from './AiAnalysis'
 import { ChecksSection } from './ChecksSection'
 import { checksFromStats } from './ChecksSection.utils'
 import { FailedSection, failureCount, hasFailures } from './FailedSection'
+import { describeCode, describeError, formatCount } from './format'
 import { LogsSection, useConsoleFilter } from './LogsSection'
 import { MetricsSection } from './MetricsSection'
+
+/**
+ * The CSV stream carries request errors that k6 never prints to stdout, so
+ * they would only ever show in the Failed tab. Mirror them into the log as
+ * error entries — grouped, so one line per code + message + request.
+ */
+function errorLogs(stats: RunStats | null): LogEntry[] {
+  const lastBucket = stats?.buckets.at(-1)?.time
+  const time = new Date(
+    lastBucket !== undefined ? lastBucket * 1000 : Date.now()
+  ).toISOString()
+
+  return (stats?.errors ?? []).map((error) => ({
+    level: 'error',
+    process: 'k6',
+    time,
+    msg: [
+      `[${describeCode(error)}] ${describeError(error)}`,
+      error.group && `· ${error.group}`,
+      error.url && `· ${error.url}`,
+      `(${formatCount(error.count)} occurrence(s))`,
+      error.dataRows.length > 0 && `· data rows: ${error.dataRows.join(', ')}`,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  }))
+}
 
 /**
  * The row starts below the panel's resize separator rather than flush against
@@ -131,6 +159,8 @@ export function ExecutionDetails({
     [checks, stats]
   )
 
+  const allLogs = useMemo(() => [...logs, ...errorLogs(stats)], [logs, stats])
+
   const consoleFilter = useConsoleFilter({
     browser: false,
   })
@@ -165,7 +195,7 @@ export function ExecutionDetails({
     >
       <div css={toolbarStyles}>
         <Tabs.List size="2" css={tabPillStyles}>
-          <Tabs.Trigger value="logs">Logs ({logs.length})</Tabs.Trigger>
+          <Tabs.Trigger value="logs">Logs ({allLogs.length})</Tabs.Trigger>
           <Tabs.Trigger value="checks" disabled={resolvedChecks.length === 0}>
             Checks ({resolvedChecks.length})
           </Tabs.Trigger>
@@ -201,7 +231,7 @@ export function ExecutionDetails({
           min-height: 0;
         `}
       >
-        <LogsSection {...consoleFilter} autoScroll={isRunning} logs={logs} />
+        <LogsSection {...consoleFilter} autoScroll={isRunning} logs={allLogs} />
       </Tabs.Content>
       {script !== undefined && (
         <Tabs.Content

@@ -7,6 +7,7 @@ import { RunStats } from '@/utils/k6/stats'
 import { createListener } from '../utils'
 
 import {
+  EditAction,
   ExportReportPayload,
   GetFilesResponse,
   MenuItem,
@@ -110,6 +111,15 @@ export function onRemoveFile(callback: (file: StudioFile) => void) {
 
 export function onToast(callback: (toast: AddToastPayload) => void) {
   return createListener(UIHandler.Toast, callback)
+}
+
+export function onRequestUndo(callback: (action: EditAction) => void) {
+  return createListener(UIHandler.RequestUndo, callback)
+}
+
+/** Runs the built-in text undo/redo, for when no view claims the action. */
+export function nativeEdit(action: EditAction) {
+  ipcRenderer.send(UIHandler.NativeEdit, action)
 }
 
 export function onRequestSave(

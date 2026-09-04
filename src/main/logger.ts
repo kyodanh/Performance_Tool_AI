@@ -111,5 +111,20 @@ export async function getLogContent() {
 async function onLogChange() {
   const content = await getLogContent()
   const mainWindow = BrowserWindow.getAllWindows()[0]
-  mainWindow?.webContents.send('log:change', content)
+
+  if (!mainWindow) {
+    return
+  }
+
+  try {
+    mainWindow.webContents.send('log:change', content)
+  } catch {
+    // ponytail: the log file keeps changing while the app tears down — quitting
+    // logs the renderer's own exit — and `send` throws once the render frame is
+    // disposed ("Render frame was disposed before WebFrameMain could be
+    // accessed"). The window is not destroyed at that point, and every way of
+    // asking about the frame (`webContents.mainFrame`) throws the same way, so
+    // catching the send is the only guard. Deliberately silent: logging here
+    // would write to the file this watcher watches.
+  }
 }

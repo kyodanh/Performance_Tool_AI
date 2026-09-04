@@ -4,6 +4,7 @@ import { Method, ProxyData, Request, Response } from '@/types'
 import type { HarContent, HarEntry } from '@/types/recording'
 
 import { safeAtob } from './format'
+import { rawPath } from './url'
 
 export function harToProxyData(har: Recording): ProxyData[] {
   return (har.log.entries ?? []).map((entry) => {
@@ -58,7 +59,7 @@ function harEntryToRequest({
         : 0,
     scheme: url.protocol.replace(':', ''),
     host: url.hostname,
-    path: url.pathname + url.search,
+    path: rawPath(request.url),
     contentLength: content.length,
   }
 }

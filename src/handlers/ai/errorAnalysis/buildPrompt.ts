@@ -83,7 +83,7 @@ export function buildFailureAnalysisPrompt({
       ? topErrors
           .map(
             (error) =>
-              `- [${error.code || 'no code'}] ${error.message || '(no message)'} — ${error.url}${error.group ? ` (group: ${error.group})` : ''} — ${error.count}x`
+              `- [${error.code || 'no code'}] ${error.message || '(no message)'} — ${error.url}${error.group ? ` (group: ${error.group})` : ''} — ${error.count}x${error.dataRows.length > 0 ? ` — data rows: ${error.dataRows.join(', ')}` : ''}`
           )
           .join('\n')
       : '(none)',

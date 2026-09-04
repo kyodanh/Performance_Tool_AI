@@ -10,7 +10,15 @@ import {
 } from './format'
 
 function error(partial: Partial<RunErrorGroup>): RunErrorGroup {
-  return { code: '', message: '', url: '', group: '', count: 1, ...partial }
+  return {
+    code: '',
+    message: '',
+    url: '',
+    group: '',
+    count: 1,
+    dataRows: [],
+    ...partial,
+  }
 }
 
 describe('describeCode', () => {

@@ -27,7 +27,7 @@ import {
   readRunResult,
   saveRunResult,
 } from './results'
-import { ExportReportPayload, MenuState, UIHandler } from './types'
+import { EditAction, ExportReportPayload, MenuState, UIHandler } from './types'
 
 export function initialize() {
   ipcMain.on(UIHandler.ToggleTheme, () => {
@@ -47,6 +47,15 @@ export function initialize() {
     }
 
     return false
+  })
+
+  ipcMain.on(UIHandler.NativeEdit, (event, action: EditAction) => {
+    if (action === 'undo') {
+      event.sender.undo()
+      return
+    }
+
+    event.sender.redo()
   })
 
   ipcMain.handle(

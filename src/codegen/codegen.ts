@@ -53,6 +53,7 @@ export function generateScript({
     ${generateGetUniqueItemFunction(generator.testData.files)}
 
     export default function() {
+      ${generateDataRowTag(generator.testData.files)}
       ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous, generator.testData.variables)}
     }
   `
@@ -147,6 +148,32 @@ export function generateGetUniqueItemFunction(files: DataFile[]) {
     function getUniqueItem(array){
       return array[execution.scenario.iterationInTest % array.length]
     }`
+}
+
+/**
+ * Tags every metric the VU emits with the data-file row this iteration used.
+ * `getUniqueItem` picks the row by `iterationInTest`, so repeating that
+ * expression names the row that fed the request — k6 puts VU tags in the CSV
+ * `extra_tags` column, which is where the errors table reads them back from.
+ *
+ * The row index rather than the row's values: the tag ends up in the metric
+ * stream, the run report and the AI analysis payload, and a data file holds
+ * credentials as often as not.
+ */
+export function generateDataRowTag(files: DataFile[]): string {
+  if (files.length === 0) {
+    return ''
+  }
+
+  const rows = files
+    .map(({ name }) => {
+      const displayName = path.name(name)
+
+      return `'${displayName}=' + (execution.scenario.iterationInTest % FILES['${displayName}'].length)`
+    })
+    .join(" + ';' + ")
+
+  return `execution.vu.tags['data_row'] = ${rows}`
 }
 
 export function generateVUCode(

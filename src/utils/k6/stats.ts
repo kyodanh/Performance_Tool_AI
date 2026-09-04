@@ -21,6 +21,7 @@ const COLUMN = {
   name: 9,
   status: 13,
   url: 16,
+  extraTags: 17,
 } as const
 
 // ponytail: keeps ~5 minutes of history at one bucket per second. Bump (or
@@ -33,6 +34,26 @@ const MAX_ERRORS = 100
 // ponytail: same guard for scripts hitting URLs with unbounded path segments.
 const MAX_REQUESTS = 200
 
+// ponytail: enough distinct rows to see the pattern without one broken run
+// growing the list unbounded.
+const MAX_DATA_ROWS = 5
+
+/** The tag `generateDataRowTag` sets, naming the data-file row of the iteration. */
+const DATA_ROW_TAG = 'data_row='
+
+/**
+ * k6 joins a sample's non-system tags into one `extra_tags` field as
+ * `key=value&key=value`. Values are not escaped, so a `&` inside another tag
+ * would split wrong — acceptable here, since `data_row` holds `file=index`.
+ */
+function dataRowTag(extraTags: string) {
+  const tag = extraTags
+    .split('&')
+    .find((entry) => entry.startsWith(DATA_ROW_TAG))
+
+  return tag?.slice(DATA_ROW_TAG.length) ?? ''
+}
+
 export interface RunErrorGroup {
   code: string
   message: string
@@ -40,6 +61,11 @@ export interface RunErrorGroup {
   /** The `group()` the failing request ran in, empty outside any group. */
   group: string
   count: number
+  /**
+   * Data-file rows seen failing, as `file=index` — the first
+   * `MAX_DATA_ROWS` distinct ones, empty when the script uses no data file.
+   */
+  dataRows: string[]
 }
 
 export interface StatsBucket {
@@ -565,8 +591,11 @@ export class RunStatsCollector {
         throughput: bucket.throughput,
       }))
 
-    const groups = [...this.#groups.entries()]
-      .map<GroupStats>(([name, group]) => {
+    // ponytail: insertion order is first-touch order, which follows the
+    // script's own group() sequence — keep it so the table reads like the
+    // controller. Nested groups close before their parent, so they land first.
+    const groups = [...this.#groups.entries()].map<GroupStats>(
+      ([name, group]) => {
         const avg = group.count ? group.sum / group.count : 0
 
         return {
@@ -590,8 +619,8 @@ export class RunStatsCollector {
               count: bucket.count,
             })),
         }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name))
+      }
+    )
 
     const requestStats = [...this.#requestStats.values()]
       .map<RequestStats>((request) => {
@@ -752,11 +781,22 @@ export class RunStatsCollector {
 
     const url = columns[COLUMN.name] || columns[COLUMN.url] || ''
     const group = groupName(columns[COLUMN.group] ?? '')
+    const dataRow = dataRowTag(columns[COLUMN.extraTags] ?? '')
     const key = `${code}|${message}|${url}|${group}`
     const existing = this.#errors.get(key)
 
     if (existing) {
       existing.count += 1
+
+      // The row stays out of the key: grouping by it would turn one broken
+      // request into a row per iteration.
+      if (
+        dataRow !== '' &&
+        existing.dataRows.length < MAX_DATA_ROWS &&
+        !existing.dataRows.includes(dataRow)
+      ) {
+        existing.dataRows.push(dataRow)
+      }
 
       return
     }
@@ -765,7 +805,14 @@ export class RunStatsCollector {
       return
     }
 
-    this.#errors.set(key, { code, message, url, group, count: 1 })
+    this.#errors.set(key, {
+      code,
+      message,
+      url,
+      group,
+      count: 1,
+      dataRows: dataRow === '' ? [] : [dataRow],
+    })
   }
 
   #collectGroup(rawName: string, value: number, time: number) {

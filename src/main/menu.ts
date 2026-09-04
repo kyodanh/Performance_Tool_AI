@@ -9,7 +9,7 @@ import { PROJECT_PATH } from '@/constants/workspace'
 import { AppHandler } from '@/handlers/app/types'
 import { createBrowserTest } from '@/handlers/browserTest/create'
 import { createGenerator } from '@/handlers/generator/create'
-import { MenuItem, UIHandler } from '@/handlers/ui/types'
+import { EditAction, MenuItem, UIHandler } from '@/handlers/ui/types'
 import { getStudioFileFromPath } from '@/main/file'
 import { getViewPath, routeMap } from '@/routeMap'
 import { showOpenDialog } from '@/utils/dialog'
@@ -27,6 +27,14 @@ import { openLogFolder } from './logger'
 
 const isDevEnv = process.env.NODE_ENV === 'development'
 const isMac = getPlatform() === 'mac'
+
+function sendEditAction(window: unknown, action: EditAction) {
+  if (window instanceof BrowserWindow === false) {
+    return
+  }
+
+  window.webContents.send(UIHandler.RequestUndo, action)
+}
 
 type MenuItemWithId = Omit<MenuItemConstructorOptions, 'id' | 'submenu'> & {
   id?: MenuItem
@@ -251,7 +259,32 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
         getCloseMenuItem(),
       ],
     },
-    { role: 'editMenu' },
+    {
+      // Undo/Redo go to the renderer instead of `role: 'undo'`: the native role
+      // only undoes text edits, and its accelerator would swallow Cmd+Z before
+      // the page ever sees it. The renderer falls back to the text undo when no
+      // view claims the action.
+      label: 'Edit',
+      submenu: [
+        {
+          label: 'Undo',
+          accelerator: 'CmdOrCtrl+Z',
+          click: (_, window) => sendEditAction(window, 'undo'),
+        },
+        {
+          label: 'Redo',
+          accelerator: isMac ? 'Cmd+Shift+Z' : 'Ctrl+Y',
+          click: (_, window) => sendEditAction(window, 'redo'),
+        },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' },
+      ],
+    },
     {
       label: 'View',
       submenu: [

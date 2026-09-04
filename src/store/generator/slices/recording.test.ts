@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { createProxyData, createRequest } from '@/test/factories/proxyData'
-import { requestKey } from '@/utils/thinkTime'
+import { exclusionKeyById, requestKey } from '@/utils/thinkTime'
 
 import { selectFilteredRequests } from '../selectors'
 import { useGeneratorStore } from '../useGeneratorStore'
@@ -209,6 +209,24 @@ describe('toggleExcludedRequest', () => {
     setRecording([createProxyData({ id: 'second-load' })])
 
     expect(selectFilteredRequests(useGeneratorStore.getState())).toEqual([])
+  })
+
+  it('removes only the clicked occurrence when the recording repeats a request', () => {
+    const { setRecording, setAllowlist, toggleExcludedRequest } =
+      useGeneratorStore.getState()
+
+    setRecording([
+      createProxyData({ id: 'first' }),
+      createProxyData({ id: 'second' }),
+    ])
+    setAllowlist(['example.com'])
+
+    const requests = useGeneratorStore.getState().requests
+    toggleExcludedRequest(exclusionKeyById(requests, 'second')!)
+
+    expect(
+      selectFilteredRequests(useGeneratorStore.getState()).map(({ id }) => id)
+    ).toEqual(['first'])
   })
 
   it('keeps manual requests out of it, those are removed for good', () => {

@@ -11,6 +11,11 @@ function errorKey(error: RunErrorGroup) {
   return `${error.code}|${error.message}|${error.url}|${error.group}`
 }
 
+/** `file=index` pairs the run tagged, or a dash when no data file was used. */
+function describeDataRows(error: RunErrorGroup) {
+  return error.dataRows.join(', ') || '—'
+}
+
 interface ErrorsTableProps {
   errors: RunErrorGroup[]
 }
@@ -22,6 +27,10 @@ interface ErrorsTableProps {
 export function ErrorsTable({ errors }: ErrorsTableProps) {
   const [selected, setSelected] = useState<string | null>(null)
   const selectedError = errors.find((error) => errorKey(error) === selected)
+
+  // The column is dead weight for a run with no data file, which is most of
+  // them — only the scripts that parameterize get the tag.
+  const hasDataRows = errors.some((error) => error.dataRows.length > 0)
 
   return (
     <>
@@ -35,6 +44,11 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
             <Table.ColumnHeaderCell>Message</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Transaction</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Request</Table.ColumnHeaderCell>
+            {hasDataRows && (
+              <Table.ColumnHeaderCell width="140px">
+                Data rows
+              </Table.ColumnHeaderCell>
+            )}
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -49,6 +63,11 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
               <Table.Cell css={truncate}>{describeError(error)}</Table.Cell>
               <Table.Cell>{error.group || '—'}</Table.Cell>
               <Table.Cell css={truncate}>{error.url}</Table.Cell>
+              {hasDataRows && (
+                <Table.Cell css={truncate}>
+                  {describeDataRows(error)}
+                </Table.Cell>
+              )}
             </Table.Row>
           ))}
         </Table.Body>
@@ -77,6 +96,8 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
                     `\nTransaction: ${selectedError.group}`,
                   selectedError.url && `\n${selectedError.url}`,
                   `\n${formatCount(selectedError.count)} occurrence(s)`,
+                  selectedError.dataRows.length > 0 &&
+                    `\nData rows (first 5 distinct): ${describeDataRows(selectedError)}`,
                 ]
                   .filter(Boolean)
                   .join(' ')}

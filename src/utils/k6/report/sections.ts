@@ -330,28 +330,26 @@ export function httpResponsesSection(stats: RunStats) {
 }
 
 export function transactionSummarySection(stats: RunStats, names: RunNames) {
-  const rows = [...stats.groups]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((group) => [
-      names.runName,
-      group.name,
-      seconds(group.min),
-      seconds(group.avg),
-      seconds(group.max),
-      seconds(group.std),
-      // ponytail: p90 of the per-second averages, the only distribution k6's
-      // CSV keeps. Switch to the raw samples if a true p90 is ever needed.
-      seconds(
-        percentile(
-          group.series.map((sample) => sample.value),
-          0.9
-        )
-      ),
-      count(Math.max(0, group.count - group.failed)),
-      count(group.failed),
-      // k6 never stops a transaction mid-flight, so the column is always zero.
-      '0',
-    ])
+  const rows = stats.groups.map((group) => [
+    names.runName,
+    group.name,
+    seconds(group.min),
+    seconds(group.avg),
+    seconds(group.max),
+    seconds(group.std),
+    // ponytail: p90 of the per-second averages, the only distribution k6's
+    // CSV keeps. Switch to the raw samples if a true p90 is ever needed.
+    seconds(
+      percentile(
+        group.series.map((sample) => sample.value),
+        0.9
+      )
+    ),
+    count(Math.max(0, group.count - group.failed)),
+    count(group.failed),
+    // k6 never stops a transaction mid-flight, so the column is always zero.
+    '0',
+  ])
 
   return `<h2>Transaction Summary</h2>${filterLine(
     'Transaction End Status = (Pass, Fail)'
@@ -524,16 +522,26 @@ export function loadGeneratorsSection(stats: RunStats) {
 }
 
 export function errorsSection(stats: RunStats) {
+  const hasDataRows = stats.errors.some((error) => error.dataRows.length > 0)
+
   const rows = stats.errors.map((error) => [
     describeCode(error),
     describeError(error),
     error.url,
     error.group === '' ? '—' : error.group,
     count(error.count),
+    ...(hasDataRows ? [error.dataRows.join(', ') || '—'] : []),
   ])
 
   return `<h2>Errors</h2>${table(
-    ['Code', 'Error', 'URL', 'Transaction', 'Count'],
+    [
+      'Code',
+      'Error',
+      'URL',
+      'Transaction',
+      'Count',
+      ...(hasDataRows ? ['Data rows'] : []),
+    ],
     rows
-  )}`
+  )}${hasDataRows ? '<p class="description">Data rows name the data-file row each failure ran with, as <code>file=index</code> — the first five distinct ones per error.</p>' : ''}`
 }

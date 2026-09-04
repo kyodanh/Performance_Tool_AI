@@ -4,6 +4,7 @@ import { DEFAULT_GROUP_NAME } from '@/constants'
 import { SendHttpRequestOptions } from '@/handlers/httpRequest/types'
 import { ProxyData, Request, Response } from '@/types'
 import { getContentType } from '@/utils/headers'
+import { rawPath } from '@/utils/url'
 
 export const HTTP_METHODS = [
   'GET',
@@ -70,7 +71,7 @@ export function toRequest(
     timestampEnd: timing.timestampEnd,
     scheme: parsedUrl.protocol.replace(':', ''),
     host: parsedUrl.hostname,
-    path: parsedUrl.pathname + parsedUrl.search,
+    path: rawPath(url),
   }
 }
 

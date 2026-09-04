@@ -8,6 +8,7 @@ import { Theme as StudioTheme } from '@/components/primitives/Theme'
 import { SettingsDialog } from '@/components/Settings/SettingsDialog'
 import { Toasts } from '@/components/Toast/Toasts'
 import { useTheme } from '@/hooks/useTheme'
+import { useUndoRedoMenu } from '@/hooks/useUndoRedo'
 import { queryClient } from '@/utils/query'
 
 import { AppRoutes } from './AppRoutes'
@@ -17,6 +18,8 @@ enableMapSet()
 
 export function App() {
   const theme = useTheme()
+
+  useUndoRedoMenu()
 
   return (
     <QueryClientProvider client={queryClient}>
