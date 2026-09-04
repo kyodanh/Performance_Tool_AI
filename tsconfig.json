@@ -1,4 +1,5 @@
 {
+  "exclude": ["out", "dist", ".vite"],
   "compilerOptions": {
     "strict": true,
     "target": "ESNext",
