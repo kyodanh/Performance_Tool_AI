@@ -72,8 +72,10 @@ function getPostPackageHook() {
 
 function getPostMakeHook() {
   // we use the hook function only on windows to sign the binary so in
-  // all other cases we just return an empty object
-  if (getPlatform() !== 'win') {
+  // all other cases we just return an empty object. Signing needs the Azure
+  // Trusted Signing tool, so skip it when SIGNTOOL_PATH is absent (creds-free
+  // builds) -- same guard as packagerConfig.windowsSign below.
+  if (getPlatform() !== 'win' || !process.env.SIGNTOOL_PATH) {
     return (forgeConfig: ForgeConfig, makeResults: ForgeMakeResult[]) =>
       Promise.resolve(makeResults)
   }
