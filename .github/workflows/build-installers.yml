@@ -2,6 +2,12 @@ name: Build installers
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Publish a public release under this tag (leave empty to only upload artifacts)'
+        type: string
+        required: false
+        default: ''
 
 permissions: {}
 
@@ -47,3 +53,28 @@ jobs:
           name: k6-studio-${{ matrix.platform }}
           path: out/make/**/*
           if-no-files-found: error
+
+  # Artifacts need a GitHub login to download and expire after 90 days. A release
+  # gives everyone a permanent public download link instead.
+  release:
+    needs: build
+    if: inputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -print0 \
+            | xargs -0 gh release create "$TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "$TAG" \
+                --generate-notes
