@@ -1,0 +1,49 @@
+name: Build installers
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11
+          cache: 'pnpm'
+
+      # appdmg (DMG maker) builds native modules with node-gyp, which needs setuptools
+      - name: install setuptools for appdmg
+        if: runner.os == 'macOS'
+        run: brew install python-setuptools
+
+      - run: pnpm install --frozen-lockfile
+
+      # .npmrc sets ignore-scripts, so the postinstall that fetches k6 never runs
+      - run: node scripts/install-k6.js
+
+      - run: pnpm make
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: k6-studio-${{ matrix.platform }}
+          path: out/make/**/*
+          if-no-files-found: error
