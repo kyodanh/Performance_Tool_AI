@@ -417,8 +417,8 @@ importers:
         specifier: 4.11.0
         version: 4.11.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       react-router-dom:
-        specifier: 6.30.3
-        version: 6.30.3(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: 6.30.5
+        version: 6.30.5(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       react-select:
         specifier: 5.10.2
         version: 5.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(supports-color@8.1.1)
@@ -441,8 +441,8 @@ importers:
         specifier: 1.2.2
         version: 1.2.2
       undici:
-        specifier: 7.28.0
-        version: 7.28.0
+        specifier: 7.29.0
+        version: 7.29.0
       update-electron-app:
         specifier: 3.2.0
         version: 3.2.0
@@ -562,8 +562,8 @@ importers:
         specifier: 17.4.2
         version: 17.4.2
       electron:
-        specifier: 42.3.0
-        version: 42.3.0(supports-color@8.1.1)
+        specifier: 42.5.1
+        version: 42.5.1(supports-color@8.1.1)
       husky:
         specifier: 9.1.7
         version: 9.1.7
@@ -865,6 +865,10 @@ packages:
   '@electron-forge/tracer@7.11.2':
     resolution: {integrity: sha512-U8j5Hyj2Zt7I5PciJvPJfmEv69Gb/Da9v+k655z3Jj1cuY0UnToEJ61IhXrzlTYqo+jUKC+fgAjDJ6vltJTS0A==}
     engines: {node: '>= 14.17.5'}
+
+  '@electron-internal/extract-zip@1.0.5':
+    resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
+    engines: {node: '>=22.12.0'}
 
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
@@ -2497,8 +2501,8 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@remix-run/router@1.23.2':
-    resolution: {integrity: sha512-Ic6m2U/rMjTkhERIa/0ZtXJP17QUi2CbWE7cqx4J58M8aA3QTfW+2UlQ4psvTX9IO1RfNVhK3pcpdjej7L+t2w==}
+  '@remix-run/router@1.23.3':
+    resolution: {integrity: sha512-4An71tdz9X8+3sI4Qqqd2LWd9vS39J7sqd9EU4Scw7TJE/qB10Flv/UuqbPVgfQV9XoK8Np6jNquZitnZq5i+Q==}
     engines: {node: '>=14.0.0'}
 
   '@rolldown/binding-android-arm64@1.0.3':
@@ -3892,8 +3896,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@42.3.0:
-    resolution: {integrity: sha512-9ZiLdRXk+WDxW1OgIUz8J2rIQ5TYU9o629gCOjU48Q3dQiOmym7osWsH5Ubs/Jh4uuFLn6m6SBD2rmRXLAPz9g==}
+  electron@42.5.1:
+    resolution: {integrity: sha512-2VFNJcHHbrhIpGsJHdkLoi/nWPZPxN3GHVPe+9At3Oz3/TJRwpr+7JL97ddBDbKyLmHGx3GfI2jvzcEQL28uFw==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -5605,15 +5609,15 @@ packages:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
-  react-router-dom@6.30.3:
-    resolution: {integrity: sha512-pxPcv1AczD4vso7G4Z3TKcvlxK7g7TNt3/FNGMhfqyntocvYKj+GCatfigGDjbLozC4baguJ0ReCigoDJXb0ag==}
+  react-router-dom@6.30.5:
+    resolution: {integrity: sha512-Howo+e5+VnIBTSLNlD/ld92CBekQffjXa2zPQH2mghkghR3JptAeO/m+xXcwACml0+XuKw3ezscmCH4jdkPMoA==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       react: '>=16.8'
       react-dom: '>=16.8'
 
-  react-router@6.30.3:
-    resolution: {integrity: sha512-XRnlbKMTmktBkjCLE8/XcZFlnHvr2Ltdr1eJX4idL55/9BbORzyZEaIkBFDhFGCEWBBItsVrDxwx3gnisMitdw==}
+  react-router@6.30.5:
+    resolution: {integrity: sha512-MyMPiI3vOGXnQhlPZ/am6V3+9doI1jzcAw/3Ufrzav9/x5DnM2KykOPzKtKLHaLYPG4o+orFIgjxKqM6DBnjcw==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       react: '>=16.8'
@@ -6310,8 +6314,8 @@ packages:
     resolution: {integrity: sha512-ZgpWDC5gmNiuY9CnLVXEH8rl50xhRCuLNA97fAUnKi8RRuV4E6KG31pDTsLVUKnohJE0I3XDrTeEydAXRw47xg==}
     engines: {node: '>=18.17'}
 
-  undici@7.28.0:
-    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
+  undici@7.29.0:
+    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
 
   unified@11.0.5:
@@ -7194,6 +7198,8 @@ snapshots:
     dependencies:
       chrome-trace-event: 1.0.4
 
+  '@electron-internal/extract-zip@1.0.5': {}
+
   '@electron/asar@3.4.1':
     dependencies:
       commander: 5.1.0
@@ -7229,7 +7235,7 @@ snapshots:
       semver: 7.7.4
       sumchecker: 3.0.1(supports-color@8.1.1)
     optionalDependencies:
-      undici: 7.28.0
+      undici: 7.29.0
     transitivePeerDependencies:
       - supports-color
 
@@ -8990,7 +8996,7 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@remix-run/router@1.23.2': {}
+  '@remix-run/router@1.23.3': {}
 
   '@rolldown/binding-android-arm64@1.0.3':
     optional: true
@@ -10413,11 +10419,11 @@ snapshots:
       - supports-color
     optional: true
 
-  electron@42.3.0(supports-color@8.1.1):
+  electron@42.5.1(supports-color@8.1.1):
     dependencies:
+      '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.0.0(supports-color@8.1.1)
       '@types/node': 24.12.2
-      extract-zip: 2.0.1(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -12390,16 +12396,16 @@ snapshots:
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
-  react-router-dom@6.30.3(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
+  react-router-dom@6.30.5(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
     dependencies:
-      '@remix-run/router': 1.23.2
+      '@remix-run/router': 1.23.3
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
-      react-router: 6.30.3(react@19.2.5)
+      react-router: 6.30.5(react@19.2.5)
 
-  react-router@6.30.3(react@19.2.5):
+  react-router@6.30.5(react@19.2.5):
     dependencies:
-      '@remix-run/router': 1.23.2
+      '@remix-run/router': 1.23.3
       react: 19.2.5
 
   react-select@5.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(supports-color@8.1.1):
@@ -13171,7 +13177,7 @@ snapshots:
 
   undici@6.25.0: {}
 
-  undici@7.28.0: {}
+  undici@7.29.0: {}
 
   unified@11.0.5:
     dependencies:
