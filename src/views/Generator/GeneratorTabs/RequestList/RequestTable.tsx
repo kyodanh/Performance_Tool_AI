@@ -2,7 +2,6 @@ import { Box, Text } from '@radix-ui/themes'
 
 import { Table } from '@/components/Table'
 import { RequestListProps } from '@/components/WebLogView'
-import { RuleInstance } from '@/types/rules'
 
 import { RequestRow } from './RequestRow'
 
@@ -11,8 +10,7 @@ export function RequestTable({
   selectedRequestId,
   onSelectRequest,
   filter,
-  selectedRuleInstance,
-}: RequestListProps & { selectedRuleInstance?: RuleInstance }) {
+}: RequestListProps) {
   if (requests.length === 0) {
     return (
       <Box px="4" py="2">
@@ -47,7 +45,6 @@ export function RequestTable({
             isSelected={selectedRequestId === data.id}
             onSelectRequest={onSelectRequest}
             filter={filter}
-            selectedRuleInstance={selectedRuleInstance}
           />
         ))}
       </Table.Body>

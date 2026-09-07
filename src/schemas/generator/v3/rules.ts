@@ -96,10 +96,26 @@ export const StatusCodeSelectorSchema = z.object({
   type: z.literal('status-code'),
 })
 
+export const TextReplacementSchema = z.object({
+  value: z.string(),
+  // What `value` becomes, with `{}` (or the variable name as `{name}`) marking
+  // where the extracted value goes - `"id":2` -> `"id":{}` keeps the key and
+  // the quoting the payload needs. Left out, the whole match becomes the
+  // variable, which is how every rule saved before this behaves.
+  replaceWith: z.string().optional(),
+})
+
 export const TextSelectorSchema = z.object({
   type: z.literal('text'),
   from: z.enum(['headers', 'body', 'url']),
   value: z.string(),
+  replaceWith: z.string().optional(),
+  // Further find/replace pairs, applied after the first. One extracted value
+  // usually appears under more than one key (`"id":7`, `"excludeExamId":7`),
+  // and a rule per key would extract the same value over and over.
+  // Optional rather than defaulted: a generator file saved before this has no
+  // such key, and the codec encodes as well as decodes.
+  replacements: TextReplacementSchema.array().optional(),
 })
 
 export const ExtractorSelectorSchema = z.discriminatedUnion('type', [

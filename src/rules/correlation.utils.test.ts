@@ -6,6 +6,18 @@ import { CorrelationRule } from '@/types/rules'
 import { replaceCorrelatedValues } from './correlation.utils'
 
 describe('replaceCorrelatedValues', () => {
+  const correlationRule: CorrelationRule = {
+    id: '1',
+    type: 'correlation',
+    enabled: true,
+    extractor: {
+      filter: { path: '' },
+      selector: { from: 'body', type: 'json', path: 'token' },
+      variableName: 'token',
+      extractionMode: 'single',
+    },
+  }
+
   it('should replace all occurrences when no selector is provided', () => {
     const request: Request = {
       method: 'POST',
@@ -142,5 +154,129 @@ describe('replaceCorrelatedValues', () => {
     })
 
     expect(result.headers[0]![1]).toBe("Bearer ${correlation_vars['token']}")
+  })
+
+  it('leaves client-describing headers alone when replacing everywhere', () => {
+    const request: Request = {
+      method: 'GET',
+      url: 'https://test.k6.io/contacts',
+      headers: [
+        [
+          'user-agent',
+          'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/141.0.0.0',
+        ],
+        ['sec-ch-ua-platform', '"macOS"'],
+        ['x-tenant-id', '537'],
+      ],
+      cookies: [],
+      query: [],
+      scheme: 'https',
+      host: 'test.k6.io',
+      content: null,
+      path: '/contacts',
+      timestampStart: 0,
+      timestampEnd: 0,
+      contentLength: 0,
+      httpVersion: '1.1',
+    }
+
+    const result = replaceCorrelatedValues({
+      request,
+      rule: correlationRule,
+      extractedValue: '537',
+      uniqueId: 0,
+    })
+
+    expect(result.headers).toEqual(request.headers)
+  })
+
+  it('does not replace values too short to match on purpose', () => {
+    const request: Request = {
+      method: 'GET',
+      url: 'https://test.k6.io/contacts/7',
+      headers: [['x-tenant-id', '7']],
+      cookies: [],
+      query: [],
+      scheme: 'https',
+      host: 'test.k6.io',
+      content: '{"id":7}',
+      path: '/contacts/7',
+      timestampStart: 0,
+      timestampEnd: 0,
+      contentLength: 0,
+      httpVersion: '1.1',
+    }
+
+    const result = replaceCorrelatedValues({
+      request,
+      rule: correlationRule,
+      extractedValue: '7',
+      uniqueId: 0,
+    })
+
+    expect(result).toBe(request)
+  })
+
+  it('replaces a short value where a replacer selector points at it', () => {
+    const request: Request = {
+      method: 'GET',
+      url: 'https://test.k6.io/contacts',
+      headers: [['x-tenant-id', '7']],
+      cookies: [],
+      query: [],
+      scheme: 'https',
+      host: 'test.k6.io',
+      content: null,
+      path: '/contacts',
+      timestampStart: 0,
+      timestampEnd: 0,
+      contentLength: 0,
+      httpVersion: '1.1',
+    }
+
+    const result = replaceCorrelatedValues({
+      request,
+      rule: {
+        ...correlationRule,
+        replacer: {
+          filter: { path: '' },
+          selector: { from: 'headers', type: 'text', value: '7' },
+        },
+      },
+      extractedValue: '7',
+      uniqueId: 0,
+    })
+
+    expect(result.headers[0]![1]).toBe("${correlation_vars['token']}")
+  })
+
+  // A JSON extractor hands back whatever the body held, not always a string.
+  it('handles a non-string extracted value', () => {
+    const request: Request = {
+      method: 'GET',
+      url: 'https://test.k6.io/contacts/123456',
+      headers: [],
+      cookies: [],
+      query: [],
+      scheme: 'https',
+      host: 'test.k6.io',
+      content: null,
+      path: '/contacts/123456',
+      timestampStart: 0,
+      timestampEnd: 0,
+      contentLength: 0,
+      httpVersion: '1.1',
+    }
+
+    const result = replaceCorrelatedValues({
+      request,
+      rule: correlationRule,
+      extractedValue: 123456 as unknown as string,
+      uniqueId: 0,
+    })
+
+    expect(result.url).toBe(
+      "https://test.k6.io/contacts/${correlation_vars['token']}"
+    )
   })
 })

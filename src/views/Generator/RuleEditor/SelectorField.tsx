@@ -11,6 +11,7 @@ import { Typeahead } from '@/views/Generator/RuleEditor/Typeahead'
 import { HeaderSelect } from './HeaderSelect'
 import { JsonSelectorHint } from './JsonSelectorHint'
 import { allowedSelectorMap, fromOptions } from './SelectorField.constants'
+import { TextReplacements } from './TextReplacements'
 
 export function SelectorField({
   field,
@@ -87,6 +88,8 @@ export function SelectorField({
           type: value,
           from: selector.from,
           value: '',
+          replaceWith: '',
+          replacements: [],
         })
         break
       default:
@@ -208,17 +211,10 @@ function SelectorContent({
       return <HeaderSelect field={field} />
 
     case 'text':
-      if (field !== 'extractor.selector') {
-        return (
-          <FieldGroup
-            name={`${field}.value`}
-            errors={errors}
-            label="Text"
-            hint="Exact text match to be replaced"
-          >
-            <TextField.Root {...register(`${field}.value`)} />
-          </FieldGroup>
-        )
+      // `text` is offered for replacers only (see `allowedSelectorMap`), and
+      // the field array inside needs the concrete path to stay typed.
+      if (field === 'replacer.selector') {
+        return <TextReplacements field={field} />
       }
       return null
 

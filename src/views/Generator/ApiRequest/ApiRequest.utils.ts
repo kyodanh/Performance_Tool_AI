@@ -6,6 +6,8 @@ import { ProxyData, Request, Response } from '@/types'
 import { getContentType } from '@/utils/headers'
 import { rawPath } from '@/utils/url'
 
+import { substitutePlaceholders } from './jsonBody'
+
 export const HTTP_METHODS = [
   'GET',
   'POST',
@@ -155,7 +157,9 @@ export function toProxyData(
 
 function inferContentType(body: string) {
   try {
-    JSON.parse(body)
+    // Placeholders first: a JSON body referencing `{name}` is still JSON, and
+    // calling it `text/plain` is what makes the API reject it.
+    JSON.parse(substitutePlaceholders(body))
     return 'application/json'
   } catch {
     return 'text/plain'

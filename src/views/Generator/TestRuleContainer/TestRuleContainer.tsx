@@ -21,7 +21,11 @@ export function TestRuleContainer() {
   const rules = useGeneratorStore((store) => store.rules)
   const swapRules = useGeneratorStore((store) => store.swapRules)
   const selectedRule = useGeneratorStore(selectSelectedRule)
-  const requests = useGeneratorStore(selectFilteredRequests)
+  // Only the count is needed, and `selectFilteredRequests` re-allocates the
+  // whole list on every store write - a keystroke in the rule editor included.
+  const requestCount = useGeneratorStore(
+    (store) => selectFilteredRequests(store).length
+  )
   const [isAutoCorrelationDialogOpen, setIsAutoCorrelationDialogOpen] =
     useState(false)
 
@@ -34,7 +38,7 @@ export function TestRuleContainer() {
     return <RuleEditor rule={selectedRule} />
   }
 
-  const isAutocorrelationButtonDisabled = requests.length === 0
+  const isAutocorrelationButtonDisabled = requestCount === 0
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { cloneDeep, escapeRegExp } from 'lodash-es'
+import { escapeRegExp } from 'lodash-es'
 
 import {
   createProxyData,
@@ -73,8 +73,15 @@ function applyRule({
   idGenerator: IdGenerator
   setState: (newState: Partial<CorrelationState>) => void
 }) {
-  // this is the modified schema that we return to the accumulator
-  const snippetSchemaReturnValue = cloneDeep(requestSnippetSchema)
+  // The schema we return to the accumulator, shared with the input until a
+  // rule actually changes something. It used to be a `cloneDeep`, which copied
+  // the whole response body of every request once per rule and handed back a
+  // fresh object even when the rule matched nothing - the request list keys its
+  // row memoisation on that identity, so a recording of a few hundred requests
+  // re-rendered every row on each keystroke in the rule editor.
+  // `tryCorrelationExtraction` and `wrapExtractionSnippet` only read the data,
+  // and the replacers below return new objects, so nothing here mutates it.
+  let snippetSchemaReturnValue = requestSnippetSchema
 
   if (state.extractedValue !== undefined && state.extractedValue !== '') {
     // Skip replacement if replacer filter doesn't match
@@ -94,7 +101,13 @@ function applyRule({
 
     // Keep track of modified requests to display in preview
     if (replacedRequest !== requestSnippetSchema.data.request) {
-      snippetSchemaReturnValue.data.request = replacedRequest
+      snippetSchemaReturnValue = {
+        ...snippetSchemaReturnValue,
+        data: {
+          ...snippetSchemaReturnValue.data,
+          request: replacedRequest,
+        },
+      }
 
       setState({
         requestsReplaced: [
@@ -1153,15 +1166,15 @@ correlation_vars['correlation_1'] = resp.json().user_id`
     const recording = [
       createProxyData({
         response: createResponse({
-          content: JSON.stringify({ user_id: '444' }),
+          content: JSON.stringify({ user_id: '4444' }),
         }),
       }),
       createProxyData({
         request: createRequest({
-          url: 'http://test.k6.io/api/v1/login?user_id=444',
+          url: 'http://test.k6.io/api/v1/login?user_id=4444',
         }),
         response: createResponse({
-          content: JSON.stringify({ user_id: '444' }),
+          content: JSON.stringify({ user_id: '4444' }),
         }),
       }),
     ]

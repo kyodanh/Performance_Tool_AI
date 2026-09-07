@@ -41,7 +41,19 @@ export function useFilterRequests({
     [filter]
   )
 
+  const isSearching =
+    !debouncedFilter.match(/^\s*$/) && debouncedFilter.length >= 2
+
+  // Indexing is deferred until something is actually searched for. Building it
+  // walks every key of every request - `response.content` alone parses each
+  // recorded body - and the request list rebuilds this hook's input on every
+  // edit, so an eagerly built index cost a full re-index per keystroke in the
+  // rule editor while the filter box sat empty.
   const searchIndex = useMemo(() => {
+    if (!isSearching) {
+      return null
+    }
+
     return new Fuse(assetsToFilter, {
       includeMatches: true,
       shouldSort: false,
@@ -51,11 +63,11 @@ export function useFilterRequests({
         ? [...basicSearchKeys, ...fullSearchKeys]
         : basicSearchKeys,
     })
-  }, [assetsToFilter, filterAllData])
+  }, [assetsToFilter, filterAllData, isSearching])
 
   const filteredRequests = useMemo(() => {
     // skip single char queries
-    if (debouncedFilter.match(/^\s*$/) || debouncedFilter.length < 2) {
+    if (searchIndex === null) {
       return assetsToFilter
     }
 

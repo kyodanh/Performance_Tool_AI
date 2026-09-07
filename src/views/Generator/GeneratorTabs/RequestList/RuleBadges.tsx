@@ -3,17 +3,21 @@ import { isEqual } from 'lodash-es'
 import { PencilIcon } from 'lucide-react'
 import { useMemo } from 'react'
 
-import { useOriginalRequest } from '@/store/generator/hooks/useOriginalRequest'
 import { ProxyData } from '@/types'
 import { RuleInstance } from '@/types/rules'
 
-export function RuleBadges({
-  selectedRuleInstance,
-  data,
-}: {
-  selectedRuleInstance?: RuleInstance
-  data: ProxyData
-}) {
+import {
+  useOriginalRequestInList,
+  useSelectedRuleInstance,
+} from './RequestListContext'
+
+export function RuleBadges({ data }: { data: ProxyData }) {
+  // From context rather than a prop: `applyRules` rebuilds the instance on
+  // every edit, and threading it down through the row would re-render every
+  // row of the list on each keystroke in the rule editor instead of just the
+  // badges that actually depend on it.
+  const selectedRuleInstance = useSelectedRuleInstance()
+
   return (
     <Flex justify="end" align="center" height="100%" pr="2" gap="2">
       <ExtractorBadge selectedRuleInstance={selectedRuleInstance} data={data} />
@@ -82,9 +86,14 @@ function ExtractorBadge({
 }
 
 function ModifiedBadge({ data }: { data: ProxyData }) {
-  const originalRequest = useOriginalRequest(data.id)
+  const originalRequest = useOriginalRequestInList(data.id)
 
-  if (isEqual(originalRequest, data.request)) {
+  // `applyRules` hands back the recorded request untouched for every row no
+  // rule rewrote, so identity answers this for most rows without a deep equal.
+  if (
+    originalRequest === data.request ||
+    isEqual(originalRequest, data.request)
+  ) {
     return
   }
 

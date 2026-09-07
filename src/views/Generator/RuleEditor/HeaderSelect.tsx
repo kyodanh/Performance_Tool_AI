@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useFormContext } from 'react-hook-form'
+import { useShallow } from 'zustand/react/shallow'
 
 import { FieldGroup } from '@/components/Form'
 import { ControlledReactSelect } from '@/components/Form/ControlledReactSelect'
@@ -18,7 +19,10 @@ export function HeaderSelect({
     control,
     formState: { errors },
   } = useFormContext<TestRule>()
-  const requests = useGeneratorStore(selectFilteredRequests)
+  // Shallow, because the selector builds a new array every time: without it
+  // every store write re-derived the header options from the whole recording,
+  // which this field sits next to while it is being typed into.
+  const requests = useGeneratorStore(useShallow(selectFilteredRequests))
 
   const filterField = useMemo(() => {
     if (field === 'extractor.selector') {

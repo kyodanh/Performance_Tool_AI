@@ -16,19 +16,33 @@ export function useHighlightRequestChanges(
   // fresh object and re-render - a few hundred components each.
   const originalRequests = useGeneratorStore(useShallow(selectFilteredRequests))
 
+  // A lookup rather than a `find` per row: the pass runs over the whole
+  // recording on every edit, and the linear scan made it quadratic.
+  const originalById = useMemo(
+    () => new Map(originalRequests.map((request) => [request.id, request])),
+    [originalRequests]
+  )
+
   return useMemo(() => {
     return requests.map((data) => {
-      const originalRequest = originalRequests.find(
-        (request) => request.id === data.id
-      )?.request
+      const original = originalById.get(data.id)
 
-      if (!originalRequest) {
+      if (!original) {
         return data
       }
 
-      return addHighlights(originalRequest, data)
+      // `applyRules` hands back the untouched request object for every row no
+      // rule rewrote, so identity alone says there is nothing to diff. Without
+      // this, a recording of a few hundred requests ran `diffWords` over every
+      // header, cookie and query param of all of them on each keystroke in the
+      // rule editor.
+      if (original === data || original.request === data.request) {
+        return data
+      }
+
+      return addHighlights(original.request, data)
     })
-  }, [requests, originalRequests])
+  }, [requests, originalById])
 }
 
 function addHighlights(

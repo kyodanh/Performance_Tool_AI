@@ -14,7 +14,6 @@ import {
 } from '@/components/WebLogView'
 import { SearchResults } from '@/components/WebLogView/SearchResults'
 import { useGeneratorStore } from '@/store/generator'
-import { RuleInstance } from '@/types/rules'
 
 import { RendezvousBadge } from './RendezvousBadge'
 import { RowActions } from './RowActions'
@@ -25,16 +24,20 @@ import { ThinkTimeBadge } from './ThinkTimeBadge'
  * Memoised because a group holds every one of its requests at once and each row
  * carries a tooltip, a dropdown and a popover - a few hundred components. Only
  * the two rows whose selection changed need to render when a row is clicked,
- * and every prop here is stable: the data comes from a memo, the callback is a
- * `useState` setter, and `selectedRuleInstance` is memoised alongside the data.
+ * and every prop here is stable: the data comes from a memo and the callback is
+ * a `useState` setter.
+ *
+ * The rule instance the editor has open is deliberately *not* a prop: it is
+ * rebuilt on every edit, which would change a prop on all rows and re-render
+ * the whole list per keystroke. `RuleBadges` reads it from context instead, so
+ * only the badges render.
  */
 export const RequestRow = memo(function RequestRow({
   data,
   onSelectRequest,
   isSelected,
   filter,
-  selectedRuleInstance,
-}: RowProps & { selectedRuleInstance?: RuleInstance }) {
+}: RowProps) {
   // `data` has rules applied, so edit the stored request instead of the row.
   const manualRequest = useGeneratorStore((state) =>
     state.manualRequests.find((request) => request.id === data.id)
@@ -71,10 +74,7 @@ export const RequestRow = memo(function RequestRow({
                 highlightAllMatches
               />
             </TextWithTooltip>
-            <RuleBadges
-              selectedRuleInstance={selectedRuleInstance}
-              data={data}
-            />
+            <RuleBadges data={data} />
             <ThinkTimeBadge data={data} />
             <RendezvousBadge data={data} />
             {/* Keeps the row actions grouped at the trailing edge. */}

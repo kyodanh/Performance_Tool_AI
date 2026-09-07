@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import log from 'electron-log/renderer'
+import { useMemo } from 'react'
 
 import { useDefaultLayout } from '@/components/primitives/ResizablePanel'
 import { useExportScript } from '@/hooks/useExportScript'
@@ -58,16 +59,28 @@ export function useUpdateValueInGeneratorFile(filePath: string) {
 }
 
 export function useIsGeneratorDirty(savedData: GeneratorFileData) {
-  const generatorState = useGeneratorStore(selectGeneratorData)
+  const savedJson = useMemo(
+    () => serializeGeneratorData(savedData),
+    [savedData]
+  )
 
-  // Comparing data without `scriptName`, which is saved to disk in the background
-  // and should not be considered as a change
-  const { scriptName: _, ...generatorStateData } = generatorState
-  const { scriptName: __, ...savedFileData } = savedData
+  // The comparison happens inside the selector so this hook yields a boolean.
+  // `selectGeneratorData` assembles a new object on every call - `options` and
+  // `testData` included - so returning it (shallow-compared or not) re-rendered
+  // the whole generator on every store write, keystrokes in the rule editor
+  // included. A boolean compares by value, so only a real change re-renders.
+  return useGeneratorStore(
+    (state) => serializeGeneratorData(selectGeneratorData(state)) !== savedJson
+  )
+}
 
-  // Convert to JSON instead of doing deep equal to remove
-  // `property: undefined` values
-  return JSON.stringify(generatorStateData) !== JSON.stringify(savedFileData)
+/**
+ * JSON rather than a deep equal, to drop `property: undefined` values.
+ * `scriptName` is left out: it is saved to disk in the background, so it is not
+ * an edit the user has to be warned about.
+ */
+function serializeGeneratorData({ scriptName: _, ...data }: GeneratorFileData) {
+  return JSON.stringify(data)
 }
 
 export function useScriptExport(generatorFilePath: string) {

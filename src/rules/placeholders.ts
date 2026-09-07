@@ -1,6 +1,4 @@
-import { produce } from 'immer'
-
-import { ProxyData } from '@/types'
+import { KeyValueTuple, ProxyData } from '@/types'
 import { TestRule } from '@/types/rules'
 import { Variable } from '@/types/testData'
 
@@ -48,7 +46,10 @@ export function interpolatePlaceholders(
   value: string,
   expressions: PlaceholderExpressions
 ) {
-  if (expressions.size === 0) {
+  // A placeholder needs a brace, and most recorded text has none. Checking for
+  // one is far cheaper than running the regex over every header and body of a
+  // large recording, which happens on each edit in the rule editor.
+  if (expressions.size === 0 || !value.includes('{')) {
     return value
   }
 
@@ -68,17 +69,40 @@ export function interpolateRequestPlaceholders(
     return data
   }
 
-  return produce(data, (draft) => {
-    const { request } = draft
+  const { request } = data
 
-    request.url = interpolatePlaceholders(request.url, expressions)
-    request.headers = request.headers.map(([name, value]) => [
-      name,
-      interpolatePlaceholders(value, expressions),
-    ])
+  const url = interpolatePlaceholders(request.url, expressions)
+  const content = request.content
+    ? interpolatePlaceholders(request.content, expressions)
+    : request.content
 
-    if (request.content) {
-      request.content = interpolatePlaceholders(request.content, expressions)
+  let headersChanged = false
+  const headers = request.headers.map(([name, value]): KeyValueTuple => {
+    const interpolated = interpolatePlaceholders(value, expressions)
+
+    if (interpolated !== value) {
+      headersChanged = true
     }
+
+    return [name, interpolated]
   })
+
+  // Handing back the same object when nothing carried a placeholder is what
+  // keeps the request list from re-rendering every row: `applyRules` runs over
+  // the whole recording on each edit, and only the requests a rule really
+  // rewrote should get a new identity. Assigning unconditionally - which is
+  // what `produce` saw before - made that every request.
+  if (!headersChanged && url === request.url && content === request.content) {
+    return data
+  }
+
+  return {
+    ...data,
+    request: {
+      ...request,
+      url,
+      headers,
+      content,
+    },
+  }
 }

@@ -35,12 +35,14 @@ import {
   toSendOptions,
 } from './ApiRequest.utils'
 import { HeadersEditor } from './HeadersEditor'
+import { jsonBodyError } from './jsonBody'
 import { parseCurl } from './parseCurl'
 import {
   resolveRequestVariables,
   useRequestVariables,
 } from './useCorrelationVariables'
 import { useGroupNames } from './useGroupNames'
+import { useJsonDiagnostics } from './useJsonDiagnostics'
 import { useVariableCompletion } from './useVariableCompletion'
 import { VariableSuggestField } from './VariableSuggestField'
 
@@ -90,6 +92,7 @@ export function ApiRequestDialog({
   const variables = useRequestVariables()
   const variableNames = Object.keys(variables)
   const handleBodyEditorMount = useVariableCompletion(variableNames)
+  useJsonDiagnostics(open)
 
   const {
     control,
@@ -112,7 +115,11 @@ export function ApiRequestDialog({
   const headerCount = watch('headers').filter(
     ({ name }) => name.trim() !== ''
   ).length
-  const hasContent = watch('content').trim() !== ''
+  const content = watch('content')
+  const hasContent = content.trim() !== ''
+  // Placeholders resolved first, so `{name}` is not reported as a syntax error
+  // while a stray brace next to one still is.
+  const bodyError = hasBody(method) ? jsonBodyError(content) : null
 
   // A response only describes the request that was sent, so editing the form
   // invalidates it. The group is not part of the request, so picking one keeps
@@ -326,6 +333,16 @@ export function ApiRequestDialog({
                     )}
                   />
                 </Box>
+                {bodyError !== null && (
+                  <Callout.Root color="red" mt="2" size="1" role="alert">
+                    <Callout.Icon>
+                      <CircleAlertIcon />
+                    </Callout.Icon>
+                    <Callout.Text>
+                      Body is not valid JSON: {bodyError}
+                    </Callout.Text>
+                  </Callout.Root>
+                )}
               </Tabs.Content>
             </Box>
           </Tabs.Root>

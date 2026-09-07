@@ -5,7 +5,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { EmptyMessage } from '@/components/EmptyMessage'
 import { WebLogView } from '@/components/WebLogView'
 import { useFilterRequests } from '@/components/WebLogView/Filter.hooks'
-import { RequestListProps as RequestTableProps } from '@/components/WebLogView/WebLogView'
 import { useProxyDataGroups } from '@/hooks/useProxyDataGroups'
 import { useGeneratorStore } from '@/store/generator'
 import { useApplyRules } from '@/store/generator/hooks/useApplyRules'
@@ -21,6 +20,7 @@ import {
 import { RecordingSelector } from '../../RecordingSelector'
 
 import { Header } from './Header'
+import { RequestListProvider } from './RequestListContext'
 import { RequestTable } from './RequestTable'
 
 interface RequestListProps {
@@ -119,13 +119,17 @@ export function RequestList({
     [removeGroup]
   )
 
-  // A new function here would be a new component type, remounting every row
-  // and dropping any popover a row has open.
-  const ListComponent = useCallback(
-    (props: RequestTableProps) => (
-      <RequestTable {...props} selectedRuleInstance={selectedRuleInstance} />
-    ),
-    [selectedRuleInstance]
+  // Built once for the whole list. Every row needs the request it was generated
+  // from to tell whether a rule changed it, and looking that up from the store
+  // per row re-ran the request filter a few hundred times per store write.
+  const originalRequests = useMemo(
+    () => new Map(requests.map((request) => [request.id, request])),
+    [requests]
+  )
+
+  const listContext = useMemo(
+    () => ({ selectedRuleInstance, originalRequests }),
+    [selectedRuleInstance, originalRequests]
   )
 
   if (recordingError !== null && !hasManualRequests) {
@@ -218,18 +222,20 @@ export function RequestList({
 
       <ScrollArea scrollbars="vertical">
         <Box px="3" pb="3">
-          <WebLogView
-            requests={requestWithHighlights}
-            selectedRequestId={selectedRequest?.id}
-            onSelectRequest={onSelectRequest}
-            groups={groups}
-            filter={filter}
-            groupVariant="card"
-            onUpdateGroup={handleUpdateGroup}
-            onRemoveGroup={handleRemoveGroup}
-            onReorderGroups={setGroupOrder}
-            ListComponent={ListComponent}
-          />
+          <RequestListProvider value={listContext}>
+            <WebLogView
+              requests={requestWithHighlights}
+              selectedRequestId={selectedRequest?.id}
+              onSelectRequest={onSelectRequest}
+              groups={groups}
+              filter={filter}
+              groupVariant="card"
+              onUpdateGroup={handleUpdateGroup}
+              onRemoveGroup={handleRemoveGroup}
+              onReorderGroups={setGroupOrder}
+              ListComponent={RequestTable}
+            />
+          </RequestListProvider>
         </Box>
       </ScrollArea>
     </Flex>

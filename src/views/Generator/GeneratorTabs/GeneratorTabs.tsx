@@ -2,6 +2,7 @@ import { css } from '@emotion/react'
 import { Badge, Box, Flex, Tabs } from '@radix-ui/themes'
 import { CircleXIcon } from 'lucide-react'
 import { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { ExportFormat } from '@/hooks/useExportPreview'
 import { ScriptPreview as ScriptPreviewType } from '@/hooks/useScriptPreview'
@@ -45,7 +46,10 @@ export function GeneratorTabs({
     setDrafts((current) => ({ ...current, [format]: draft }))
   }
 
-  const filteredRequests = useGeneratorStore(selectFilteredRequests)
+  // Shallow, because the selector builds a new array every time: without it any
+  // store write - a keystroke in the rule editor - would re-render this subtree
+  // and hand `RequestList` a new array to re-derive everything from.
+  const filteredRequests = useGeneratorStore(useShallow(selectFilteredRequests))
   const hasRecording = useGeneratorStore(selectHasRecording)
 
   return (
