@@ -10,7 +10,13 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { useQuery } from '@tanstack/react-query'
-import { InfoIcon, PlayIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
+import {
+  InfoIcon,
+  PlayIcon,
+  SquareIcon,
+  TrashIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { LoadGenerators } from '@/components/LoadGenerators'
@@ -70,6 +76,7 @@ export function LoadTestRunner({
   const errors = useLoadRunStore((state) => state.errors)
   const startRun = useLoadRunStore((state) => state.startRun)
   const stopRun = useLoadRunStore((state) => state.stopRun)
+  const clearRun = useLoadRunStore((state) => state.clearRun)
   const failRun = useLoadRunStore((state) => state.failRun)
   const resources = useLoadRunStore((state) => state.resources)
   const sampleResources = useLoadRunStore((state) => state.sampleResources)
@@ -230,7 +237,17 @@ export function LoadTestRunner({
           </Button>
         )}
         {!isRunning && stats !== null && stats.buckets.length > 0 && (
-          <SaveRunButton testName={testName} stats={stats} />
+          <>
+            <SaveRunButton testName={testName} stats={stats} />
+            <Button
+              variant="soft"
+              color="gray"
+              radius="full"
+              onClick={clearRun}
+            >
+              <TrashIcon /> Clear results
+            </Button>
+          </>
         )}
         <ExportReportButton
           stats={stats}

@@ -41,7 +41,10 @@ const isUrlReachable = async (url: string) => {
         resolve(false)
       })
       .on('error', (err) => {
-        log.error(err)
+        log.error(
+          `Proxy health check failed for ${url} via ${getProxyURL()}`,
+          err
+        )
         resolve(false)
       })
   })

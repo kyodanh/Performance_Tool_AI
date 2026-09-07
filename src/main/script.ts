@@ -21,7 +21,7 @@ import {
 import { getProxyArguments } from '@/main/proxy'
 import { ProxySettings } from '@/types/settings'
 import { showOpenDialog } from '@/utils/dialog'
-import { createWriteStream } from '@/utils/fs'
+import { createWriteStream, unlink } from '@/utils/fs'
 import { K6Client } from '@/utils/k6/client'
 import { LoadProfileOverrides } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
@@ -318,6 +318,14 @@ export const runLoadTest = async ({
 
   testRun.on('stop', () => {
     browserWindow.webContents.send(ScriptHandler.Stopped)
+
+    // The archive lives at a fixed path shared by every load test. It is
+    // overwritten on the next Start, but leaving a stale one on disk means a
+    // failed archive step can hand k6 the previous test's script — the run
+    // would look fine and measure the wrong thing.
+    void unlink(TEMP_K6_LOAD_ARCHIVE_PATH).catch(() => {
+      // Best effort: a generator may still be pulling it.
+    })
 
     const stats: RunStats | null = lastStats
 

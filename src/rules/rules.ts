@@ -1,6 +1,6 @@
 import { produce } from 'immer'
 
-import { ProxyData, RequestSnippetSchema } from '@/types'
+import { KeyValueTuple, ProxyData, RequestSnippetSchema } from '@/types'
 import { TestRule } from '@/types/rules'
 import { Variable } from '@/types/testData'
 
@@ -110,6 +110,24 @@ function updateQueryParams(
   requestSnippet: RequestSnippetSchema
 ): RequestSnippetSchema {
   return produce(requestSnippet, (draft) => {
-    draft.data.request.query = urlToQueryParams(draft.data.request.url)
+    const query = urlToQueryParams(draft.data.request.url)
+
+    // Assigning unconditionally would make immer hand back a new object for
+    // every request even when no rule touched it, and the request list leans
+    // on that identity to keep rows from re-rendering.
+    if (!isSameQuery(draft.data.request.query, query)) {
+      draft.data.request.query = query
+    }
   })
+}
+
+function isSameQuery(a: KeyValueTuple[], b: KeyValueTuple[]) {
+  return (
+    a.length === b.length &&
+    a.every(([name, value], index) => {
+      const other = b[index]
+
+      return other?.[0] === name && other[1] === value
+    })
+  )
 }

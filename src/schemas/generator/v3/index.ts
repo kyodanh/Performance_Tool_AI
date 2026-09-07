@@ -16,9 +16,15 @@ export const GeneratorFileDataSchema = z.object({
   // Recorded requests dropped from the test, keyed by `requestKey` since the
   // requests themselves get fresh ids on every recording load.
   excludedRequests: z.string().array().default([]),
-  // Recorded requests edited by hand, keyed by the `requestKey` of the
-  // recorded request each one replaces, for the same reason.
+  // Recorded requests edited by hand, keyed by occurrence (`METHOD URL#n`)
+  // like exclusions: a recording repeats the same method and URL, and only the
+  // edited occurrence should change. Files saved before this hold a bare
+  // `requestKey`, honoured for the first occurrence only.
   requestOverrides: z.record(z.string(), ManualRequestSchema).default({}),
+  // Recorded requests moved to another group, keyed by occurrence
+  // (`METHOD URL#n`) rather than by `requestKey`: a recording repeats the same
+  // request across groups, and only the moved occurrence should follow.
+  groupMoves: z.record(z.string(), z.string()).default({}),
   // Renamed groups, from the name a request carries in the recording to the
   // name it shows under. Kept as a mapping because reloading the recording
   // brings the original names back.

@@ -1,62 +1,62 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import { createGeneratorData } from '@/test/factories/generator'
+import { createGeneratorState } from '@/test/factories/generator'
+import { createProxyData, createRequest } from '@/test/factories/proxyData'
 
-import { selectGeneratorData } from './selectors'
-import { useGeneratorStore } from './useGeneratorStore'
+import { selectFilteredRequests } from './selectors'
 
-beforeEach(() => {
-  useGeneratorStore.getState().resetGeneratorFile()
-})
+describe('selectFilteredRequests', () => {
+  // A GraphQL recording is nothing but repeats of `POST /api/graphql`, so an
+  // edit keyed by method and URL used to show up on all of them.
+  const graphql = (id: string, content: string) =>
+    createProxyData({
+      id,
+      request: createRequest({
+        method: 'POST',
+        url: 'http://example.com/api/graphql',
+        content,
+      }),
+    })
 
-describe('wizardUsed round-trip', () => {
-  it('starts out false', () => {
-    expect(selectGeneratorData(useGeneratorStore.getState()).wizardUsed).toBe(
-      false
-    )
+  const requests = [
+    graphql('1', '{"op":"start"}'),
+    graphql('2', '{"op":"end"}'),
+  ]
+
+  const state = createGeneratorState({
+    requests,
+    allowlist: ['example.com'],
+    includeStaticAssets: true,
   })
 
-  it('survives loading and saving a generator file', () => {
-    useGeneratorStore
-      .getState()
-      .setGeneratorFile(createGeneratorData({ wizardUsed: true }))
+  it('applies an edit to the edited occurrence only', () => {
+    const result = selectFilteredRequests({
+      ...state,
+      requestOverrides: {
+        'POST http://example.com/api/graphql#1': graphql(
+          '2',
+          '{"op":"edited"}'
+        ),
+      },
+    })
 
-    expect(selectGeneratorData(useGeneratorStore.getState()).wizardUsed).toBe(
-      true
-    )
+    expect(result.map((data) => data.request.content)).toEqual([
+      '{"op":"start"}',
+      '{"op":"edited"}',
+    ])
   })
 
-  it('is saved after the wizard marks the generator', () => {
-    useGeneratorStore.getState().setWizardUsed(true)
+  it('applies an override saved under the legacy key to the first occurrence', () => {
+    const result = selectFilteredRequests({
+      ...state,
+      requestOverrides: {
+        'POST http://example.com/api/graphql': graphql('1', '{"op":"edited"}'),
+      },
+    })
 
-    expect(selectGeneratorData(useGeneratorStore.getState()).wizardUsed).toBe(
-      true
-    )
-  })
-})
-
-describe('groupOrder round-trip', () => {
-  it('starts out empty', () => {
-    expect(
-      selectGeneratorData(useGeneratorStore.getState()).groupOrder
-    ).toEqual([])
-  })
-
-  it('saves the order the groups were dragged into', () => {
-    useGeneratorStore.getState().setGroupOrder(['Login', 'Dashboard'])
-
-    expect(
-      selectGeneratorData(useGeneratorStore.getState()).groupOrder
-    ).toEqual(['Login', 'Dashboard'])
-  })
-
-  it('survives loading and saving a generator file', () => {
-    useGeneratorStore
-      .getState()
-      .setGeneratorFile(createGeneratorData({ groupOrder: ['Login'] }))
-
-    expect(
-      selectGeneratorData(useGeneratorStore.getState()).groupOrder
-    ).toEqual(['Login'])
+    expect(result.map((data) => data.request.content)).toEqual([
+      '{"op":"edited"}',
+      '{"op":"end"}',
+    ])
   })
 })

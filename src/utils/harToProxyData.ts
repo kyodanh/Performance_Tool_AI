@@ -6,6 +6,13 @@ import type { HarContent, HarEntry } from '@/types/recording'
 import { safeAtob } from './format'
 import { rawPath } from './url'
 
+// A recording can hold whole videos and images. Decoding those doubles them in
+// size - `TextDecoder` turns every invalid UTF-8 byte into a two-byte U+FFFD -
+// and the result then crosses IPC into the renderer, which runs out of memory.
+// Rules match on text, so a body this large is of no use to them anyway.
+// ponytail: a flat cap, raise it if someone needs to correlate on a huge body.
+const MAX_DECODED_BODY_LENGTH = 1_000_000
+
 export function harToProxyData(har: Recording): ProxyData[] {
   return (har.log.entries ?? []).map((entry) => {
     const request = harEntryToRequest(entry)
@@ -38,6 +45,12 @@ function harEntryToRequest({
         {} as Record<string, string | undefined>
       )
     )
+  }
+
+  // Capped for the same reason as the response body: an upload can be as large
+  // as any download.
+  if (content.length > MAX_DECODED_BODY_LENGTH) {
+    content = ''
   }
 
   const url = new URL(request.url)
@@ -91,6 +104,8 @@ function isoToUnixTimestamp(isoString: string): number {
 
 function parseContent(content: HarContent): string {
   if (!content.text) return ''
+
+  if (content.text.length > MAX_DECODED_BODY_LENGTH) return ''
 
   if (content.encoding === 'base64') {
     return safeAtob(content.text)

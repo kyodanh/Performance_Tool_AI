@@ -29,18 +29,31 @@ export function initialize() {
   let currentTestRun: TestRun | null = null
 
   /**
+   * The stop of the previous run, still in flight. `currentTestRun` is cleared
+   * the moment a stop is asked for, so without this a Start right after a Stop
+   * has nothing left to await and launches k6 while the old process is still
+   * shutting down — two runs hitting the target, and the new run's stats mixed
+   * with the tail of the old one.
+   */
+  let pendingStop: Promise<void> = Promise.resolve()
+
+  /**
    * Only one run is tracked at a time, so starting a second without stopping
    * the first orphans it: it keeps loading the target with nothing left to stop
    * it from the UI.
    */
-  async function stopCurrentTestRun() {
+  function stopCurrentTestRun() {
     const run = currentTestRun
 
     currentTestRun = null
 
-    await run?.stop().catch((error) => {
-      log.error('Failed to stop the test run', error)
-    })
+    pendingStop = pendingStop.then(() =>
+      run?.stop().catch((error) => {
+        log.error('Failed to stop the test run', error)
+      })
+    )
+
+    return pendingStop
   }
 
   ipcMain.handle(ScriptHandler.Select, async (event) => {
@@ -127,13 +140,16 @@ export function initialize() {
 
       const browserWindow = browserWindowFromEvent(event)
 
+      // Resolved up front so the cleanup below unlinks the file that was
+      // actually written: a relative `scriptPath` is written under
+      // SCRIPTS_PATH but was being unlinked relative to the main process cwd,
+      // leaving the temp script behind on every run.
+      const resolvedScriptPath = path.isAbsolute(scriptPath)
+        ? scriptPath
+        : path.join(SCRIPTS_PATH, scriptPath)
+
       try {
         await stopCurrentTestRun()
-
-        const absolute = path.isAbsolute(scriptPath)
-        const resolvedScriptPath = absolute
-          ? scriptPath
-          : path.join(SCRIPTS_PATH, scriptPath)
 
         if (content !== undefined) {
           await writeFile(resolvedScriptPath, content)
@@ -164,7 +180,7 @@ export function initialize() {
       } finally {
         if (content !== undefined) {
           // The archive is self-contained by the time `runLoadTest` resolves.
-          await unlink(scriptPath).catch(() => {
+          await unlink(resolvedScriptPath).catch(() => {
             // Best case effort cleanup.
           })
         }

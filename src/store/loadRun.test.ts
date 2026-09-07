@@ -83,6 +83,34 @@ describe('loadRun store', () => {
     expect(useLoadRunStore.getState().stats).toBeNull()
   })
 
+  it('clears the results on request, without touching the run flags', () => {
+    useLoadRunStore.getState().startRun()
+    handlers.stats.forEach((cb) => cb(stats))
+    handlers.log.forEach((cb) =>
+      cb(createK6Log({ level: 'error', error: 'x' }))
+    )
+    handlers.stopped.forEach((cb) => cb())
+
+    useLoadRunStore.getState().clearRun()
+
+    expect(useLoadRunStore.getState()).toMatchObject({
+      stats: null,
+      logs: [],
+      errors: [],
+      resources: [],
+    })
+  })
+
+  it('stops suppressing errors once the stop has landed', () => {
+    useLoadRunStore.getState().startRun()
+    useLoadRunStore.getState().stopRun()
+
+    // k6's own SIGTERM log is not a failure, but the next run's errors are.
+    handlers.stopped.forEach((cb) => cb())
+
+    expect(useLoadRunStore.getState().isStopping).toBe(false)
+  })
+
   it('reports error logs, except after a deliberate stop', () => {
     useLoadRunStore.getState().startRun()
 

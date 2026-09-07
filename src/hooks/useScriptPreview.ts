@@ -1,6 +1,7 @@
 import { debounce } from 'lodash-es'
 import { useEffect, useState } from 'react'
 
+import { generateScript } from '@/codegen'
 import {
   selectFilteredRequests,
   selectGeneratorData,
@@ -8,7 +9,6 @@ import {
   GeneratorStore,
 } from '@/store/generator'
 import * as path from '@/utils/path'
-import { generateScriptPreview } from '@/views/Generator/Generator.utils'
 
 export type ScriptPreview =
   | { valid: true; preview: string }
@@ -24,16 +24,21 @@ export function useScriptPreview(generatorPath: string): ScriptPreview {
   useEffect(() => {
     const scriptPath = generatorPathToScriptPath(generatorPath)
 
-    const updatePreview = debounce(async (storeState: GeneratorStore) => {
+    const updatePreview = debounce((storeState: GeneratorStore) => {
       try {
         const generator = selectGeneratorData(storeState)
         const requests = selectFilteredRequests(storeState)
 
-        const preview = await generateScriptPreview(
-          scriptPath,
+        // Deliberately not prettified: this runs on every store write, and
+        // formatting a script this size costs more than generating it. The
+        // script tab formats what it shows, and it is the only thing that
+        // needs it - saving and exporting go through
+        // `generateScriptFromGenerator`.
+        const preview = generateScript({
           generator,
-          requests
-        )
+          recording: requests,
+          scriptPath,
+        })
 
         setState({ valid: true, preview })
       } catch (error) {
@@ -46,9 +51,6 @@ export function useScriptPreview(generatorPath: string): ScriptPreview {
       }
     }, 100)
 
-    // Initial preview generation
-    // TODO: https://github.com/grafana/k6-studio/issues/277
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     updatePreview(useGeneratorStore.getState())
 
     const unsubscribe = useGeneratorStore.subscribe((state) =>

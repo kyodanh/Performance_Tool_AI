@@ -94,6 +94,7 @@ describe('Code generation', () => {
           scriptPath: '/project/Scripts/my-script.js',
           generator: {
             version: '3.0',
+            groupMoves: {},
             groupRenames: {},
             groupOrder: [],
             recordingPath: 'test',
@@ -153,6 +154,7 @@ describe('Code generation', () => {
   describe('generateImports', () => {
     const generator: GeneratorFileData = {
       version: '3.0',
+      groupMoves: {},
       groupRenames: {},
       groupOrder: [],
       recordingPath: 'test',

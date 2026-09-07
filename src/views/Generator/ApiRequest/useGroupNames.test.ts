@@ -10,6 +10,7 @@ describe('selectGroupNames', () => {
       requests: [createProxyData({ group: 'Default group' })],
       manualRequests: [],
       emptyGroups: [],
+      groupMoves: {},
       groupRenames: {},
       requestOverrides: {
         'GET http://example.com': createProxyData({ group: 'Trans_ThemMoi' }),
@@ -24,6 +25,7 @@ describe('selectGroupNames', () => {
       requests: [createProxyData({ group: 'Default group' })],
       manualRequests: [],
       emptyGroups: [],
+      groupMoves: {},
       groupRenames: { 'Default group': 'Login' },
       requestOverrides: {},
     })

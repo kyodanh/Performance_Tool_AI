@@ -1,4 +1,5 @@
 import { Box, Flex } from '@radix-ui/themes'
+import { memo } from 'react'
 
 import { HighlightedText } from '@/components/HighlightedText'
 import { Table } from '@/components/Table'
@@ -20,7 +21,14 @@ import { RowActions } from './RowActions'
 import { RuleBadges } from './RuleBadges'
 import { ThinkTimeBadge } from './ThinkTimeBadge'
 
-export function RequestRow({
+/**
+ * Memoised because a group holds every one of its requests at once and each row
+ * carries a tooltip, a dropdown and a popover - a few hundred components. Only
+ * the two rows whose selection changed need to render when a row is clicked,
+ * and every prop here is stable: the data comes from a memo, the callback is a
+ * `useState` setter, and `selectedRuleInstance` is memoised alongside the data.
+ */
+export const RequestRow = memo(function RequestRow({
   data,
   onSelectRequest,
   isSelected,
@@ -90,4 +98,4 @@ export function RequestRow({
       />
     </>
   )
-}
+})

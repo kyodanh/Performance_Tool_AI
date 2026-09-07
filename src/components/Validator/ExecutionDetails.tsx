@@ -1,5 +1,5 @@
 import { css } from '@emotion/react'
-import { Tabs } from '@radix-ui/themes'
+import { ScrollArea, Tabs } from '@radix-ui/themes'
 import { useEffect, useMemo, useState } from 'react'
 
 import { useTrackScriptCopy } from '@/hooks/useTrackScriptCopy'
@@ -16,6 +16,7 @@ import { FailedSection, failureCount, hasFailures } from './FailedSection'
 import { describeCode, describeError, formatCount } from './format'
 import { LogsSection, useConsoleFilter } from './LogsSection'
 import { MetricsSection } from './MetricsSection'
+import { TransactionsTable } from './TransactionsTable'
 
 /**
  * The CSV stream carries request errors that k6 never prints to stdout, so
@@ -123,9 +124,16 @@ const aiButtonStyles = css`
   flex-shrink: 0;
 `
 
-type Tab = 'logs' | 'checks' | 'failed' | 'metrics' | 'script'
+type Tab = 'logs' | 'transactions' | 'checks' | 'failed' | 'metrics' | 'script'
 
-const TABS: Tab[] = ['logs', 'checks', 'failed', 'metrics', 'script']
+const TABS: Tab[] = [
+  'logs',
+  'transactions',
+  'checks',
+  'failed',
+  'metrics',
+  'script',
+]
 
 interface ExecutionDetailsProps {
   isRunning: boolean
@@ -158,6 +166,8 @@ export function ExecutionDetails({
     () => (checks.length > 0 ? checks : checksFromStats(stats)),
     [checks, stats]
   )
+
+  const groups = stats?.groups ?? []
 
   const allLogs = useMemo(() => [...logs, ...errorLogs(stats)], [logs, stats])
 
@@ -196,6 +206,9 @@ export function ExecutionDetails({
       <div css={toolbarStyles}>
         <Tabs.List size="2" css={tabPillStyles}>
           <Tabs.Trigger value="logs">Logs ({allLogs.length})</Tabs.Trigger>
+          <Tabs.Trigger value="transactions" disabled={groups.length === 0}>
+            Transactions ({groups.length})
+          </Tabs.Trigger>
           <Tabs.Trigger value="checks" disabled={resolvedChecks.length === 0}>
             Checks ({resolvedChecks.length})
           </Tabs.Trigger>
@@ -247,6 +260,29 @@ export function ExecutionDetails({
           />
         </Tabs.Content>
       )}
+      <Tabs.Content
+        value="transactions"
+        css={css`
+          flex: 1;
+          min-height: 0;
+        `}
+      >
+        <ScrollArea scrollbars="vertical">
+          <div
+            css={css`
+              padding: var(--space-2);
+            `}
+          >
+            <TransactionsTable
+              groups={groups}
+              elapsed={stats?.elapsed ?? 0}
+              errors={stats?.errors ?? []}
+              checks={stats?.checks ?? []}
+              requests={stats?.requestStats ?? []}
+            />
+          </div>
+        </ScrollArea>
+      </Tabs.Content>
       <Tabs.Content
         value="checks"
         css={css`

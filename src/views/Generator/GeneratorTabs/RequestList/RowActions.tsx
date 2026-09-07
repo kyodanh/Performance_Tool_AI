@@ -15,7 +15,11 @@ import { PopoverDialog } from '@/components/PopoverDialogs'
 import { useGeneratorStore } from '@/store/generator'
 import { useToast } from '@/store/ui/useToast'
 import { ProxyData } from '@/types'
-import { exclusionKeyById, requestKey } from '@/utils/thinkTime'
+import {
+  exclusionKeyById,
+  findRequestOverride,
+  requestKey,
+} from '@/utils/thinkTime'
 
 import { ApiRequestDialog, useGroupNames } from '../../ApiRequest'
 
@@ -50,6 +54,10 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
   const clearRequestOverride = useGeneratorStore(
     (store) => store.clearRequestOverride
   )
+  const setRequestGroup = useGeneratorStore((store) => store.setRequestGroup)
+  const clearRequestGroup = useGeneratorStore(
+    (store) => store.clearRequestGroup
+  )
   const toggleExcludedRequest = useGeneratorStore(
     (store) => store.toggleExcludedRequest
   )
@@ -59,24 +67,32 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
   const isRendezvous = useGeneratorStore((store) => store.rendezvous[key])
   const toggleRendezvous = useGeneratorStore((store) => store.toggleRendezvous)
 
-  // Edits to a recorded request are stored against the request as recorded, so
-  // the key has to come from that rather than from the row, which carries both
-  // the rules and any earlier edit.
+  // Edits to a recorded request are stored against the request as recorded,
+  // rather than against the row, which carries both the rules and any earlier
+  // edit.
   const recorded = useGeneratorStore((store) =>
     store.requests.find((request) => request.id === data.id)
   )
-  const overrideKey = recorded ? requestKey(recorded) : null
-  // Removal is per occurrence, so it cannot share `key` - a recording often
-  // repeats the same request and only the clicked row should go.
-  const excludedKey = useGeneratorStore((store) =>
+  // Removal, edits and moves are all per occurrence, so they cannot share
+  // `key` - a recording often repeats the same request and only the clicked
+  // row should change.
+  const occurrenceKey = useGeneratorStore((store) =>
     exclusionKeyById(store.requests, data.id)
   )
   const override = useGeneratorStore((store) =>
-    overrideKey ? store.requestOverrides[overrideKey] : undefined
+    recorded && occurrenceKey !== null
+      ? findRequestOverride(store.requestOverrides, recorded, occurrenceKey)
+      : undefined
+  )
+  const groupMove = useGeneratorStore((store) =>
+    occurrenceKey !== null ? store.groupMoves[occurrenceKey] : undefined
   )
   // What an edit starts from and writes back to: the stored request, never the
-  // row, which has rules applied to it.
-  const editedRequest = manualRequest ?? override ?? recorded
+  // row, which has rules applied to it. The group is the exception - it comes
+  // from the row, which is where a rename or a move shows up.
+  const editedRequest = manualRequest
+    ? manualRequest
+    : recorded && { ...(override ?? recorded), group: data.group }
 
   const [isEditingThinkTime, setIsEditingThinkTime] = useState(false)
   const [isEditingRequest, setIsEditingRequest] = useState(false)
@@ -98,17 +114,45 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
     setTimeout(selection)
   }
 
-  // A manual request lives in its own list, so it is edited in place. A
-  // recorded one belongs to the HAR, so the edit is stored as an override that
-  // shadows it.
+  // A manual request lives in its own list, so it is edited in place, and its
+  // group rides along with it. A recorded one belongs to the HAR, so the edit
+  // is stored as an override that shadows it, and the group is stored apart -
+  // `groupRenames` maps recorded names, which a move has already left behind.
   function handleSave(request: ProxyData) {
     if (manualRequest) {
       updateManualRequest(manualRequest.id, request)
       return
     }
 
-    if (overrideKey) {
-      setRequestOverride(overrideKey, request)
+    if (occurrenceKey === null) {
+      return
+    }
+
+    if (request.group !== undefined) {
+      setRequestGroup(occurrenceKey, request.group)
+    }
+
+    setRequestOverride(occurrenceKey, request)
+  }
+
+  // Moving only needs the group, so a recorded request gets no override for it
+  // - one would show up as an edit to revert that changed nothing else.
+  function handleMoveToGroup(group: string) {
+    if (manualRequest) {
+      updateManualRequest(manualRequest.id, { ...manualRequest, group })
+      return
+    }
+
+    if (occurrenceKey !== null) {
+      setRequestGroup(occurrenceKey, group)
+    }
+  }
+
+  // Back to the recording: both the edit and the move have to go.
+  function handleRevert() {
+    if (occurrenceKey !== null) {
+      clearRequestOverride(occurrenceKey)
+      clearRequestGroup(occurrenceKey)
     }
   }
 
@@ -121,17 +165,17 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
       return
     }
 
-    if (excludedKey === null) {
+    if (occurrenceKey === null) {
       return
     }
 
-    toggleExcludedRequest(excludedKey)
+    toggleExcludedRequest(occurrenceKey)
     showToast({
       title: 'Request removed from the test',
       action: (
         <Button
           variant="ghost"
-          onClick={() => toggleExcludedRequest(excludedKey)}
+          onClick={() => toggleExcludedRequest(occurrenceKey)}
         >
           Undo
         </Button>
@@ -205,9 +249,7 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                           <DropdownMenu.Item
                             key={group}
                             disabled={group === editedRequest.group}
-                            onSelect={() =>
-                              handleSave({ ...editedRequest, group })
-                            }
+                            onSelect={() => handleMoveToGroup(group)}
                           >
                             {group}
                           </DropdownMenu.Item>
@@ -227,10 +269,8 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                   </>
                 )}
 
-                {override && overrideKey && (
-                  <DropdownMenu.Item
-                    onSelect={() => clearRequestOverride(overrideKey)}
-                  >
+                {(override || groupMove !== undefined) && (
+                  <DropdownMenu.Item onSelect={handleRevert}>
                     <RotateCcwIcon />
                     Revert to recorded
                   </DropdownMenu.Item>

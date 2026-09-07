@@ -88,3 +88,22 @@ export function exclusionKeyById(
 
   return `${key}#${occurrence}`
 }
+
+/**
+ * The stored edit for one recorded request. Edits are keyed by occurrence, the
+ * same as exclusions: a recording repeats the same method and URL - a GraphQL
+ * endpoint is nothing but repeats - so a shared key would show one row's body
+ * on every twin. Generators saved before that hold a bare `requestKey`, which
+ * is honoured for the first occurrence only, so an old edit is kept without
+ * leaking onto the rest.
+ */
+export function findRequestOverride<T>(
+  overrides: Record<string, T>,
+  request: Pick<ProxyData, 'request'>,
+  occurrenceKey: string
+): T | undefined {
+  return (
+    overrides[occurrenceKey] ??
+    (occurrenceKey.endsWith('#0') ? overrides[requestKey(request)] : undefined)
+  )
+}

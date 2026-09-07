@@ -1,5 +1,6 @@
 import { diffWords } from 'diff'
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { KeyValueTuple, ProxyDataWithMatches } from '@/types'
 import { Match } from '@/types/fuse'
@@ -10,7 +11,10 @@ import { selectFilteredRequests, useGeneratorStore } from '..'
 export function useHighlightRequestChanges(
   requests: ProxyDataWithMatches[]
 ): ProxyDataWithMatches[] {
-  const originalRequests = useGeneratorStore(selectFilteredRequests)
+  // Shallow, for the same reason as in `useApplyRules`: the selector builds a
+  // new array on every store write, and without this every row would get a
+  // fresh object and re-render - a few hundred components each.
+  const originalRequests = useGeneratorStore(useShallow(selectFilteredRequests))
 
   return useMemo(() => {
     return requests.map((data) => {
@@ -78,17 +82,23 @@ function addHighlights(
     'request.host'
   )
 
-  return {
-    ...data,
-    matches: [
-      ...requestHeaderMatches,
-      ...requestCookieMatches,
-      ...queryMatches,
-      urlMatches,
-      pathMatches,
-      hostMatches,
-    ],
+  const matches = [
+    ...requestHeaderMatches,
+    ...requestCookieMatches,
+    ...queryMatches,
+    urlMatches,
+    pathMatches,
+    hostMatches,
+  ]
+
+  // A rule rewrites a handful of requests but `applyRules` hands back every
+  // one of them, so most rows have nothing to highlight. Returning the row
+  // untouched keeps its identity, and with it the `memo` on the row.
+  if (matches.every(({ indices }) => indices.length === 0)) {
+    return data
   }
+
+  return { ...data, matches }
 }
 
 function getStringHighlights(

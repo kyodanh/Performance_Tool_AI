@@ -23,9 +23,16 @@ interface State {
   // Recorded requests removed from the test, by `requestKey`. Kept as keys
   // rather than ids so the removal survives reloading the recording.
   excludedRequests: string[]
-  // Recorded requests edited by hand, by `requestKey` of the request each one
-  // replaces. Keyed for the same reason as `excludedRequests`.
+  // Recorded requests edited by hand, by the occurrence key from
+  // `exclusionKeys`. Keyed for the same reason as `excludedRequests`: a
+  // recording repeats the same method and URL, so `requestKey` alone would put
+  // one row's edited body on every identical request.
   requestOverrides: Record<string, ProxyData>
+  // Recorded requests moved to another group, by the occurrence key from
+  // `exclusionKeys`. A recording repeats the same request across groups, so a
+  // move cannot be keyed by `requestKey` like an override is - that would drag
+  // every identical request along with the one that was moved.
+  groupMoves: Record<string, string>
   // Group renames, from the name in the recording to the current one. Renaming
   // a recorded request in place would be undone by the next recording load.
   groupRenames: Record<string, string>
@@ -50,6 +57,8 @@ interface Actions {
   toggleExcludedRequest: (key: string) => void
   setRequestOverride: (key: string, request: ProxyData) => void
   clearRequestOverride: (key: string) => void
+  setRequestGroup: (occurrenceKey: string, group: string) => void
+  clearRequestGroup: (occurrenceKey: string) => void
   restoreExcludedRequests: () => void
   addGroup: (name: string) => void
   renameGroup: (from: string, to: string) => void
@@ -83,6 +92,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   groupOrder: [],
   excludedRequests: [],
   requestOverrides: {},
+  groupMoves: {},
   groupRenames: {},
   recordingPath: '',
   recordingError: null,
@@ -176,6 +186,14 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
     set((state) => {
       delete state.requestOverrides[key]
     }),
+  setRequestGroup: (occurrenceKey: string, group: string) =>
+    set((state) => {
+      state.groupMoves[occurrenceKey] = group
+    }),
+  clearRequestGroup: (occurrenceKey: string) =>
+    set((state) => {
+      delete state.groupMoves[occurrenceKey]
+    }),
   restoreExcludedRequests: () =>
     set((state) => {
       state.excludedRequests = []
@@ -207,6 +225,13 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
       })
       state.groupRenames[from] = to
       Object.values(state.requestOverrides).forEach(rename)
+      // Moves already name a current group, so a later rename has to rewrite
+      // them rather than being applied on top through `groupRenames`.
+      Object.keys(state.groupMoves).forEach((key) => {
+        if (state.groupMoves[key] === from) {
+          state.groupMoves[key] = to
+        }
+      })
       state.emptyGroups = state.emptyGroups.map((group) =>
         group === from ? to : group
       )
@@ -231,6 +256,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
       state.allowlist = []
       state.excludedRequests = []
       state.requestOverrides = {}
+      state.groupMoves = {}
       state.recordingPath = ''
     }),
   setAllowlist: (value) =>

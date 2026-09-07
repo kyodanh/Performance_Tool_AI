@@ -49,13 +49,32 @@ export function initialize() {
           },
         }
       } catch (error) {
-        return {
-          type: 'error',
-          message: error instanceof Error ? error.message : String(error),
-        }
+        return { type: 'error', message: describeError(error) }
       }
     }
   )
+}
+
+/**
+ * `fetch` reports every network failure as a bare "fetch failed"; the reason
+ * (ENOTFOUND, self-signed certificate, ECONNREFUSED) only lives on `cause`.
+ */
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error)
+  }
+
+  const { cause } = error
+
+  if (cause === undefined || cause === null) {
+    return error.message
+  }
+
+  const causeMessage = describeError(cause)
+
+  return causeMessage === error.message
+    ? error.message
+    : `${error.message}: ${causeMessage}`
 }
 
 function parseSetCookieHeaders(setCookie: string[]): Cookie[] {
@@ -64,5 +83,31 @@ function parseSetCookieHeaders(setCookie: string[]): Cookie[] {
     const [name = '', ...value] = pair.split('=')
 
     return [name.trim(), value.join('=')]
+  })
+}
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest
+
+  describe('describeError', () => {
+    it('appends the cause of an opaque fetch failure', () => {
+      const error = new TypeError('fetch failed', {
+        cause: new Error('getaddrinfo ENOTFOUND example.invalid'),
+      })
+
+      expect(describeError(error)).toBe(
+        'fetch failed: getaddrinfo ENOTFOUND example.invalid'
+      )
+    })
+
+    it('keeps a message without a cause as is', () => {
+      expect(describeError(new Error('The operation timed out'))).toBe(
+        'The operation timed out'
+      )
+    })
+
+    it('handles a non-error throw', () => {
+      expect(describeError('boom')).toBe('boom')
+    })
   })
 }

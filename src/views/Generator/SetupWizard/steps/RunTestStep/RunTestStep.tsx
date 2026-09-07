@@ -336,6 +336,8 @@ function WhatWillRun({
         // Overrides replace requests one for one, so they can't change the
         // count.
         requestOverrides: {},
+        // Moving a request between groups can't change the count either.
+        groupMoves: {},
         groupRenames: {},
         // Only the count is needed here, and reordering groups can't change it.
         groupOrder: [],

@@ -62,4 +62,96 @@ describe('harToProxyData', () => {
 
     expect(proxyData!.request.timestampEnd).toBe(0)
   })
+
+  it('drops a response body too large to be worth decoding', () => {
+    const [proxyData] = harToProxyData({
+      log: {
+        version: '1.2',
+        creator: { name: 'test', version: '1' },
+        entries: [
+          createHarEntry({
+            response: {
+              status: 200,
+              statusText: 'OK',
+              httpVersion: 'HTTP/1.1',
+              headers: [],
+              cookies: [],
+              content: {
+                size: 30_000_000,
+                mimeType: 'video/mp4',
+                encoding: 'base64',
+                text: 'A'.repeat(1_000_001),
+              },
+              redirectURL: '',
+              headersSize: -1,
+              bodySize: -1,
+            },
+          }),
+        ],
+      },
+    })
+
+    expect(proxyData!.response!.content).toBe('')
+    // The size still comes from the recording, so the row reports it.
+    expect(proxyData!.response!.contentLength).toBe(30_000_000)
+  })
+
+  it('keeps a response body under the cap', () => {
+    const [proxyData] = harToProxyData({
+      log: {
+        version: '1.2',
+        creator: { name: 'test', version: '1' },
+        entries: [
+          createHarEntry({
+            response: {
+              status: 200,
+              statusText: 'OK',
+              httpVersion: 'HTTP/1.1',
+              headers: [],
+              cookies: [],
+              content: {
+                size: 15,
+                mimeType: 'application/json',
+                text: '{"id":"abc123"}',
+              },
+              redirectURL: '',
+              headersSize: -1,
+              bodySize: -1,
+            },
+          }),
+        ],
+      },
+    })
+
+    expect(proxyData!.response!.content).toBe('{"id":"abc123"}')
+  })
+
+  it('drops a request body too large to be worth keeping', () => {
+    const [proxyData] = harToProxyData({
+      log: {
+        version: '1.2',
+        creator: { name: 'test', version: '1' },
+        entries: [
+          createHarEntry({
+            request: {
+              method: 'POST',
+              url: 'https://example.com/upload',
+              httpVersion: 'HTTP/1.1',
+              headers: [],
+              queryString: [],
+              cookies: [],
+              headersSize: -1,
+              bodySize: -1,
+              postData: {
+                mimeType: 'application/octet-stream',
+                text: 'A'.repeat(1_000_001),
+              },
+            },
+          }),
+        ],
+      },
+    })
+
+    expect(proxyData!.request.content).toBe('')
+  })
 })

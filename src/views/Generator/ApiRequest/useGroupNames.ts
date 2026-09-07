@@ -10,6 +10,7 @@ type GroupNameState = Pick<
   | 'emptyGroups'
   | 'groupRenames'
   | 'requestOverrides'
+  | 'groupMoves'
 >
 
 /** Group names already in use, so they can be picked instead of retyped. */
@@ -29,6 +30,9 @@ export function selectGroupNames(state: GroupNameState) {
       ...Object.values(state.requestOverrides).map(
         ({ group }) => group || DEFAULT_GROUP_NAME
       ),
+      // A group can also exist only as the target of a move, which already
+      // holds a current name.
+      ...Object.values(state.groupMoves),
       ...state.emptyGroups,
     ])
   )
@@ -40,6 +44,7 @@ export function useGroupNames() {
   const emptyGroups = useGeneratorStore((store) => store.emptyGroups)
   const groupRenames = useGeneratorStore((store) => store.groupRenames)
   const requestOverrides = useGeneratorStore((store) => store.requestOverrides)
+  const groupMoves = useGeneratorStore((store) => store.groupMoves)
 
   return useMemo(
     () =>
@@ -49,7 +54,15 @@ export function useGroupNames() {
         emptyGroups,
         groupRenames,
         requestOverrides,
+        groupMoves,
       }),
-    [requests, manualRequests, emptyGroups, groupRenames, requestOverrides]
+    [
+      requests,
+      manualRequests,
+      emptyGroups,
+      groupRenames,
+      requestOverrides,
+      groupMoves,
+    ]
   )
 }

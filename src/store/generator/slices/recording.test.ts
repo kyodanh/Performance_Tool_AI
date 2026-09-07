@@ -288,15 +288,139 @@ describe('setRequestOverride', () => {
     setAllowlist(['example.com'])
     setRequestOverride(
       requestKey(useGeneratorStore.getState().requests[0]!),
-      createProxyData({ id: 'edited', group: 'Checkout' })
+      createProxyData({
+        id: 'edited',
+        request: createRequest({ url: 'http://example.com/edited' }),
+      })
     )
 
     setRecording([createProxyData({ id: 'second-load' })])
 
     const [request] = selectFilteredRequests(useGeneratorStore.getState())
-    expect(request?.group).toBe('Checkout')
+    expect(request?.request.url).toBe('http://example.com/edited')
     // The row keeps the recorded id so the rest of the UI still matches it up.
     expect(request?.id).toBe('second-load')
+  })
+
+  // A recording repeats the same request across groups - a logo asks for the
+  // same URL in every one - and the override is shared by all of them.
+  it('leaves every occurrence in its own group', () => {
+    const { setRecording, setAllowlist, setRequestOverride } =
+      useGeneratorStore.getState()
+
+    setRecording([
+      createProxyData({ id: 'in-home', group: 'Trans_TrangChu' }),
+      createProxyData({ id: 'in-login', group: 'Trans_DangNhap' }),
+      createProxyData({ id: 'in-logout', group: 'Trans_LogOut' }),
+    ])
+    setAllowlist(['example.com'])
+
+    // What sending one row again does: it stores an override carrying the
+    // group of the row that was clicked.
+    setRequestOverride(
+      requestKey(useGeneratorStore.getState().requests[0]!),
+      createProxyData({ id: 'in-home', group: 'Trans_TrangChu' })
+    )
+
+    expect(
+      selectFilteredRequests(useGeneratorStore.getState()).map(
+        ({ group }) => group
+      )
+    ).toEqual(['Trans_TrangChu', 'Trans_DangNhap', 'Trans_LogOut'])
+  })
+})
+
+describe('setRequestGroup', () => {
+  function groupsOf() {
+    return selectFilteredRequests(useGeneratorStore.getState()).map(
+      ({ group }) => group
+    )
+  }
+
+  function recordThreeInDifferentGroups() {
+    const { setRecording, setAllowlist } = useGeneratorStore.getState()
+
+    setRecording([
+      createProxyData({ id: 'in-home', group: 'Trans_TrangChu' }),
+      createProxyData({ id: 'in-login', group: 'Trans_DangNhap' }),
+      createProxyData({ id: 'in-logout', group: 'Trans_LogOut' }),
+    ])
+    setAllowlist(['example.com'])
+  }
+
+  it('moves only the occurrence it was given', () => {
+    recordThreeInDifferentGroups()
+    const { setRequestGroup } = useGeneratorStore.getState()
+
+    setRequestGroup(
+      exclusionKeyById(useGeneratorStore.getState().requests, 'in-login')!,
+      'Trans_NopBai'
+    )
+
+    expect(groupsOf()).toEqual([
+      'Trans_TrangChu',
+      'Trans_NopBai',
+      'Trans_LogOut',
+    ])
+  })
+
+  it('keeps the move after the recording is loaded again', () => {
+    recordThreeInDifferentGroups()
+    const { setRequestGroup, setRecording } = useGeneratorStore.getState()
+
+    setRequestGroup(
+      exclusionKeyById(useGeneratorStore.getState().requests, 'in-login')!,
+      'Trans_NopBai'
+    )
+
+    // Fresh ids, same occurrences.
+    setRecording([
+      createProxyData({ id: 'a', group: 'Trans_TrangChu' }),
+      createProxyData({ id: 'b', group: 'Trans_DangNhap' }),
+      createProxyData({ id: 'c', group: 'Trans_LogOut' }),
+    ])
+
+    expect(groupsOf()).toEqual([
+      'Trans_TrangChu',
+      'Trans_NopBai',
+      'Trans_LogOut',
+    ])
+  })
+
+  it('follows the target group when it is renamed', () => {
+    recordThreeInDifferentGroups()
+    const { setRequestGroup, renameGroup } = useGeneratorStore.getState()
+
+    setRequestGroup(
+      exclusionKeyById(useGeneratorStore.getState().requests, 'in-login')!,
+      'Trans_LogOut'
+    )
+    renameGroup('Trans_LogOut', 'trans_dang_xuat')
+
+    expect(groupsOf()).toEqual([
+      'Trans_TrangChu',
+      'trans_dang_xuat',
+      'trans_dang_xuat',
+    ])
+  })
+
+  it('reverts to the recorded group', () => {
+    recordThreeInDifferentGroups()
+    const { setRequestGroup, clearRequestGroup } = useGeneratorStore.getState()
+
+    const key = exclusionKeyById(
+      useGeneratorStore.getState().requests,
+      'in-login'
+    )!
+
+    setRequestGroup(key, 'Trans_NopBai')
+    clearRequestGroup(key)
+
+    expect(groupsOf()).toEqual([
+      'Trans_TrangChu',
+      'Trans_DangNhap',
+      'Trans_LogOut',
+    ])
   })
 })
 

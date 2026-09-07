@@ -23,6 +23,7 @@ export async function loadGeneratorTest(generatorPath: string) {
     manualRequests: generator.manualRequests ?? [],
     excludedRequests: generator.excludedRequests ?? [],
     requestOverrides: generator.requestOverrides ?? {},
+    groupMoves: generator.groupMoves ?? {},
     groupRenames: generator.groupRenames ?? {},
     groupOrder: generator.groupOrder ?? [],
     allowlist: generator.allowlist,

@@ -11,6 +11,23 @@ window.addEventListener('error', (event) => {
   }
 })
 
+// Monaco rejects the promise behind its debounced tasks with a `Canceled`
+// error whenever a widget is disposed mid-delay — closing an editor disposes
+// WordHighlighter that way. Nothing upstream awaits that promise, so every
+// editor teardown would be logged as an unhandled rejection.
+window.addEventListener('unhandledrejection', (event) => {
+  const reason: unknown = event.reason
+
+  if (
+    reason instanceof Error &&
+    reason.name === 'Canceled' &&
+    reason.message === 'Canceled'
+  ) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
+})
+
 log.errorHandler.startCatching()
 
 const root = createRoot(document.getElementById('root')!)

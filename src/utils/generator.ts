@@ -15,6 +15,7 @@ export function createNewGeneratorFile(
     manualRequests: [],
     excludedRequests: [],
     requestOverrides: {},
+    groupMoves: {},
     groupRenames: {},
     groupOrder: [],
     options: {

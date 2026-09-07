@@ -4,7 +4,11 @@ import { GeneratorFileData } from '@/types/generator'
 import { LoadProfileExecutorOptions, TestOptions } from '@/types/testOptions'
 import { sortByGroupOrder } from '@/utils/groups'
 import { isNonStaticAssetResponse } from '@/utils/staticAssets'
-import { exclusionKeys, requestKey } from '@/utils/thinkTime'
+import {
+  exclusionKeys,
+  findRequestOverride,
+  requestKey,
+} from '@/utils/thinkTime'
 import { exhaustive } from '@/utils/typescript'
 
 export function selectRuleById(state: GeneratorStore, id?: string) {
@@ -41,6 +45,7 @@ export function selectFilteredRequests(
     | 'includeStaticAssets'
     | 'excludedRequests'
     | 'requestOverrides'
+    | 'groupMoves'
     | 'groupRenames'
     | 'groupOrder'
   >
@@ -48,25 +53,47 @@ export function selectFilteredRequests(
   const excluded = new Set(state.excludedRequests)
   const keys = exclusionKeys(state.requests)
 
-  const allowedRequests = state.requests.filter((request, index) => {
-    return (
-      state.allowlist.includes(request.request.host) &&
-      !excluded.has(keys[index]!) &&
-      // Generators saved before exclusions were per occurrence hold a bare
-      // `requestKey`, which still removes every identical request.
-      !excluded.has(requestKey(request))
-    )
-  })
+  // The occurrence key travels with the request: it is what identifies a
+  // single recorded request once the list has been filtered.
+  const allowedRequests = state.requests
+    .map((request, index) => ({ request, occurrenceKey: keys[index]! }))
+    .filter(({ request, occurrenceKey }) => {
+      return (
+        state.allowlist.includes(request.request.host) &&
+        !excluded.has(occurrenceKey) &&
+        // Generators saved before exclusions were per occurrence hold a bare
+        // `requestKey`, which still removes every identical request.
+        !excluded.has(requestKey(request))
+      )
+    })
 
   const filtered = state.includeStaticAssets
     ? allowedRequests
-    : allowedRequests.filter(isNonStaticAssetResponse)
+    : allowedRequests.filter(({ request }) => isNonStaticAssetResponse(request))
 
   // An edited recorded request keeps its place in the script, so it replaces
   // the recorded one rather than being appended like a manual request.
-  const recordedRequests = filtered.map((request) => {
-    const override = state.requestOverrides[requestKey(request)]
-    const stored = override ? { ...override, id: request.id } : request
+  const recordedRequests = filtered.map(({ request, occurrenceKey }) => {
+    const override = findRequestOverride(
+      state.requestOverrides,
+      request,
+      occurrenceKey
+    )
+    // The group belongs to the occurrence, not to the edit, so a generator
+    // saved with an older shared override cannot pull every identical request
+    // into one group.
+    const stored = override
+      ? { ...override, id: request.id, group: request.group }
+      : request
+
+    const moved = state.groupMoves[occurrenceKey]
+
+    // A move already names a current group, so `groupRenames` - which maps
+    // recorded names - must not be applied on top of it.
+    if (moved !== undefined) {
+      return { ...stored, group: moved }
+    }
+
     const renamed = state.groupRenames[stored.group || DEFAULT_GROUP_NAME]
 
     return renamed ? { ...stored, group: renamed } : stored
@@ -103,6 +130,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     manualRequests,
     excludedRequests,
     requestOverrides,
+    groupMoves,
     groupRenames,
     groupOrder,
     includeStaticAssets,
@@ -131,6 +159,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     manualRequests,
     excludedRequests,
     requestOverrides,
+    groupMoves,
     groupRenames,
     groupOrder,
     includeStaticAssets,

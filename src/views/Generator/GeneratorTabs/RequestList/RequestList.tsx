@@ -112,6 +112,13 @@ export function RequestList({
 
   const requestWithHighlights = useHighlightRequestChanges(filteredRequests)
 
+  // A fresh function here defeats `memo` on WebLogView, which then renders
+  // every group and every row on any change above it.
+  const handleRemoveGroup = useCallback(
+    ({ name }: Group) => removeGroup(name),
+    [removeGroup]
+  )
+
   // A new function here would be a new component type, remounting every row
   // and dropping any popover a row has open.
   const ListComponent = useCallback(
@@ -219,7 +226,7 @@ export function RequestList({
             filter={filter}
             groupVariant="card"
             onUpdateGroup={handleUpdateGroup}
-            onRemoveGroup={({ name }) => removeGroup(name)}
+            onRemoveGroup={handleRemoveGroup}
             onReorderGroups={setGroupOrder}
             ListComponent={ListComponent}
           />

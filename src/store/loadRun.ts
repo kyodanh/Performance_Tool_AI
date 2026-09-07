@@ -36,6 +36,12 @@ interface State {
 interface Actions {
   /** Clears the previous run and starts collecting the next one. */
   startRun: () => void
+  /**
+   * Drops the last run's results without starting another. `startRun` already
+   * does this, so this is only for clearing the panel by hand — a finished run
+   * stays on screen until then, which is the point of running it.
+   */
+  clearRun: () => void
   /** A stop the user asked for. */
   stopRun: () => void
   /** A run that never got going — archiving, a syntax error, a bad option. */
@@ -62,6 +68,16 @@ export const useLoadRunStore = create<LoadRunStore>()(
       set((state) => {
         state.isRunning = true
         state.isStopping = false
+        state.stats = null
+        state.resources = []
+        state.logs = []
+        state.checks = []
+        state.errors = []
+      })
+    },
+
+    clearRun: () => {
+      set((state) => {
         state.stats = null
         state.resources = []
         state.logs = []
@@ -154,6 +170,9 @@ export function subscribe() {
   window.studio.script.onScriptStopped(() => {
     useLoadRunStore.setState((state) => {
       state.isRunning = false
+      // The stop has landed, so the next error log is a real failure again
+      // rather than k6 reporting its own SIGTERM.
+      state.isStopping = false
     })
   })
 }
