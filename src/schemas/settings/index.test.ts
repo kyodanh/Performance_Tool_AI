@@ -6,8 +6,9 @@ import * as v1 from './v1'
 import * as v2 from './v2'
 import * as v3 from './v3'
 import * as v4 from './v4'
+import * as v5 from './v5'
 
-import { AppSettingsSchema, migrate } from '.'
+import { AppSettingsSchema, DEFAULT_SCRIPT_SETTINGS, migrate } from '.'
 
 describe('Settings migration', () => {
   it('should migrate from v1 to latest', () => {
@@ -40,7 +41,7 @@ describe('Settings migration', () => {
 
     const migration = migrate(v1Settings)
 
-    expect(migration.version).toBe('5.0')
+    expect(migration.version).toBe('6.0')
     expect(migration.telemetry.usageReport).toBe(v1Settings.usageReport.enabled)
   })
 
@@ -74,7 +75,7 @@ describe('Settings migration', () => {
 
     const migration = migrate(v2Settings)
 
-    expect(migration.version).toBe('5.0')
+    expect(migration.version).toBe('6.0')
     expect(migration.telemetry.usageReport).toBe(v2Settings.usageReport.enabled)
   })
 
@@ -211,8 +212,64 @@ describe('Settings migration', () => {
     it('should migrate v4 to latest through the orchestrator', () => {
       const migration = migrate(v4Settings)
 
-      expect(migration.version).toBe('5.0')
+      expect(migration.version).toBe('6.0')
       expect('ai' in migration).toBe(false)
+    })
+  })
+
+  describe('v5 to v6', () => {
+    const v5Settings: v5.AppSettings = {
+      version: '5.0',
+      proxy: {
+        mode: 'regular',
+        port: 6000,
+        automaticallyFindPort: true,
+        sslInsecure: false,
+      },
+      recorder: {
+        detectBrowserPath: true,
+        browserRecording: 'extension',
+      },
+      windowState: {
+        width: 1200,
+        height: 800,
+        x: 0,
+        y: 0,
+        isMaximized: true,
+      },
+      telemetry: { usageReport: true, errorReport: true },
+      appearance: { theme: 'system' },
+      script: DEFAULT_SCRIPT_SETTINGS,
+    }
+
+    it('should default the workspace to the standard location', () => {
+      const migration = v5.migrate(v5Settings)
+
+      expect(migration.version).toBe('6.0')
+      expect(migration.workspace.root).toBe('')
+    })
+
+    it('should preserve every other field', () => {
+      const migration = v5.migrate(v5Settings)
+
+      expect(migration.proxy).toEqual(v5Settings.proxy)
+      expect(migration.recorder).toEqual(v5Settings.recorder)
+      expect(migration.windowState).toEqual(v5Settings.windowState)
+      expect(migration.telemetry).toEqual(v5Settings.telemetry)
+      expect(migration.appearance).toEqual(v5Settings.appearance)
+      expect(migration.script).toEqual(v5Settings.script)
+    })
+
+    it('should keep a workspace root the user already chose', () => {
+      const settings = AppSettingsSchema.parse({
+        ...v5Settings,
+        version: '6.0',
+        workspace: { root: '/Users/someone/k6-projects/Elearning' },
+      })
+
+      expect(settings.workspace.root).toBe(
+        '/Users/someone/k6-projects/Elearning'
+      )
     })
   })
 })

@@ -4,6 +4,11 @@ import log from 'electron-log/main'
 import isSquirrelStartup from 'electron-squirrel-startup'
 import { updateElectronApp } from 'update-electron-app'
 
+import {
+  getDefaultWorkspaceRoot,
+  getProjectPath,
+  setActiveWorkspaceRoot,
+} from '@/constants/workspace'
 import * as path from '@/utils/path'
 
 import * as handlers from './handlers'
@@ -69,6 +74,24 @@ mainState.initialize()
 initializeDeepLinks()
 initOpenFile()
 
+/**
+ * The project name is part of the title so several projects open in sequence
+ * stay tellable apart — the default workspace shows no name, there is only one.
+ */
+function buildWindowTitle() {
+  const base = DEV_GIT_BRANCH
+    ? `Grafana k6 Studio [${DEV_GIT_BRANCH}]`
+    : 'Grafana k6 Studio'
+
+  const root = getProjectPath()
+
+  if (path.equal(root, getDefaultWorkspaceRoot())) {
+    return base
+  }
+
+  return `${path.basename(root)} — ${base}`
+}
+
 const createWindow = async () => {
   const icon = getAppIcon(process.env.NODE_ENV === 'development')
   if (getPlatform() === 'mac') {
@@ -93,9 +116,7 @@ const createWindow = async () => {
     minHeight: 600,
     show: false,
     icon,
-    title: DEV_GIT_BRANCH
-      ? `Grafana k6 Studio [${DEV_GIT_BRANCH}]`
-      : 'Grafana k6 Studio',
+    title: buildWindowTitle(),
     backgroundColor: nativeTheme.themeSource === 'light' ? '#fff' : '#111110',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -179,6 +200,10 @@ app.whenReady().then(
     await initSettings()
     k6StudioState.appSettings = await getSettings()
     nativeTheme.themeSource = k6StudioState.appSettings.appearance.theme
+
+    // Must happen before the folders are created, the watcher starts or any
+    // handler resolves a path — everything downstream reads the active root.
+    setActiveWorkspaceRoot(k6StudioState.appSettings.workspace.root)
 
     await setupProjectStructure()
     await initEventTracking()

@@ -1,10 +1,15 @@
 import { app, BrowserWindow, nativeTheme } from 'electron'
 import log from 'electron-log/main'
 
+import { getDefaultWorkspaceRoot, getProjectPath } from '@/constants/workspace'
 import { configureSystemProxy } from '@/services/http'
 import * as path from '@/utils/path'
 
-import { AppSettingsSchema, DEFAULT_SCRIPT_SETTINGS } from '../schemas/settings'
+import {
+  AppSettingsSchema,
+  DEFAULT_SCRIPT_SETTINGS,
+  DEFAULT_WORKSPACE_SETTINGS,
+} from '../schemas/settings'
 import { AppSettings } from '../types/settings'
 import { showOpenDialog } from '../utils/dialog'
 import { getPlatform } from '../utils/electron'
@@ -15,7 +20,7 @@ import { getExecutableNameFromPlist } from '../utils/plist'
 import { stopProxyProcess, launchProxyAndAttachEmitter } from './proxy'
 
 export const defaultSettings: AppSettings = {
-  version: '5.0',
+  version: '6.0',
   proxy: {
     mode: 'regular',
     port: 6000,
@@ -27,6 +32,7 @@ export const defaultSettings: AppSettings = {
   telemetry: { usageReport: true, errorReport: true },
   appearance: { theme: 'system' },
   script: DEFAULT_SCRIPT_SETTINGS,
+  workspace: DEFAULT_WORKSPACE_SETTINGS,
 }
 
 const fileName =
@@ -161,6 +167,13 @@ export async function selectBrowserExecutable(browserWindow: BrowserWindow) {
   return { canceled, bookmarks, filePaths: await getFilePaths() }
 }
 
+export function getWorkspaceInfo() {
+  return {
+    activeRoot: getProjectPath(),
+    defaultRoot: getDefaultWorkspaceRoot(),
+  }
+}
+
 export async function selectUpstreamCertificate(browserWindow: BrowserWindow) {
   return showOpenDialog(browserWindow, {
     title: 'Select certificate',
@@ -194,5 +207,13 @@ export async function applySettings(
   if (modifiedSettings.appearance) {
     k6StudioState.appSettings.appearance = modifiedSettings.appearance
     nativeTheme.themeSource = k6StudioState.appSettings.appearance.theme
+  }
+
+  // Deliberately not applied live. The watcher, the open tabs and any running
+  // recording all hold paths derived from the old root, so the new one only
+  // takes effect on the next launch — the settings UI says so and offers to
+  // restart.
+  if (modifiedSettings.workspace) {
+    k6StudioState.appSettings.workspace = modifiedSettings.workspace
   }
 }

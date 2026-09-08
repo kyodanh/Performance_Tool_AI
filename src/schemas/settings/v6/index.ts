@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
 import { DEFAULT_HTTP_TIMEOUT } from '../../generator/v3/testOptions'
+// Imported from v4, not v5: each version may only depend on versions older
+// than itself. v5 imports v6 to declare its migration, so a v6 -> v5 import
+// would be a cycle and leave these schemas undefined at module-eval time.
 import {
   AppearanceSchema,
   ProxySettingsSchema,
@@ -9,7 +12,6 @@ import {
   WindowStateSchema,
   type UpstreamProxySettings,
 } from '../v4'
-import * as v6 from '../v6'
 
 export {
   AppearanceSchema,
@@ -37,24 +39,31 @@ export const DEFAULT_SCRIPT_SETTINGS = {
   allowExportEdit: false,
 }
 
+/**
+ * Where the Recordings / Generators / Scripts / Data / Browser / Results
+ * folders live. An empty string means the default location
+ * (`Documents/k6-studio`) — storing it that way keeps the settings file valid
+ * when the OS reports a different Documents folder, and lets the UI tell
+ * "never chosen" apart from "deliberately pointed at the default".
+ */
+export const WorkspaceSettingsSchema = z.object({
+  root: z.string().default(''),
+})
+
+export const DEFAULT_WORKSPACE_SETTINGS = {
+  root: '',
+}
+
 export const AppSettingsSchema = z.object({
-  version: z.literal('5.0'),
+  version: z.literal('6.0'),
   proxy: ProxySettingsSchema,
   recorder: RecorderSettingsSchema,
   windowState: WindowStateSchema,
   telemetry: TelemetrySchema,
   appearance: AppearanceSchema,
   script: ScriptSettingsSchema.default(DEFAULT_SCRIPT_SETTINGS),
+  workspace: WorkspaceSettingsSchema.default(DEFAULT_WORKSPACE_SETTINGS),
 })
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>
-
-export function migrate(
-  settings: z.infer<typeof AppSettingsSchema>
-): v6.AppSettings {
-  return {
-    ...settings,
-    version: '6.0',
-    workspace: v6.DEFAULT_WORKSPACE_SETTINGS,
-  }
-}
+export type WorkspaceSettings = z.infer<typeof WorkspaceSettingsSchema>

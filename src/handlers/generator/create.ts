@@ -1,5 +1,5 @@
 import { K6_GENERATOR_FILE_EXTENSION } from '@/constants/files'
-import { GENERATORS_PATH } from '@/constants/workspace'
+import { getGeneratorsPath } from '@/constants/workspace'
 import { getSettings } from '@/main/settings'
 import { trackEvent } from '@/services/usageTracking'
 import { UsageEventName } from '@/services/usageTracking/types'
@@ -15,10 +15,10 @@ export async function createGenerator(recordingPath?: string): Promise<string> {
 
   const filePath = await createFileWithUniqueName({
     data: serializeGenerator(
-      path.join(GENERATORS_PATH, `Generator${K6_GENERATOR_FILE_EXTENSION}`),
+      path.join(getGeneratorsPath(), `Generator${K6_GENERATOR_FILE_EXTENSION}`),
       generator
     ),
-    directory: GENERATORS_PATH,
+    directory: getGeneratorsPath(),
     ext: K6_GENERATOR_FILE_EXTENSION,
     prefix: 'Generator',
   })

@@ -5,6 +5,7 @@ import { isEncryptionAvailable } from '@/main/encryption'
 import {
   applySettings,
   getSettings,
+  getWorkspaceInfo,
   saveSettings,
   selectBrowserExecutable,
   selectUpstreamCertificate,
@@ -58,5 +59,9 @@ export function initialize() {
 
   ipcMain.handle(SettingsHandler.IsEncryptionAvailable, () => {
     return isEncryptionAvailable()
+  })
+
+  ipcMain.handle(SettingsHandler.GetWorkspaceInfo, () => {
+    return getWorkspaceInfo()
   })
 }

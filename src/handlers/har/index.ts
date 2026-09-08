@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 
-import { RECORDINGS_PATH } from '@/constants/workspace'
+import { getRecordingsPath } from '@/constants/workspace'
 import { Recording } from '@/schemas/recording'
 import { trackEvent } from '@/services/usageTracking'
 import { UsageEventName } from '@/services/usageTracking/types'
@@ -24,7 +24,7 @@ export function initialize() {
 
       const filePath = await createFileWithUniqueName({
         data: JSON.stringify(data, null, 2),
-        directory: RECORDINGS_PATH,
+        directory: getRecordingsPath(),
         ext: '.har',
         prefix,
       })
@@ -45,7 +45,7 @@ export function initialize() {
       const browserWindow = browserWindowFromEvent(event)
 
       const result = await showSaveDialog(browserWindow, {
-        defaultPath: path.join(RECORDINGS_PATH, hint),
+        defaultPath: path.join(getRecordingsPath(), hint),
         filters: [{ name: 'HAR', extensions: ['har'] }],
       })
 
@@ -77,7 +77,10 @@ export function initialize() {
       return
     }
 
-    const destinationPath = path.join(RECORDINGS_PATH, path.basename(filePath))
+    const destinationPath = path.join(
+      getRecordingsPath(),
+      path.basename(filePath)
+    )
 
     if (await exists(destinationPath)) {
       const { response } = await showMessageBox(browserWindow, {

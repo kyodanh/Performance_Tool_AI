@@ -5,10 +5,11 @@ import {
   K6_GENERATOR_FILE_EXTENSION,
 } from '@/constants/files'
 import {
-  BROWSER_TESTS_PATH,
-  GENERATORS_PATH,
-  PROJECT_PATH,
-  SCRIPTS_PATH,
+  getBrowserTestsPath,
+  getGeneratorsPath,
+  getProjectPath,
+  getRecordingsPath,
+  getScriptsPath,
 } from '@/constants/workspace'
 import { getStudioFileFromPath } from '@/main/file'
 import { getTempScriptName } from '@/main/script'
@@ -34,20 +35,20 @@ function getDefaultPath(location: StorageLocation) {
 
   switch (path.extname(location.hint)) {
     case '.har':
-      return path.join(PROJECT_PATH, 'Recordings', location.hint)
+      return path.join(getRecordingsPath(), location.hint)
 
     case K6_GENERATOR_FILE_EXTENSION:
-      return path.join(GENERATORS_PATH, location.hint)
+      return path.join(getGeneratorsPath(), location.hint)
 
     case K6_BROWSER_TEST_FILE_EXTENSION:
-      return path.join(BROWSER_TESTS_PATH, location.hint)
+      return path.join(getBrowserTestsPath(), location.hint)
 
     case '.js':
     case '.ts':
-      return path.join(SCRIPTS_PATH, location.hint)
+      return path.join(getScriptsPath(), location.hint)
 
     default:
-      return PROJECT_PATH
+      return getProjectPath()
   }
 }
 

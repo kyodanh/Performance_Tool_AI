@@ -5,12 +5,13 @@ import {
   shell,
 } from 'electron'
 
-import { PROJECT_PATH } from '@/constants/workspace'
+import { getProjectPath } from '@/constants/workspace'
 import { AppHandler } from '@/handlers/app/types'
 import { createBrowserTest } from '@/handlers/browserTest/create'
 import { createGenerator } from '@/handlers/generator/create'
 import { EditAction, MenuItem, UIHandler } from '@/handlers/ui/types'
 import { getStudioFileFromPath } from '@/main/file'
+import { createProject, openProject } from '@/main/project'
 import { getViewPath, routeMap } from '@/routeMap'
 import { showOpenDialog } from '@/utils/dialog'
 import * as path from '@/utils/path'
@@ -152,9 +153,30 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
                 )
               },
             },
+            { type: 'separator' },
+            {
+              label: 'Project...',
+              click: async (_, window) => {
+                if (window instanceof BrowserWindow === false) {
+                  return
+                }
+
+                await createProject(window)
+              },
+            },
           ],
         },
         { type: 'separator' },
+        {
+          label: 'Open Project...',
+          click: async (_, window) => {
+            if (window instanceof BrowserWindow === false) {
+              return
+            }
+
+            await openProject(window)
+          },
+        },
         {
           label: 'Open...',
           accelerator: 'CmdOrCtrl+O',
@@ -166,7 +188,7 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
             const {
               filePaths: [filePath],
             } = await showOpenDialog(window, {
-              defaultPath: PROJECT_PATH,
+              defaultPath: getProjectPath(),
               properties: ['openFile'],
               filters: [
                 {

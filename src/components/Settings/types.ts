@@ -4,5 +4,6 @@ export type SettingsTabValue =
   | 'usageReport'
   | 'appearance'
   | 'script'
+  | 'workspace'
   | 'logs'
   | 'aiProvider'

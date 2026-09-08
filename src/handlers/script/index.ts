@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
 
-import { SCRIPTS_PATH } from '@/constants/workspace'
+import { getScriptsPath } from '@/constants/workspace'
 import { waitForProxy } from '@/main/proxy'
 import {
   analyzeScript,
@@ -90,7 +90,7 @@ export function initialize() {
         const absolute = path.isAbsolute(scriptPath)
         const resolvedScriptPath = absolute
           ? scriptPath
-          : path.join(SCRIPTS_PATH, scriptPath)
+          : path.join(getScriptsPath(), scriptPath)
 
         currentTestRun = await runScript({
           browserWindow,
@@ -141,12 +141,12 @@ export function initialize() {
       const browserWindow = browserWindowFromEvent(event)
 
       // Resolved up front so the cleanup below unlinks the file that was
-      // actually written: a relative `scriptPath` is written under
-      // SCRIPTS_PATH but was being unlinked relative to the main process cwd,
-      // leaving the temp script behind on every run.
+      // actually written: a relative `scriptPath` is written under the
+      // workspace Scripts folder but was being unlinked relative to the main
+      // process cwd, leaving the temp script behind on every run.
       const resolvedScriptPath = path.isAbsolute(scriptPath)
         ? scriptPath
-        : path.join(SCRIPTS_PATH, scriptPath)
+        : path.join(getScriptsPath(), scriptPath)
 
       try {
         await stopCurrentTestRun()

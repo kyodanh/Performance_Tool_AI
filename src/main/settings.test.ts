@@ -95,7 +95,7 @@ describe('initSettings disk migration', () => {
     const raw = readFileSync(filePath, 'utf-8')
     const parsed = readSettingsFile(filePath)
 
-    expect(parsed.version).toBe('5.0')
+    expect(parsed.version).toBe('6.0')
     expect(parsed).not.toHaveProperty('ai')
     expect(raw).not.toContain('encrypted-key-string')
     expect(parsed.proxy).toEqual(baseSharedSettings.proxy)
@@ -105,12 +105,29 @@ describe('initSettings disk migration', () => {
     expect(parsed.windowState).toEqual(baseSharedSettings.windowState)
   })
 
-  it('leaves a v5 file untouched', async () => {
+  it('migrates a v5 file on disk and defaults the workspace root', async () => {
     const v5Settings = {
       version: '5.0',
       ...baseSharedSettings,
     }
-    const originalRaw = JSON.stringify(v5Settings)
+    writeFileSync(filePath, JSON.stringify(v5Settings))
+
+    const { initSettings } = await import('./settings')
+    await initSettings()
+
+    const parsed = readSettingsFile(filePath)
+
+    expect(parsed.version).toBe('6.0')
+    expect(parsed.workspace).toEqual({ root: '' })
+  })
+
+  it('leaves a v6 file untouched', async () => {
+    const v6Settings = {
+      version: '6.0',
+      ...baseSharedSettings,
+      workspace: { root: '/Users/someone/k6-projects/Elearning' },
+    }
+    const originalRaw = JSON.stringify(v6Settings)
     writeFileSync(filePath, originalRaw)
 
     const { initSettings } = await import('./settings')

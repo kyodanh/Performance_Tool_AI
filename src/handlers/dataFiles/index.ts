@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import invariant from 'tiny-invariant'
 
 import { MAX_DATA_FILE_SIZE } from '@/constants/files'
-import { DATA_FILES_PATH } from '@/constants/workspace'
+import { getDataFilesPath } from '@/constants/workspace'
 import { showMessageBox, showOpenDialog } from '@/utils/dialog'
 import { browserWindowFromEvent } from '@/utils/electron'
 import { copyFile, exists, stat } from '@/utils/fs'
@@ -29,7 +29,10 @@ export function initialize() {
     const { size } = await stat(filePath)
     invariant(size <= MAX_DATA_FILE_SIZE, 'File is too large')
 
-    const destinationPath = path.join(DATA_FILES_PATH, path.basename(filePath))
+    const destinationPath = path.join(
+      getDataFilesPath(),
+      path.basename(filePath)
+    )
 
     if (await exists(destinationPath)) {
       const { response } = await showMessageBox(browserWindow, {

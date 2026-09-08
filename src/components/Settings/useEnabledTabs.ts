@@ -11,6 +11,7 @@ import { RecorderSettings } from './RecorderSettings'
 import { ScriptSettings } from './ScriptSettings'
 import { TelemetrySettings } from './TelemetrySettings'
 import { SettingsTabValue } from './types'
+import { WorkspaceSettings } from './WorkspaceSettings'
 
 const TABS: Array<{
   label: string
@@ -34,6 +35,11 @@ const TABS: Array<{
     label: 'Script',
     value: 'script',
     component: ScriptSettings,
+  },
+  {
+    label: 'Workspace',
+    value: 'workspace',
+    component: WorkspaceSettings,
   },
   {
     label: 'Logs',

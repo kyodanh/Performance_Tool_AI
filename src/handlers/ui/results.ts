@@ -1,7 +1,7 @@
 import { shell } from 'electron'
 import log from 'electron-log/main'
 
-import { RESULTS_PATH } from '@/constants/workspace'
+import { getResultsPath } from '@/constants/workspace'
 import { mkdir, readdir, readFile, unlink, writeFile } from '@/utils/fs'
 import { RunStats } from '@/utils/k6/stats'
 import * as path from '@/utils/path'
@@ -42,7 +42,7 @@ function runKey(testName: string, stats: RunStats) {
  * renames it, it does not fork it.
  */
 async function removeOtherNames(key: string, keep: string) {
-  const entries = await readdir(RESULTS_PATH).catch(() => [])
+  const entries = await readdir(getResultsPath()).catch(() => [])
 
   await Promise.all(
     entries
@@ -53,7 +53,7 @@ async function removeOtherNames(key: string, keep: string) {
           (entry.name === `${key}.json` ||
             entry.name.startsWith(`${key}${LABEL_SEPARATOR}`))
       )
-      .map((entry) => unlink(path.join(RESULTS_PATH, entry.name)))
+      .map((entry) => unlink(path.join(getResultsPath(), entry.name)))
   )
 }
 
@@ -79,10 +79,10 @@ export async function saveRunResult(
   const named = label === undefined ? '' : safeName(label)
   const fileName =
     named === '' ? `${key}.json` : `${key}${LABEL_SEPARATOR}${named}.json`
-  const filePath = path.join(RESULTS_PATH, fileName)
+  const filePath = path.join(getResultsPath(), fileName)
 
   try {
-    await mkdir(RESULTS_PATH, { recursive: true })
+    await mkdir(getResultsPath(), { recursive: true })
     await writeFile(filePath, JSON.stringify(result))
     await removeOtherNames(key, fileName)
 
@@ -128,7 +128,7 @@ function summarize(fileName: string): RunResultSummary {
  * Saved runs, newest first. Only file names are read — see `summarize`.
  */
 export async function listRunResults(): Promise<RunResultSummary[]> {
-  const entries = await readdir(RESULTS_PATH).catch(() => [])
+  const entries = await readdir(getResultsPath()).catch(() => [])
 
   return (
     entries
@@ -145,7 +145,7 @@ export async function listRunResults(): Promise<RunResultSummary[]> {
  */
 export async function deleteRunResults(ids: string[]) {
   for (const id of ids) {
-    const filePath = path.join(RESULTS_PATH, path.basename(id))
+    const filePath = path.join(getResultsPath(), path.basename(id))
 
     try {
       await shell.trashItem(path.toNativePath(filePath))
@@ -160,7 +160,7 @@ export async function deleteRunResults(ids: string[]) {
 /** Reads one saved run. Returns null when the file is missing or corrupt. */
 export async function readRunResult(id: string): Promise<RunResult | null> {
   // `id` arrives from the renderer, so keep it to a file inside Results.
-  const filePath = path.join(RESULTS_PATH, path.basename(id))
+  const filePath = path.join(getResultsPath(), path.basename(id))
 
   try {
     return JSON.parse(await readFile(filePath, 'utf-8')) as RunResult

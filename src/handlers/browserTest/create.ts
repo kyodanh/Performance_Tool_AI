@@ -1,5 +1,5 @@
 import { K6_BROWSER_TEST_FILE_EXTENSION } from '@/constants/files'
-import { BROWSER_TESTS_PATH } from '@/constants/workspace'
+import { getBrowserTestsPath } from '@/constants/workspace'
 import {
   type AnyBrowserAction,
   BrowserTestFile,
@@ -21,7 +21,7 @@ export async function createBrowserTest(
 
   const filePath = await createFileWithUniqueName({
     data: BrowserTestFileCodec.encode(browserTest),
-    directory: BROWSER_TESTS_PATH,
+    directory: getBrowserTestsPath(),
     ext: K6_BROWSER_TEST_FILE_EXTENSION,
     prefix: 'Browser',
   })

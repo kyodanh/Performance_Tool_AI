@@ -4,12 +4,12 @@ import invariant from 'tiny-invariant'
 
 import { INVALID_FILENAME_CHARS } from '@/constants/files'
 import {
-  RECORDINGS_PATH,
-  GENERATORS_PATH,
-  SCRIPTS_PATH,
+  getRecordingsPath,
+  getGeneratorsPath,
+  getScriptsPath,
   TEMP_SCRIPT_SUFFIX,
-  DATA_FILES_PATH,
-  BROWSER_TESTS_PATH,
+  getDataFilesPath,
+  getBrowserTestsPath,
 } from '@/constants/workspace'
 import { getStudioFileFromPath } from '@/main/file'
 import { StudioFile } from '@/types'
@@ -116,29 +116,31 @@ export function initialize() {
 
   ipcMain.handle(UIHandler.GetFiles, async () => {
     console.info(`${UIHandler.GetFiles} event received`)
-    const recordings = (await readdir(RECORDINGS_PATH))
+    const recordings = (await readdir(getRecordingsPath()))
       .filter((f) => f.isFile())
-      .map((f) => getStudioFileFromPath(path.join(RECORDINGS_PATH, f.name)))
+      .map((f) => getStudioFileFromPath(path.join(getRecordingsPath(), f.name)))
       .filter((f) => typeof f !== 'undefined')
 
-    const generators = (await readdir(GENERATORS_PATH))
+    const generators = (await readdir(getGeneratorsPath()))
       .filter((f) => f.isFile())
-      .map((f) => getStudioFileFromPath(path.join(GENERATORS_PATH, f.name)))
+      .map((f) => getStudioFileFromPath(path.join(getGeneratorsPath(), f.name)))
       .filter((f) => typeof f !== 'undefined')
 
-    const browserTests = (await readdir(BROWSER_TESTS_PATH))
+    const browserTests = (await readdir(getBrowserTestsPath()))
       .filter((f) => f.isFile())
-      .map((f) => getStudioFileFromPath(path.join(BROWSER_TESTS_PATH, f.name)))
+      .map((f) =>
+        getStudioFileFromPath(path.join(getBrowserTestsPath(), f.name))
+      )
       .filter((f) => typeof f !== 'undefined')
 
-    const scripts = (await readdir(SCRIPTS_PATH))
+    const scripts = (await readdir(getScriptsPath()))
       .filter((f) => f.isFile() && !f.name.endsWith(TEMP_SCRIPT_SUFFIX))
-      .map((f) => getStudioFileFromPath(path.join(SCRIPTS_PATH, f.name)))
+      .map((f) => getStudioFileFromPath(path.join(getScriptsPath(), f.name)))
       .filter((f) => typeof f !== 'undefined')
 
-    const dataFiles = (await readdir(DATA_FILES_PATH))
+    const dataFiles = (await readdir(getDataFilesPath()))
       .filter((f) => f.isFile())
-      .map((f) => getStudioFileFromPath(path.join(DATA_FILES_PATH, f.name)))
+      .map((f) => getStudioFileFromPath(path.join(getDataFilesPath(), f.name)))
       .filter((f) => typeof f !== 'undefined')
 
     return {

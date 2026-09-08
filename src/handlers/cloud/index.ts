@@ -1,6 +1,6 @@
 import { ipcMain, shell } from 'electron'
 
-import { SCRIPTS_PATH } from '@/constants/workspace'
+import { getScriptsPath } from '@/constants/workspace'
 import { getTempScriptName } from '@/main/script'
 import { ProjectClient } from '@/services/k6/projects'
 import { CloudCredentials } from '@/services/k6/types'
@@ -74,7 +74,7 @@ async function estimateVuh(script: RawScript): Promise<VuhEstimate | null> {
 
 async function createTempFile(script: RawScript) {
   const tempFileName = getTempScriptName()
-  const tempFilePath = join(SCRIPTS_PATH, tempFileName)
+  const tempFilePath = join(getScriptsPath(), tempFileName)
 
   await writeFile(tempFilePath, script.content)
 
@@ -111,7 +111,7 @@ export function initialize() {
     const file = await toScriptFile(script)
 
     const absolutePath = !isAbsolute(file.path)
-      ? join(SCRIPTS_PATH, file.path)
+      ? join(getScriptsPath(), file.path)
       : file.path
 
     try {

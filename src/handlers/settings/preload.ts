@@ -2,7 +2,7 @@ import { ipcRenderer } from 'electron'
 
 import { AppSettings } from '@/types/settings'
 
-import { SettingsHandler } from './types'
+import { SettingsHandler, WorkspaceInfo } from './types'
 
 export function getSettings() {
   return ipcRenderer.invoke(SettingsHandler.Get) as Promise<AppSettings>
@@ -31,4 +31,10 @@ export function isEncryptionAvailable() {
   return ipcRenderer.invoke(
     SettingsHandler.IsEncryptionAvailable
   ) as Promise<boolean>
+}
+
+export function getWorkspaceInfo() {
+  return ipcRenderer.invoke(
+    SettingsHandler.GetWorkspaceInfo
+  ) as Promise<WorkspaceInfo>
 }
