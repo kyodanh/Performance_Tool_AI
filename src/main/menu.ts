@@ -5,7 +5,6 @@ import {
   shell,
 } from 'electron'
 
-import { getProjectPath } from '@/constants/workspace'
 import { AppHandler } from '@/handlers/app/types'
 import { createBrowserTest } from '@/handlers/browserTest/create'
 import { createGenerator } from '@/handlers/generator/create'
@@ -25,6 +24,7 @@ import { reportNewIssue } from '../utils/bugReport'
 import { getPlatform } from '../utils/electron'
 
 import { openLogFolder } from './logger'
+import { createWindow, getWindowRoot } from './window'
 
 const isDevEnv = process.env.NODE_ENV === 'development'
 const isMac = getPlatform() === 'mac'
@@ -114,6 +114,19 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
           label: 'New',
           submenu: [
             {
+              label: 'Window',
+              accelerator: 'CmdOrCtrl+Shift+N',
+              // A second window on the same project — File > Open project is
+              // what opens a different one.
+              click: (_, window) =>
+                void createWindow(
+                  window instanceof BrowserWindow
+                    ? getWindowRoot(window.id)
+                    : undefined
+                ),
+            },
+            { type: 'separator' },
+            {
               label: 'Recording',
               click: (_, window) => {
                 if (window instanceof BrowserWindow === false) {
@@ -188,7 +201,7 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
             const {
               filePaths: [filePath],
             } = await showOpenDialog(window, {
-              defaultPath: getProjectPath(),
+              defaultPath: getWindowRoot(window.id),
               properties: ['openFile'],
               filters: [
                 {

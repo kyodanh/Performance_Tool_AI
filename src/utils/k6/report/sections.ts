@@ -193,6 +193,10 @@ export function workloadSection(stats: RunStats) {
     },
     { label: 'Total Transactions Number', value: count(stats.groups.length) },
     { label: 'Total Iterations', value: count(stats.iterations) },
+    {
+      label: 'Failed Iterations',
+      value: `${stats.failedIterationsCapped ? '≥' : ''}${count(stats.failedIterations)}`,
+    },
     { label: 'Dropped Iterations', value: count(stats.droppedIterations) },
     { label: 'Data Received', value: bytes(stats.dataReceived) },
   ])
@@ -292,6 +296,26 @@ export function overviewSection(stats: RunStats, names: RunNames) {
       label: 'Maximum Request Response Time',
       value: `${seconds(stats.maxDuration)} s`,
     },
+    ...(stats.percentiles === undefined
+      ? []
+      : [
+          {
+            label: 'Median Request Response Time',
+            value: `${seconds(stats.percentiles.p50)} s`,
+          },
+          {
+            label: '90th Percentile Request Response Time',
+            value: `${seconds(stats.percentiles.p90)} s`,
+          },
+          {
+            label: '95th Percentile Request Response Time',
+            value: `${seconds(stats.percentiles.p95)} s`,
+          },
+          {
+            label: '99th Percentile Request Response Time',
+            value: `${seconds(stats.percentiles.p99)} s`,
+          },
+        ]),
     { label: 'Total Passed Transactions', value: count(passed) },
     { label: 'Total Failed Transactions', value: count(failed) },
     {
@@ -299,6 +323,13 @@ export function overviewSection(stats: RunStats, names: RunNames) {
       value: total === 0 ? '0' : decimal((passed / total) * 100),
     },
     { label: 'Total Failed Requests', value: count(stats.failedRequests) },
+    {
+      label: 'Failed Requests, %',
+      value:
+        stats.requests === 0
+          ? '0.00'
+          : decimal((stats.failedRequests / stats.requests) * 100, 2),
+    },
     { label: 'Total Errors per Second', value: decimal(errors / elapsed, 2) },
     { label: 'Total Errors', value: count(errors) },
     { label: 'Checks Passed', value: count(stats.checksPassed) },
@@ -329,6 +360,25 @@ export function httpResponsesSection(stats: RunStats) {
   )}`
 }
 
+/**
+ * The percentile of a transaction's response time. Runs recorded before the
+ * distribution was collected fall back to the percentile of their per-second
+ * averages — the only distribution those results kept, and flatter than the
+ * real one.
+ */
+function groupPercentile(group: RunStats['groups'][number], ratio: number) {
+  const recorded = group.percentiles
+
+  if (recorded !== undefined) {
+    return ratio >= 0.95 ? recorded.p95 : recorded.p90
+  }
+
+  return percentile(
+    group.series.map((sample) => sample.value),
+    ratio
+  )
+}
+
 export function transactionSummarySection(stats: RunStats, names: RunNames) {
   const rows = stats.groups.map((group) => [
     names.runName,
@@ -337,14 +387,8 @@ export function transactionSummarySection(stats: RunStats, names: RunNames) {
     seconds(group.avg),
     seconds(group.max),
     seconds(group.std),
-    // ponytail: p90 of the per-second averages, the only distribution k6's
-    // CSV keeps. Switch to the raw samples if a true p90 is ever needed.
-    seconds(
-      percentile(
-        group.series.map((sample) => sample.value),
-        0.9
-      )
-    ),
+    seconds(groupPercentile(group, 0.9)),
+    seconds(groupPercentile(group, 0.95)),
     count(Math.max(0, group.count - group.failed)),
     count(group.failed),
     // k6 never stops a transaction mid-flight, so the column is always zero.
@@ -362,6 +406,7 @@ export function transactionSummarySection(stats: RunStats, names: RunNames) {
       'Maximum',
       'Std. Deviation',
       '90%',
+      '95%',
       'Pass Count',
       'Fail Count',
       'Stop Count',
@@ -381,6 +426,7 @@ function urlRow(request: RunStats['requestStats'][number]) {
     seconds(request.max),
     seconds(request.avg),
     seconds(request.std),
+    request.percentiles === undefined ? '—' : seconds(request.percentiles.p90),
   ]
 }
 
@@ -393,6 +439,7 @@ const URL_HEADERS = [
   'Max',
   'Avg',
   'StdDev',
+  '90%',
 ]
 
 export function worstUrlsSection(stats: RunStats, limit = 15) {

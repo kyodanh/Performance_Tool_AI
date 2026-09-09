@@ -12,7 +12,12 @@ import {
 
 import { ChecksTable } from './ChecksTable'
 import { ErrorsTable } from './ErrorsTable'
-import { formatCount, formatTime } from './format'
+import {
+  formatCount,
+  formatErrorRate,
+  formatOptionalTime,
+  formatTime,
+} from './format'
 import { SERIES_COLORS, SERIES_DASHES, chartedSeries } from './MetricPanel'
 import { RequestsTable } from './RequestsTable'
 
@@ -67,6 +72,11 @@ export function TransactionsTable({
             </Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell align="right">Min</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell align="right">Avg</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell align="right">
+              Median
+            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell align="right">90%</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell align="right">95%</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell align="right">Max</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell align="right">Std</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell align="right">Last</Table.ColumnHeaderCell>
@@ -96,6 +106,15 @@ export function TransactionsTable({
               </Table.Cell>
               <Table.Cell align="right">{formatTime(item.min)}</Table.Cell>
               <Table.Cell align="right">{formatTime(item.avg)}</Table.Cell>
+              <Table.Cell align="right">
+                {formatOptionalTime(item.percentiles?.p50)}
+              </Table.Cell>
+              <Table.Cell align="right">
+                {formatOptionalTime(item.percentiles?.p90)}
+              </Table.Cell>
+              <Table.Cell align="right">
+                {formatOptionalTime(item.percentiles?.p95)}
+              </Table.Cell>
               <Table.Cell align="right">{formatTime(item.max)}</Table.Cell>
               <Table.Cell align="right">{formatTime(item.std)}</Table.Cell>
               <Table.Cell align="right">{formatTime(item.last)}</Table.Cell>
@@ -140,9 +159,26 @@ export function TransactionsTable({
                   <DataList.Value>{tps(group.count, elapsed)}</DataList.Value>
                 </DataList.Item>
                 <DataList.Item>
+                  <DataList.Label minWidth="88px">Error rate</DataList.Label>
+                  <DataList.Value>
+                    <Text color={group.failed > 0 ? 'red' : undefined}>
+                      {formatErrorRate(group.failed, group.count)}
+                    </Text>
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
                   <DataList.Label minWidth="88px">Response time</DataList.Label>
                   <DataList.Value>
                     {formatTime(group.avg)} avg / {formatTime(group.max)} max
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Percentiles</DataList.Label>
+                  <DataList.Value>
+                    {formatOptionalTime(group.percentiles?.p50)} median /{' '}
+                    {formatOptionalTime(group.percentiles?.p90)} 90% /{' '}
+                    {formatOptionalTime(group.percentiles?.p95)} 95% /{' '}
+                    {formatOptionalTime(group.percentiles?.p99)} 99%
                   </DataList.Value>
                 </DataList.Item>
               </DataList.Root>

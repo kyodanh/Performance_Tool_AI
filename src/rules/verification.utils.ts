@@ -1,5 +1,4 @@
-import { escapeRegExp } from 'lodash-es'
-
+import { parseStatusCodes, statusCodesToRegex } from '@/schemas/generator'
 import { Response } from '@/types'
 import { VerificationRule } from '@/types/rules'
 import { exhaustive } from '@/utils/typescript'
@@ -22,7 +21,11 @@ export function getValueFromRule(
     case 'string':
       return `'${rule.value.value}'`
     case 'regex':
-      return `new RegExp('${escapeRegExp(rule.value.regex)}')`
+      // JSON.stringify, not escapeRegExp: the user typed a pattern, so only the
+      // JS string literal wrapping it needs escaping (backslashes, quotes).
+      return `new RegExp(${JSON.stringify(rule.value.regex)})`
+    case 'statusList':
+      return `/${statusCodesToRegex(parseStatusCodes(rule.value.codes))}/`
     case 'variable':
       return `VARS['${rule.value.variableName}']`
     case 'number':
@@ -134,7 +137,9 @@ function getValueDescription(rule: VerificationRule, value: string | number) {
     case 'number':
       return rule.value.number
     case 'regex':
-      return new RegExp(escapeRegExp(rule.value.regex)).toString()
+      return new RegExp(rule.value.regex).toString()
+    case 'statusList':
+      return parseStatusCodes(rule.value.codes).join(', ')
     default:
       return exhaustive(rule.value)
   }

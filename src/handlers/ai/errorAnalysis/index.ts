@@ -180,11 +180,21 @@ export function initialize() {
       // the rest of the app's AI. It throws a sign-in message when unavailable.
       const config = await getErrorAnalysisConfig()
 
+      // The SDK reports what actually went wrong (a 401 from the gateway, a
+      // dead endpoint) to `onError` and then rejects `text` with a generic
+      // "No output generated", so without capturing it here both the log and
+      // the UI lose the only message that says why.
+      let cause: unknown = null
+
       try {
         const { text } = streamText({
           model: config ? languageModelFor(config) : grafanaAssistantModel,
           prompt: buildFailureAnalysisPrompt(request),
           abortSignal: AbortSignal.timeout(ANALYZE_TIMEOUT_MS),
+          onError: ({ error }) => {
+            cause = error
+            log.error('[ErrorAnalysis] Stream failed:', error)
+          },
           // The Assistant keys its A2A session on this; a fresh id per run
           // keeps each analysis its own conversation.
           ...(config
@@ -197,10 +207,12 @@ export function initialize() {
         })
         return { text: await text }
       } catch (error) {
-        log.error('[ErrorAnalysis] Analyze failed:', error)
-        captureException(error, { tags: { component: 'ai-error-analysis' } })
+        const reported = cause ?? error
+
+        log.error('[ErrorAnalysis] Analyze failed:', reported)
+        captureException(reported, { tags: { component: 'ai-error-analysis' } })
         return {
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: reported instanceof Error ? reported.message : 'Unknown error',
         }
       }
     }

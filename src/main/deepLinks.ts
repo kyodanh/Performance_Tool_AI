@@ -1,7 +1,8 @@
-import { app, BrowserWindow } from 'electron'
+import { app } from 'electron'
 import log from 'electron-log/main'
 
 import { AppHandler } from '@/handlers/app/types'
+import { getTargetWindow } from '@/utils/electron'
 import * as path from '@/utils/path'
 
 import { CUSTOM_APP_PROTOCOL } from './deepLinks.constants'
@@ -71,7 +72,7 @@ function listenWindowsDeepLink() {
 }
 
 function handleDeepLink(url: string) {
-  const mainWindow = BrowserWindow.getAllWindows()[0]
+  const mainWindow = getTargetWindow()
 
   // Main window not ready yet, store the URL until the renderer has loaded
   if (!mainWindow) {

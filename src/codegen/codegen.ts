@@ -53,6 +53,10 @@ export function generateScript({
     ${generateGetUniqueItemFunction(generator.testData.files)}
 
     export default function() {
+      // Tags every sample of this iteration so the run stats can count how many
+      // iterations hit an error — the number a controller reports as failed
+      // Vusers. k6 has no per-iteration verdict of its own.
+      execution.vu.tags['iter'] = execution.scenario.iterationInTest
       ${generateDataRowTag(generator.testData.files)}
       ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous, generator.testData.variables)}
     }

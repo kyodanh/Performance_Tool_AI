@@ -30,7 +30,7 @@ export function initialize() {
       const { windowState: _, ...settings } = data
       const modifiedSettings = await saveSettings(settings)
 
-      await applySettings(modifiedSettings, browserWindow)
+      await applySettings(modifiedSettings)
 
       sendToast(browserWindow.webContents, {
         title: 'Settings saved successfully',

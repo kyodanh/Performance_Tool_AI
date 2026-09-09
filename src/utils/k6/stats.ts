@@ -22,11 +22,37 @@ const COLUMN = {
   status: 13,
   url: 16,
   extraTags: 17,
-} as const
+}
 
-// ponytail: keeps ~5 minutes of history at one bucket per second. Bump (or
-// downsample) if the charts ever need to span a whole test run.
-const MAX_BUCKETS = 300
+type ColumnMap = typeof COLUMN
+
+/**
+ * The header field behind each column. k6 writes one column per enabled system
+ * tag, so a script that sets its own `systemTags` — or a generator running a k6
+ * whose default set differs — shifts the layout above. Reading the header keeps
+ * the indices honest instead of silently attributing one tag's value to
+ * another.
+ */
+const COLUMN_FIELD: Record<keyof ColumnMap, string> = {
+  metric: 'metric_name',
+  timestamp: 'timestamp',
+  value: 'metric_value',
+  check: 'check',
+  error: 'error',
+  errorCode: 'error_code',
+  group: 'group',
+  method: 'method',
+  name: 'name',
+  status: 'status',
+  url: 'url',
+  extraTags: 'extra_tags',
+}
+
+// One bucket per second, so this is the longest run the charts, the report and
+// a saved result cover in full — a longer one loses its start, and with it the
+// run's real start time. An hour of buckets is a few MB.
+// ponytail: downsample to 2s/5s buckets if a run has to span longer than this.
+const MAX_BUCKETS = 3600
 
 // ponytail: guards against a script that generates unbounded distinct errors.
 const MAX_ERRORS = 100
@@ -41,17 +67,90 @@ const MAX_DATA_ROWS = 5
 /** The tag `generateDataRowTag` sets, naming the data-file row of the iteration. */
 const DATA_ROW_TAG = 'data_row='
 
+/** The tag the generated script sets, unique per iteration across the run. */
+const ITER_TAG = 'iter='
+
+// ponytail: a run where everything fails would otherwise hold one Set entry per
+// iteration. Past the cap the count saturates — `failedIterationsCapped` says so.
+const MAX_FAILED_ITERATIONS = 100_000
+
 /**
  * k6 joins a sample's non-system tags into one `extra_tags` field as
  * `key=value&key=value`. Values are not escaped, so a `&` inside another tag
  * would split wrong — acceptable here, since `data_row` holds `file=index`.
  */
-function dataRowTag(extraTags: string) {
-  const tag = extraTags
-    .split('&')
-    .find((entry) => entry.startsWith(DATA_ROW_TAG))
+function tagValue(extraTags: string, prefix: string) {
+  const tag = extraTags.split('&').find((entry) => entry.startsWith(prefix))
 
-  return tag?.slice(DATA_ROW_TAG.length) ?? ''
+  return tag?.slice(prefix.length) ?? ''
+}
+
+/**
+ * Response-time distribution, kept as counts in log-spaced buckets instead of
+ * raw samples: a percentile needs the distribution, and a run of millions of
+ * requests cannot keep a sample each. Buckets are 2% wide, so a reported
+ * percentile is within 2% of the true one — closer than the 3 decimals of a
+ * second an analysis report prints. Counts add, so a distributed run merges
+ * by pushing every generator's samples into the same histogram.
+ */
+type Histogram = Map<number, number>
+
+const HIST_STEP = Math.log(1.02)
+
+/** Bucket 0 holds the zeroes; bucket `i` holds `exp((i - 1) * step)` ms. */
+function histIndex(ms: number) {
+  return ms <= 0 ? 0 : 1 + Math.round(Math.log(ms) / HIST_STEP)
+}
+
+function histValue(index: number) {
+  return index === 0 ? 0 : Math.exp((index - 1) * HIST_STEP)
+}
+
+function record(hist: Histogram, ms: number) {
+  const index = histIndex(ms)
+
+  hist.set(index, (hist.get(index) ?? 0) + 1)
+}
+
+/**
+ * The percentile columns LoadRunner Analysis and JMeter's aggregate report
+ * print. In milliseconds, like every other duration here.
+ */
+export interface Percentiles {
+  /** The median — JMeter's `Median` column. */
+  p50: number
+  /** LoadRunner's `90%` column. */
+  p90: number
+  p95: number
+  p99: number
+}
+
+/** Nearest-rank percentiles over a histogram, the rule both tools use. */
+function percentiles(hist: Histogram): Percentiles {
+  const indices = [...hist.keys()].sort((a, b) => a - b)
+  const total = [...hist.values()].reduce((sum, count) => sum + count, 0)
+
+  const at = (ratio: number) => {
+    if (total === 0) {
+      return 0
+    }
+
+    const rank = Math.max(1, Math.ceil(ratio * total))
+
+    let seen = 0
+
+    for (const index of indices) {
+      seen += hist.get(index) ?? 0
+
+      if (seen >= rank) {
+        return histValue(index)
+      }
+    }
+
+    return histValue(indices.at(-1) ?? 0)
+  }
+
+  return { p50: at(0.5), p90: at(0.9), p95: at(0.95), p99: at(0.99) }
 }
 
 export interface RunErrorGroup {
@@ -98,6 +197,11 @@ export interface RequestStats {
   /** Population standard deviation of `http_req_duration`, in milliseconds. */
   std: number
   /**
+   * Response-time percentiles of this request. Absent on runs saved before the
+   * distribution was collected — saved results are read back as-is.
+   */
+  percentiles?: Percentiles
+  /**
    * Sum of `http_req_waiting` (time to first byte) in milliseconds — the time
    * the server itself spent, which the report ranks URLs by.
    */
@@ -133,11 +237,14 @@ export interface GroupStats {
   /** Completed executions of the group — `group_duration` samples. */
   count: number
   /**
-   * Failed executions attributed to this group. k6 has no per-execution verdict
-   * for a group, so this is an attribution, not an exact count: it is the
-   * larger of the failed requests and the failed checks tagged with the group,
-   * because a failing request normally fails its check too and summing the two
-   * would report every failure twice.
+   * Failed executions of this group — the pass/fail count a controller reports
+   * per transaction, so it never exceeds `count`. Counted from the `iter` tag
+   * the generated script sets: distinct iterations that hit a failure inside
+   * the group. A hand-written script without that tag falls back to an
+   * attribution — the larger of the failed requests and the failed checks
+   * tagged with the group, capped at `count`, because one execution can fail
+   * several requests and summing them would report a transaction as failing
+   * more often than it ran.
    */
   failed: number
   avg: number
@@ -145,6 +252,11 @@ export interface GroupStats {
   min: number
   /** Population standard deviation of `group_duration`, in milliseconds. */
   std: number
+  /**
+   * Percentiles of `group_duration` — the `90%` column a controller reports
+   * per transaction. Absent on runs saved before it was collected.
+   */
+  percentiles?: Percentiles
   /** The most recent `group_duration` sample, as a controller reports "Last". */
   last: number
   /** Per-second averages, for the response-time-over-time chart. */
@@ -182,6 +294,14 @@ export interface RunStats {
   failedRequests: number
   iterations: number
   /**
+   * Iterations that had at least one failed request — the closest equivalent of
+   * the failed-Vuser count a controller reports. Counted from the `iter` tag the
+   * generated script sets, so a hand-written script without that tag reports 0.
+   */
+  failedIterations: number
+  /** True once `failedIterations` hit its cap and stopped counting new ones. */
+  failedIterationsCapped: boolean
+  /**
    * Iterations k6 couldn't start because the client ran out of headroom for
    * the configured arrival rate — a sign the run is limited by the machine
    * running k6, not by the target.
@@ -192,6 +312,11 @@ export interface RunStats {
   dataReceived: number
   avgDuration: number
   maxDuration: number
+  /**
+   * `http_req_duration` percentiles across the whole run. Absent on runs saved
+   * before the distribution was collected.
+   */
+  percentiles?: Percentiles
   timings: RequestTimingBreakdown
   groups: GroupStats[]
   /** Per-request breakdown, one row per method + name + status. */
@@ -332,6 +457,7 @@ interface MutableRequest {
   min: number
   /** Sum of squares, so the standard deviation needs no sample history. */
   squares: number
+  hist: Histogram
   waiting: number
 }
 
@@ -345,6 +471,9 @@ interface MutableGroup {
   last: number
   failedRequests: number
   failedChecks: number
+  /** Iterations that hit a failure in this group, by `iter` tag. */
+  failedIters: Set<string>
+  hist: Histogram
   series: Map<number, { sum: number; count: number }>
 }
 
@@ -375,6 +504,21 @@ function groupName(raw: string) {
   return raw.replace(/^::/, '').replaceAll('::', ' / ')
 }
 
+/**
+ * Failed executions of a group — see `GroupStats.failed` for why the `iter`
+ * tag is preferred over counting the failures themselves.
+ */
+function failedExecutions(group: MutableGroup) {
+  const failed =
+    group.failedIters.size > 0
+      ? group.failedIters.size
+      : Math.max(group.failedRequests, group.failedChecks)
+
+  // No `group_duration` sample yet means the execution is still in flight on
+  // this snapshot, so `count` is not a ceiling to clamp against.
+  return group.count === 0 ? failed : Math.min(group.count, failed)
+}
+
 export class RunStatsCollector {
   #buckets = new Map<number, MutableBucket>()
   #groups = new Map<string, MutableGroup>()
@@ -382,6 +526,9 @@ export class RunStatsCollector {
   #checkResults = new Map<string, CheckStats>()
   #errors = new Map<string, RunErrorGroup>()
   #generators = new Map<string, MutableGenerator>()
+
+  /** Column layout of the stream, replaced when its header line arrives. */
+  #column: ColumnMap = { ...COLUMN }
 
   #firstTime: number | null = null
   #lastTime = 0
@@ -391,6 +538,8 @@ export class RunStatsCollector {
   #requests = 0
   #failedRequests = 0
   #iterations = 0
+  #failedIters = new Set<string>()
+  #failedItersCapped = false
   #droppedIterations = 0
   #checksPassed = 0
   #checksFailed = 0
@@ -398,6 +547,7 @@ export class RunStatsCollector {
   #durationSum = 0
   #durationCount = 0
   #maxDuration = 0
+  #durationHist: Histogram = new Map()
 
   #timingSums: RequestTimingBreakdown = {
     blocked: 0,
@@ -438,6 +588,12 @@ export class RunStatsCollector {
 
     const metric = line.slice(0, separator)
 
+    if (metric === COLUMN_FIELD.metric) {
+      this.#readHeader(line)
+
+      return true
+    }
+
     if (!KNOWN_METRICS.has(metric)) {
       return false
     }
@@ -445,8 +601,8 @@ export class RunStatsCollector {
     // ponytail: one full split per sample. Cheaper than JSON.parse but still
     // the hot path — switch to offset scanning if it ever shows up in a profile.
     const columns = parseCsvLine(line)
-    const time = Number(columns[COLUMN.timestamp]) + clockOffset
-    const value = Number(columns[COLUMN.value])
+    const time = Number(columns[this.#column.timestamp]) + clockOffset
+    const value = Number(columns[this.#column.value])
 
     if (!Number.isFinite(time) || !Number.isFinite(value)) {
       return false
@@ -486,7 +642,12 @@ export class RunStatsCollector {
           bucket.failed += 1
           this.#failedRequests += 1
           generator.failedRequests += 1
-          this.#failGroup(columns[COLUMN.group] ?? '', 'request')
+          this.#failGroup(
+            columns[this.#column.group] ?? '',
+            'request',
+            columns[this.#column.extraTags] ?? ''
+          )
+          this.#failIteration(columns[this.#column.extraTags] ?? '')
           this.#request(columns, (request) => {
             request.failed += 1
           })
@@ -502,11 +663,13 @@ export class RunStatsCollector {
         generator.durationSum += value
         generator.durationCount += 1
         generator.maxDuration = Math.max(generator.maxDuration, value)
+        record(this.#durationHist, value)
         this.#request(columns, (request) => {
           request.sum += value
           request.squares += value * value
           request.max = Math.max(request.max, value)
           request.min = Math.min(request.min, value)
+          record(request.hist, value)
         })
         break
 
@@ -563,14 +726,18 @@ export class RunStatsCollector {
           this.#checksPassed += 1
         } else {
           this.#checksFailed += 1
-          this.#failGroup(columns[COLUMN.group] ?? '', 'check')
+          this.#failGroup(
+            columns[this.#column.group] ?? '',
+            'check',
+            columns[this.#column.extraTags] ?? ''
+          )
         }
 
         this.#collectCheck(columns, value === 1)
         break
 
       case 'group_duration':
-        this.#collectGroup(columns[COLUMN.group] ?? '', value, time)
+        this.#collectGroup(columns[this.#column.group] ?? '', value, time)
         break
     }
 
@@ -601,7 +768,7 @@ export class RunStatsCollector {
         return {
           name,
           count: group.count,
-          failed: Math.max(group.failedRequests, group.failedChecks),
+          failed: failedExecutions(group),
           avg,
           max: group.max,
           min: group.count ? group.min : 0,
@@ -610,6 +777,7 @@ export class RunStatsCollector {
           std: group.count
             ? Math.sqrt(Math.max(0, group.squares / group.count - avg * avg))
             : 0,
+          percentiles: percentiles(group.hist),
           last: group.last,
           series: [...group.series.entries()]
             .sort(([a], [b]) => a - b)
@@ -649,6 +817,7 @@ export class RunStatsCollector {
                 Math.max(0, request.squares / request.count - avg * avg)
               )
             : 0,
+          percentiles: percentiles(request.hist),
           serverTime: request.waiting,
         }
       })
@@ -674,6 +843,8 @@ export class RunStatsCollector {
       requests: this.#requests,
       failedRequests: this.#failedRequests,
       iterations: this.#iterations,
+      failedIterations: this.#failedIters.size,
+      failedIterationsCapped: this.#failedItersCapped,
       droppedIterations: this.#droppedIterations,
       checksPassed: this.#checksPassed,
       checksFailed: this.#checksFailed,
@@ -682,6 +853,7 @@ export class RunStatsCollector {
         ? this.#durationSum / this.#durationCount
         : 0,
       maxDuration: this.#maxDuration,
+      percentiles: percentiles(this.#durationHist),
       timings: {
         blocked: phaseAvg('blocked'),
         connecting: phaseAvg('connecting'),
@@ -735,6 +907,22 @@ export class RunStatsCollector {
     return generator
   }
 
+  /**
+   * Maps every column this collector reads to its position in the stream. A
+   * field the header does not carry maps to -1, which reads as an empty tag
+   * rather than as another column's value.
+   */
+  #readHeader(line: string) {
+    const fields = parseCsvLine(line)
+
+    this.#column = Object.fromEntries(
+      Object.entries(COLUMN_FIELD).map(([key, field]) => [
+        key,
+        fields.indexOf(field),
+      ])
+    ) as ColumnMap
+  }
+
   #bucket(time: number): MutableBucket {
     const existing = this.#buckets.get(time)
 
@@ -772,16 +960,19 @@ export class RunStatsCollector {
   }
 
   #collectError(columns: string[]) {
-    const code = columns[COLUMN.errorCode] ?? ''
-    const message = columns[COLUMN.error] ?? ''
+    const code = columns[this.#column.errorCode] ?? ''
+    const message = columns[this.#column.error] ?? ''
 
     if (code === '' && message === '') {
       return
     }
 
-    const url = columns[COLUMN.name] || columns[COLUMN.url] || ''
-    const group = groupName(columns[COLUMN.group] ?? '')
-    const dataRow = dataRowTag(columns[COLUMN.extraTags] ?? '')
+    const url = columns[this.#column.name] || columns[this.#column.url] || ''
+    const group = groupName(columns[this.#column.group] ?? '')
+    const dataRow = tagValue(
+      columns[this.#column.extraTags] ?? '',
+      DATA_ROW_TAG
+    )
     const key = `${code}|${message}|${url}|${group}`
     const existing = this.#errors.get(key)
 
@@ -830,6 +1021,7 @@ export class RunStatsCollector {
     group.max = Math.max(group.max, value)
     group.min = Math.min(group.min, value)
     group.last = value
+    record(group.hist, value)
 
     const sample = group.series.get(time)
 
@@ -857,15 +1049,15 @@ export class RunStatsCollector {
    * by status too, so the same endpoint answering 200 and 401 shows as two rows.
    */
   #request(columns: string[], update: (request: MutableRequest) => void) {
-    const name = columns[COLUMN.name] || columns[COLUMN.url] || ''
+    const name = columns[this.#column.name] || columns[this.#column.url] || ''
 
     if (name === '') {
       return
     }
 
-    const method = columns[COLUMN.method] ?? ''
-    const status = columns[COLUMN.status] ?? ''
-    const group = groupName(columns[COLUMN.group] ?? '')
+    const method = columns[this.#column.method] ?? ''
+    const status = columns[this.#column.status] ?? ''
+    const group = groupName(columns[this.#column.group] ?? '')
     const key = `${group}|${method}|${name}|${status}`
     const existing = this.#requestStats.get(key)
 
@@ -890,6 +1082,7 @@ export class RunStatsCollector {
       max: 0,
       min: Infinity,
       squares: 0,
+      hist: new Map(),
       waiting: 0,
     }
 
@@ -899,14 +1092,14 @@ export class RunStatsCollector {
   }
 
   #collectCheck(columns: string[], passed: boolean) {
-    const name = columns[COLUMN.check] ?? ''
+    const name = columns[this.#column.check] ?? ''
 
     if (name === '') {
       return
     }
 
-    const group = groupName(columns[COLUMN.group] ?? '')
-    const request = columns[COLUMN.name] ?? ''
+    const group = groupName(columns[this.#column.group] ?? '')
+    const request = columns[this.#column.name] ?? ''
     // Keyed by request too, so the same check reused across requests reports
     // per request instead of collapsing into one row.
     const key = `${group}|${name}|${request}`
@@ -928,7 +1121,18 @@ export class RunStatsCollector {
     })
   }
 
-  #failGroup(rawName: string, kind: 'request' | 'check') {
+  #failIteration(extraTags: string) {
+    const iter = tagValue(extraTags, ITER_TAG)
+
+    if (iter === '' || this.#failedItersCapped) {
+      return
+    }
+
+    this.#failedIters.add(iter)
+    this.#failedItersCapped = this.#failedIters.size >= MAX_FAILED_ITERATIONS
+  }
+
+  #failGroup(rawName: string, kind: 'request' | 'check', extraTags: string) {
     const name = groupName(rawName)
 
     if (name === '') {
@@ -941,6 +1145,14 @@ export class RunStatsCollector {
       group.failedRequests += 1
     } else {
       group.failedChecks += 1
+    }
+
+    const iter = tagValue(extraTags, ITER_TAG)
+
+    // Same cap as the run-wide count: a run where everything fails would
+    // otherwise hold one entry per iteration per transaction.
+    if (iter !== '' && group.failedIters.size < MAX_FAILED_ITERATIONS) {
+      group.failedIters.add(iter)
     }
   }
 
@@ -960,6 +1172,8 @@ export class RunStatsCollector {
       last: 0,
       failedRequests: 0,
       failedChecks: 0,
+      failedIters: new Set(),
+      hist: new Map(),
       series: new Map(),
     }
 

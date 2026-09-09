@@ -4,7 +4,7 @@ import { waitForProxy } from '@/main/proxy'
 import { launchBrowser } from '@/recorder/launch'
 import { BrowserLaunchError } from '@/recorder/launchers/types'
 import { LaunchBrowserOptions } from '@/recorder/types'
-import { browserWindowFromEvent } from '@/utils/electron'
+import { browserWindowFromEvent, sendToast } from '@/utils/electron'
 import { validateExternalUrl } from '@/utils/url'
 
 import { BrowserHandler } from './types'
@@ -15,9 +15,22 @@ export function initialize() {
     async (event, options: LaunchBrowserOptions) => {
       console.info(`${BrowserHandler.Start} event received`)
 
-      await waitForProxy()
-
       const browserWindow = browserWindowFromEvent(event)
+
+      // ponytail: one recording at a time across all windows — the recording
+      // session and the proxy stream it reads are app-wide, so a second
+      // recording would mix its traffic into the first one's HAR.
+      if (k6StudioState.currentRecordingSession !== null) {
+        sendToast(browserWindow.webContents, {
+          title: 'A recording is already running',
+          description: 'Stop the recording in the other window first.',
+          status: 'error',
+        })
+
+        return
+      }
+
+      await waitForProxy()
 
       try {
         k6StudioState.currentRecordingSession = await launchBrowser(options)

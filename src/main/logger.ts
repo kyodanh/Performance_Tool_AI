@@ -1,8 +1,7 @@
-import { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 import { spawn } from 'node:child_process'
 
-import { getPlatform } from '../utils/electron'
+import { broadcast, getPlatform } from '../utils/electron'
 import { FSWatcher, readFile, watch } from '../utils/fs'
 import * as path from '../utils/path'
 import { toNativePath } from '../utils/path'
@@ -110,21 +109,13 @@ export async function getLogContent() {
 
 async function onLogChange() {
   const content = await getLogContent()
-  const mainWindow = BrowserWindow.getAllWindows()[0]
 
-  if (!mainWindow) {
-    return
-  }
-
-  try {
-    mainWindow.webContents.send('log:change', content)
-  } catch {
-    // ponytail: the log file keeps changing while the app tears down — quitting
-    // logs the renderer's own exit — and `send` throws once the render frame is
-    // disposed ("Render frame was disposed before WebFrameMain could be
-    // accessed"). The window is not destroyed at that point, and every way of
-    // asking about the frame (`webContents.mainFrame`) throws the same way, so
-    // catching the send is the only guard. Deliberately silent: logging here
-    // would write to the file this watcher watches.
-  }
+  // ponytail: the log file keeps changing while the app tears down — quitting
+  // logs the renderer's own exit — and `send` throws once the render frame is
+  // disposed ("Render frame was disposed before WebFrameMain could be
+  // accessed"). The window is not destroyed at that point, and every way of
+  // asking about the frame (`webContents.mainFrame`) throws the same way, so
+  // `broadcast` swallowing the send is the only guard. Deliberately silent:
+  // logging here would write to the file this watcher watches.
+  broadcast('log:change', content)
 }

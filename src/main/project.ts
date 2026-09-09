@@ -1,42 +1,37 @@
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 
-import { getDefaultWorkspaceRoot, getProjectPath } from '@/constants/workspace'
+import { getDefaultWorkspaceRoot } from '@/constants/workspace'
 import { showMessageBox, showOpenDialog, showSaveDialog } from '@/utils/dialog'
 import { exists } from '@/utils/fs'
 import * as path from '@/utils/path'
 import { createWorkspaceFolders } from '@/utils/workspace'
 
 import { saveSettings } from './settings'
+import { createWindow, getWindowRoot } from './window'
 
 /**
- * Switching project cannot be done in place: the file watcher, every open tab
- * and any running recording hold paths derived from the current root. The
- * setting is written now and the new root is picked up on the next launch.
+ * A project is opened in a window of its own: the open tabs, the file watcher
+ * and any running recording all hold paths derived from the root, so a window
+ * keeps the root it was created with. The setting is written too, so the next
+ * launch starts on the project last opened.
  */
-async function switchToProject(browserWindow: BrowserWindow, root: string) {
+async function openProjectWindow(root: string) {
   const isDefault = path.equal(root, getDefaultWorkspaceRoot())
+  const workspace = { root: isDefault ? '' : root }
 
-  await saveSettings({ workspace: { root: isDefault ? '' : root } })
+  // A project opened for the first time may be missing some of the folders the
+  // handlers read from; lay out whatever is not there yet.
+  await createWorkspaceFolders(root)
 
-  const { response } = await showMessageBox(browserWindow, {
-    type: 'question',
-    message: `Open "${path.basename(root)}"?`,
-    detail:
-      'k6 Studio needs to restart to open the project. Unsaved changes will be lost.',
-    buttons: ['Restart now', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-  })
+  // The in-memory copy too, not just the file: `trackWindowState` writes the
+  // whole of `appSettings` back on the next move or resize and would otherwise
+  // restore the root we just replaced.
+  k6StudioState.appSettings.workspace = workspace
 
-  if (response !== 0) {
-    return
-  }
+  await saveSettings({ workspace })
 
-  // `exit` rather than `quit`: the unsaved-changes guard on window close must
-  // not be able to cancel a restart the user has just confirmed.
-  app.relaunch()
-  app.exit(0)
+  await createWindow(root)
 }
 
 export async function createProject(browserWindow: BrowserWindow) {
@@ -44,7 +39,10 @@ export async function createProject(browserWindow: BrowserWindow) {
     title: 'New project',
     // Alongside the current project rather than inside it — projects are
     // siblings, never nested.
-    defaultPath: path.join(path.dirname(getProjectPath()), 'New project'),
+    defaultPath: path.join(
+      path.dirname(getWindowRoot(browserWindow.id)),
+      'New project'
+    ),
     buttonLabel: 'Create',
     nameFieldLabel: 'Project name',
     properties: ['createDirectory'],
@@ -69,7 +67,7 @@ export async function createProject(browserWindow: BrowserWindow) {
     return
   }
 
-  await switchToProject(browserWindow, filePath)
+  await openProjectWindow(filePath)
 }
 
 export async function openProject(browserWindow: BrowserWindow) {
@@ -77,7 +75,7 @@ export async function openProject(browserWindow: BrowserWindow) {
     filePaths: [folder],
   } = await showOpenDialog(browserWindow, {
     title: 'Open project',
-    defaultPath: path.dirname(getProjectPath()),
+    defaultPath: path.dirname(getWindowRoot(browserWindow.id)),
     buttonLabel: 'Open',
     properties: ['openDirectory', 'createDirectory'],
   })
@@ -87,7 +85,7 @@ export async function openProject(browserWindow: BrowserWindow) {
   }
 
   // A folder with none of the expected subfolders is more likely a mis-click
-  // than a project — say so before restarting into an empty workspace.
+  // than a project — say so before opening an empty workspace.
   if (!(await exists(path.join(folder, 'Generators')))) {
     const { response } = await showMessageBox(browserWindow, {
       type: 'warning',
@@ -104,5 +102,5 @@ export async function openProject(browserWindow: BrowserWindow) {
     }
   }
 
-  await switchToProject(browserWindow, folder)
+  await openProjectWindow(folder)
 }

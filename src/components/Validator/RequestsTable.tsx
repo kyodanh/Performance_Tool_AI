@@ -4,7 +4,12 @@ import { Text } from '@radix-ui/themes'
 import { Table } from '@/components/Table'
 import { RequestStats } from '@/utils/k6/stats'
 
-import { formatCount, formatTime } from './format'
+import {
+  formatCount,
+  formatErrorRate,
+  formatOptionalTime,
+  formatTime,
+} from './format'
 
 interface RequestsTableProps {
   requests: RequestStats[]
@@ -24,7 +29,12 @@ export function RequestsTable({ requests }: RequestsTableProps) {
           <Table.ColumnHeaderCell width="70px">Status</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell align="right">Count</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell align="right">Failed</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell align="right">Error %</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell align="right">Avg</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell align="right">Median</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell align="right">90%</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell align="right">95%</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell align="right">99%</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell align="right">Max</Table.ColumnHeaderCell>
         </Table.Row>
       </Table.Header>
@@ -52,7 +62,24 @@ export function RequestsTable({ requests }: RequestsTableProps) {
                 {formatCount(request.failed)}
               </Text>
             </Table.Cell>
+            <Table.Cell align="right">
+              <Text color={request.failed > 0 ? 'red' : undefined}>
+                {formatErrorRate(request.failed, request.count)}
+              </Text>
+            </Table.Cell>
             <Table.Cell align="right">{formatTime(request.avg)}</Table.Cell>
+            <Table.Cell align="right">
+              {formatOptionalTime(request.percentiles?.p50)}
+            </Table.Cell>
+            <Table.Cell align="right">
+              {formatOptionalTime(request.percentiles?.p90)}
+            </Table.Cell>
+            <Table.Cell align="right">
+              {formatOptionalTime(request.percentiles?.p95)}
+            </Table.Cell>
+            <Table.Cell align="right">
+              {formatOptionalTime(request.percentiles?.p99)}
+            </Table.Cell>
             <Table.Cell align="right">{formatTime(request.max)}</Table.Cell>
           </Table.Row>
         ))}

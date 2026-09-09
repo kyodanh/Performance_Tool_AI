@@ -4,12 +4,7 @@ import log from 'electron-log/main'
 import isSquirrelStartup from 'electron-squirrel-startup'
 import { updateElectronApp } from 'update-electron-app'
 
-import {
-  getDefaultWorkspaceRoot,
-  getProjectPath,
-  setActiveWorkspaceRoot,
-} from '@/constants/workspace'
-import * as path from '@/utils/path'
+import { setActiveWorkspaceRoot } from '@/constants/workspace'
 
 import * as handlers from './handlers'
 import { ProxyHandler } from './handlers/proxy/types'
@@ -18,18 +13,19 @@ import * as mainState from './main/k6StudioState'
 import { initializeLogger } from './main/logger'
 import { configureApplicationMenu } from './main/menu'
 import { initOpenFile, replayPendingFileOpen } from './main/openFile'
+import { installProjectContext } from './main/projectContext'
 import {
   cleanUpProxies,
   launchProxyAndAttachEmitter,
   stopProxyProcess,
 } from './main/proxy'
 import { getSettings, initSettings } from './main/settings'
-import { closeWatcher, configureWatcher } from './main/watcher'
-import { showWindow, trackWindowState } from './main/window'
+import { closeWatchers } from './main/watcher'
+import { createWindow } from './main/window'
 import { configureSystemProxy } from './services/http'
 import { initEventTracking } from './services/usageTracking'
 import { ProxyStatus } from './types'
-import { getAppIcon, getPlatform } from './utils/electron'
+import { broadcast, getAppIcon, getPlatform } from './utils/electron'
 import { setupProjectStructure } from './utils/workspace'
 
 // stdout/stderr can be closed pipes (e.g. the launching terminal has exited);
@@ -69,30 +65,21 @@ if (isSquirrelStartup) {
 }
 
 initializeLogger()
+// Before the handlers register: every registration gets wrapped so it resolves
+// paths against the project of the window that called it.
+installProjectContext()
 handlers.initialize()
 mainState.initialize()
 initializeDeepLinks()
 initOpenFile()
 
 /**
- * The project name is part of the title so several projects open in sequence
- * stay tellable apart — the default workspace shows no name, there is only one.
+ * App-level setup that must happen exactly once, no matter how many windows are
+ * open: one proxy, one menu. Everything these push to the renderer is broadcast
+ * to every window. The file watcher is per-window — it follows that window's
+ * project.
  */
-function buildWindowTitle() {
-  const base = DEV_GIT_BRANCH
-    ? `Grafana k6 Studio [${DEV_GIT_BRANCH}]`
-    : 'Grafana k6 Studio'
-
-  const root = getProjectPath()
-
-  if (path.equal(root, getDefaultWorkspaceRoot())) {
-    return base
-  }
-
-  return `${path.basename(root)} — ${base}`
-}
-
-const createWindow = async () => {
+async function initializeApp() {
   const icon = getAppIcon(process.env.NODE_ENV === 'development')
   if (getPlatform() === 'mac') {
     app.dock?.setIcon(icon)
@@ -102,97 +89,18 @@ const createWindow = async () => {
   // clean leftover proxies if any, this might happen on windows
   await cleanUpProxies()
 
-  const { width, height, x, y } = k6StudioState.appSettings.windowState
-
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    x,
-    y,
-    width,
-    height,
-    // Keeps the narrowest view row (with the sidebar at its max) above the
-    // header's fully collapsed floor; see GeneratorControls' breakpoints.
-    minWidth: 1000,
-    minHeight: 600,
-    show: false,
-    icon,
-    title: buildWindowTitle(),
-    backgroundColor: nativeTheme.themeSource === 'light' ? '#fff' : '#111110',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      devTools: process.env.NODE_ENV === 'development',
-    },
-  })
-
-  mainWindow.once('ready-to-show', () => {
-    showWindow(mainWindow)
-  })
-
   configureApplicationMenu()
-  configureWatcher(mainWindow)
-  k6StudioState.wasAppClosedByClient = false
 
   k6StudioState.proxyEmitter.on('status:change', (status: ProxyStatus) => {
     k6StudioState.proxyStatus = status
-    mainWindow.webContents.send(ProxyHandler.ChangeStatus, status)
+    broadcast(ProxyHandler.ChangeStatus, status)
   })
 
   // Configure proxy settings for `fetch`.
   await configureSystemProxy()
 
   // Start proxy
-  k6StudioState.currentProxyProcess =
-    await launchProxyAndAttachEmitter(mainWindow)
-
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    await mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
-  } else {
-    await mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
-    )
-  }
-
-  replayPendingDeepLink()
-  replayPendingFileOpen()
-
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools()
-  }
-
-  mainWindow.on('closed', () =>
-    k6StudioState.proxyEmitter.removeAllListeners('status:change')
-  )
-
-  mainWindow.on('moved', () => trackWindowState(mainWindow))
-  mainWindow.on('resized', () => trackWindowState(mainWindow))
-  mainWindow.on('close', (event) => {
-    mainWindow.webContents.send('app:close')
-
-    const fileExtension =
-      k6StudioState.currentClientRoute.startsWith('/file/') &&
-      path.extname(
-        decodeURIComponent(
-          k6StudioState.currentClientRoute.slice('/file/'.length)
-        )
-      )
-
-    if (
-      fileExtension &&
-      ['.k6g', '.k6b', '.js', '.ts'].includes(fileExtension) &&
-      !k6StudioState.wasAppClosedByClient
-    ) {
-      event.preventDefault()
-    }
-
-    if (
-      k6StudioState.currentClientRoute.startsWith('/recorder') &&
-      k6StudioState.currentRecordingSession !== null
-    ) {
-      event.preventDefault()
-    }
-  })
-
-  return mainWindow
+  k6StudioState.currentProxyProcess = await launchProxyAndAttachEmitter()
 }
 
 app.whenReady().then(
@@ -207,7 +115,11 @@ app.whenReady().then(
 
     await setupProjectStructure()
     await initEventTracking()
+    await initializeApp()
     await createWindow()
+
+    replayPendingDeepLink()
+    replayPendingFileOpen()
   },
   (error) => {
     log.error(error)
@@ -223,7 +135,7 @@ app.on('window-all-closed', async () => {
     return
   }
 
-  await closeWatcher()
+  await closeWatchers()
 })
 
 app.on('activate', async () => {
@@ -237,6 +149,6 @@ app.on('activate', async () => {
 
 app.on('before-quit', async () => {
   k6StudioState.appShuttingDown = true
-  await closeWatcher()
+  await closeWatchers()
   return stopProxyProcess()
 })

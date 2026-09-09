@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app } from 'electron'
 import log from 'electron-log/main'
 import find from 'find-process'
 import forge from 'node-forge'
@@ -15,7 +15,8 @@ import {
   getPlatform,
   getArch,
   findOpenPort,
-  sendToast,
+  broadcast,
+  broadcastToast,
 } from '../utils/electron'
 import { exists, readFile } from '../utils/fs'
 import { safeJsonParse } from '../utils/json'
@@ -30,7 +31,6 @@ interface options {
 }
 
 export const launchProxy = (
-  browserWindow: BrowserWindow,
   proxySettings: ProxySettings,
   { onReady, onFailure }: options = {}
 ): ProxyProcess => {
@@ -79,7 +79,7 @@ export const launchProxy = (
     // TODO: add zod schema validation
     const proxyData = safeJsonParse<ProxyData>(data)
     if (proxyData) {
-      browserWindow.webContents.send(ProxyHandler.Data, proxyData)
+      broadcast(ProxyHandler.Data, proxyData)
     } else {
       // the proxy outputs some errors to stdout
       // example: [Errno 48] HTTP(S) proxy failed to listen on *:6001
@@ -95,12 +95,15 @@ export const launchProxy = (
   proxy.on('close', (code) => {
     console.log(`proxy process exited with code ${code}`)
 
-    // if the window is destroyed we don't have to do anything else since we are quitting
-    if (browserWindow.isDestroyed()) {
+    // ponytail: the proxy starts before the first window exists, so "no windows"
+    // no longer means "quitting" — only shutdown does. Returning on window count
+    // swallowed every failure that happened during startup: no notification, no
+    // retry, status stuck on 'starting' and nothing listening on the port.
+    if (k6StudioState.appShuttingDown) {
       return
     }
 
-    browserWindow.webContents.send(ProxyHandler.Close, code)
+    broadcast(ProxyHandler.Close, code)
     onFailure?.()
   })
 
@@ -200,9 +203,7 @@ export const waitForProxy = async (): Promise<void> => {
   })
 }
 
-export const launchProxyAndAttachEmitter = async (
-  browserWindow: BrowserWindow
-) => {
+export const launchProxyAndAttachEmitter = async () => {
   const PROXY_RETRY_LIMIT = 5
   const { port, automaticallyFindPort } = k6StudioState.appSettings.proxy
 
@@ -215,21 +216,27 @@ export const launchProxyAndAttachEmitter = async (
 
   k6StudioState.proxyEmitter.emit('status:change', 'starting')
 
-  return launchProxy(browserWindow, k6StudioState.appSettings.proxy, {
+  return launchProxy(k6StudioState.appSettings.proxy, {
     onReady: () => {
       k6StudioState.wasProxyStoppedByClient = false
       k6StudioState.proxyEmitter.emit('status:change', 'online')
       k6StudioState.proxyEmitter.emit('ready')
     },
     onFailure: async () => {
-      if (k6StudioState.wasProxyStoppedByClient) {
+      // A proxy that dies before it ever came up leaves the status on
+      // 'starting'. Nothing else corrects it, so a window opening afterwards
+      // (the proxy starts before the first one exists) asks for the status and
+      // is told the proxy is on its way when it is gone.
+      const diedBeforeReady = k6StudioState.proxyStatus === 'starting'
+
+      if (k6StudioState.wasProxyStoppedByClient || diedBeforeReady) {
         k6StudioState.proxyEmitter.emit('status:change', 'offline')
       }
 
       if (
         k6StudioState.appShuttingDown ||
         k6StudioState.wasProxyStoppedByClient ||
-        k6StudioState.proxyStatus === 'starting'
+        diedBeforeReady
       ) {
         // don't restart the proxy if the app is shutting down, manually stopped by client or already restarting
         return
@@ -242,7 +249,7 @@ export const launchProxyAndAttachEmitter = async (
         k6StudioState.proxyRetryCount = 0
         k6StudioState.proxyEmitter.emit('status:change', 'offline')
 
-        sendToast(browserWindow.webContents, {
+        broadcastToast({
           title: `Port ${proxyPort} is already in use`,
           description:
             'Please select a different port or enable automatic port selection',
@@ -254,12 +261,11 @@ export const launchProxyAndAttachEmitter = async (
 
       k6StudioState.proxyRetryCount++
       k6StudioState.proxyEmitter.emit('status:change', 'starting')
-      k6StudioState.currentProxyProcess =
-        await launchProxyAndAttachEmitter(browserWindow)
+      k6StudioState.currentProxyProcess = await launchProxyAndAttachEmitter()
 
       const errorMessage = `Proxy failed to start on port ${proxyPort}, restarting...`
       log.error(errorMessage)
-      sendToast(browserWindow.webContents, {
+      broadcastToast({
         title: errorMessage,
         status: 'error',
       })
@@ -281,9 +287,15 @@ export const stopProxyProcess = async () => {
 
 export const cleanUpProxies = async () => {
   const processList = await find('name', 'k6-studio-proxy', false)
-  processList.forEach((proc) => {
-    kill(proc.pid)
-  })
+
+  // ponytail: `kill` is async — not waiting for it let the new proxy spawn
+  // while the old one still held the port, so it died on "[Errno 48] failed to
+  // listen" right after launch.
+  await Promise.all(
+    processList.map(
+      (proc) => new Promise<void>((resolve) => kill(proc.pid, () => resolve()))
+    )
+  )
 }
 
 export const getProxyURL = () => {

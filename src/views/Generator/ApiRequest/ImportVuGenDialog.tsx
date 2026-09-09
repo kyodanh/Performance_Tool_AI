@@ -17,9 +17,11 @@ interface ImportVuGenDialogProps {
 }
 
 /**
- * Paste `Action.c` and get its steps as requests. LoadRunner scripts hold no
- * responses, so correlation and recorded-value assertions have nothing to read
- * — the toast says so, since it is the one thing that surprises people.
+ * Paste `Action.c` and get its steps as requests, plus a correlation rule per
+ * `web_reg_save_param*` registration. LoadRunner scripts hold no responses, so
+ * those rules cannot extract until a request has one (send it, or load a
+ * recording) — the toast says so, since it is the one thing that surprises
+ * people.
  */
 export function ImportVuGenDialog({
   open,
@@ -41,6 +43,7 @@ export function ImportVuGenDialog({
     (store) => store.setThinkTimeOverride
   )
   const toggleRendezvous = useGeneratorStore((store) => store.toggleRendezvous)
+  const setRules = useGeneratorStore((store) => store.setRules)
   const showToast = useToast()
 
   function handleImport() {
@@ -56,7 +59,8 @@ export function ImportVuGenDialog({
       return
     }
 
-    const { requests, skipped, droppedThinkTime } = result
+    const { requests, skipped, subResources, droppedThinkTime, correlations } =
+      result
 
     if (requests.length === 0) {
       showToast({
@@ -74,6 +78,22 @@ export function ImportVuGenDialog({
       'vugen',
       requests.map((request) => ({ ...toProxyData(request), source: 'vugen' }))
     )
+
+    // A rule already in the generator wins: it may have been edited by hand,
+    // and re-importing must not duplicate the variable.
+    const rules = useGeneratorStore.getState().rules
+    const known = new Set(
+      rules.flatMap((rule) =>
+        rule.type === 'correlation' ? [rule.extractor.variableName] : []
+      )
+    )
+    const addedRules = correlations.filter(
+      ({ extractor }) => !known.has(extractor.variableName)
+    )
+
+    if (addedRules.length > 0) {
+      setRules([...rules, ...addedRules])
+    }
 
     for (const request of requests) {
       // Overrides are keyed by `requestKey`, not by the generated request id.
@@ -94,7 +114,12 @@ export function ImportVuGenDialog({
         alreadyImported > 0
           ? `${count(alreadyImported, 'request')} from the previous import replaced.`
           : '',
-        'LoadRunner scripts carry no responses, so add correlation rules by hand.',
+        addedRules.length > 0
+          ? `${count(addedRules.length, 'correlation rule')} recreated from web_reg_save_param. LoadRunner scripts carry no responses, so each rule extracts only once its request has one — send it, or load the recording.`
+          : 'LoadRunner scripts carry no responses, so add correlation rules by hand.',
+        subResources > 0
+          ? `${count(subResources, 'EXTRARES sub-resource')} imported into the transaction that listed them, so its duration covers them the way LoadRunner's does. They are sent in order, not in parallel.`
+          : '',
         skipped > 0 ? describeSkipped(skipped) : '',
         droppedThinkTime > 0
           ? `${count(droppedThinkTime, 'lr_think_time call')} between transactions dropped: keeping them would add their seconds to the transaction above.`
@@ -116,8 +141,9 @@ export function ImportVuGenDialog({
         <Dialog.Title>Import LoadRunner script</Dialog.Title>
         <Dialog.Description size="2" color="gray" mb="4">
           Paste the body of a VuGen action. Transactions become groups,
-          lr_think_time and lr_rendezvous become per-request options, and
-          EXTRARES sub-resources are left out.
+          lr_think_time and lr_rendezvous become per-request options,
+          web_reg_save_param calls become correlation rules, and EXTRARES
+          sub-resources become their own requests inside the same transaction.
           {alreadyImported > 0 &&
             ' Importing replaces the requests from your last LoadRunner import; requests you added by hand are kept.'}
         </Dialog.Description>
@@ -136,7 +162,8 @@ export function ImportVuGenDialog({
 
         <Flex gap="3" mt="4" justify="end" align="center">
           <Text size="1" color="gray" mr="auto">
-            No responses are imported — correlation must be added afterwards.
+            No responses are imported — correlation rules extract once their
+            request has one.
           </Text>
           <Dialog.Close>
             <Button variant="soft" color="gray">
@@ -155,7 +182,7 @@ export function ImportVuGenDialog({
 }
 
 function describeSkipped(skipped: number) {
-  return `${count(skipped, 'step')} skipped: EXTRARES sub-resources, a relative URL, or an unsupported method.`
+  return `${count(skipped, 'step')} skipped: a relative URL with no referer to resolve it, or a method k6 Studio does not support.`
 }
 
 function count(value: number, noun: string) {

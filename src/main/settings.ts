@@ -182,16 +182,12 @@ export async function selectUpstreamCertificate(browserWindow: BrowserWindow) {
   })
 }
 
-export async function applySettings(
-  modifiedSettings: Partial<AppSettings>,
-  browserWindow: BrowserWindow
-) {
+export async function applySettings(modifiedSettings: Partial<AppSettings>) {
   if (modifiedSettings.proxy) {
     await stopProxyProcess()
 
     k6StudioState.appSettings.proxy = modifiedSettings.proxy
-    k6StudioState.currentProxyProcess =
-      await launchProxyAndAttachEmitter(browserWindow)
+    k6StudioState.currentProxyProcess = await launchProxyAndAttachEmitter()
 
     await configureSystemProxy()
   }

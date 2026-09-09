@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { RunErrorGroup } from '@/utils/k6/stats'
 
 import {
+  describeCategory,
   describeCode,
   describeError,
+  errorCategories,
   formatDuration,
   formatTime,
 } from './format'
@@ -58,5 +60,33 @@ describe('formatTime', () => {
   it('reports milliseconds as seconds', () => {
     expect(formatTime(13473)).toBe('13.473 s')
     expect(formatTime(4.2)).toBe('0.004 s')
+  })
+})
+
+describe('describeCategory', () => {
+  it('names the class of failure behind a k6 code', () => {
+    expect(describeCategory(error({ code: '1404' }))).toBe('HTTP 4xx')
+    expect(describeCategory(error({ code: '1500' }))).toBe('HTTP 5xx')
+    expect(describeCategory(error({ code: '1050' }))).toBe('Timeout')
+    expect(describeCategory(error({ code: '1211' }))).toBe('Timeout')
+    expect(describeCategory(error({ code: '1212' }))).toBe('Connection')
+    expect(describeCategory(error({ code: '1101' }))).toBe('DNS')
+    expect(describeCategory(error({ code: '1310' }))).toBe('TLS')
+    expect(describeCategory(error({ code: '' }))).toBe('Other')
+  })
+})
+
+describe('errorCategories', () => {
+  it('totals occurrences per category, largest first', () => {
+    expect(
+      errorCategories([
+        error({ code: '1404', count: 2 }),
+        error({ code: '1050', count: 7 }),
+        error({ code: '1403', count: 3 }),
+      ])
+    ).toEqual([
+      { category: 'Timeout', count: 7 },
+      { category: 'HTTP 4xx', count: 5 },
+    ])
   })
 })

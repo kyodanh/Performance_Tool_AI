@@ -7,50 +7,68 @@ import {
   getDataFilesPath,
   TEMP_SCRIPT_SUFFIX,
   getBrowserTestsPath,
+  runInProject,
 } from '@/constants/workspace'
 import { UIHandler } from '@/handlers/ui/types'
-import { watch } from '@/utils/fs'
+import { FSWatcher, watch } from '@/utils/fs'
 
 import { getStudioFileFromPath } from './file'
 
-export function configureWatcher(browserWindow: BrowserWindow) {
-  k6StudioState.watcher = watch(
-    [
-      getRecordingsPath(),
-      getGeneratorsPath(),
-      getBrowserTestsPath(),
-      getScriptsPath(),
-      getDataFilesPath(),
-    ],
-    {
-      ignoreInitial: true,
-    }
+/**
+ * One watcher per window, not per app: two windows can sit on two projects, and
+ * a file appearing in one must not show up in the other's sidebar.
+ */
+const watchers = new Map<number, FSWatcher>()
+
+export function configureWatcher(browserWindow: BrowserWindow, root: string) {
+  const watcher = runInProject(root, () =>
+    watch(
+      [
+        getRecordingsPath(),
+        getGeneratorsPath(),
+        getBrowserTestsPath(),
+        getScriptsPath(),
+        getDataFilesPath(),
+      ],
+      {
+        ignoreInitial: true,
+      }
+    )
   )
 
-  k6StudioState.watcher.on('add', (filePath) => {
+  watchers.set(browserWindow.id, watcher)
+
+  const send = (channel: string, filePath: string) => {
     const file = getStudioFileFromPath(filePath)
 
     if (!file || filePath.endsWith(TEMP_SCRIPT_SUFFIX)) {
       return
     }
 
-    browserWindow.webContents.send(UIHandler.AddFile, file)
-  })
-
-  k6StudioState.watcher.on('unlink', (filePath) => {
-    const file = getStudioFileFromPath(filePath)
-
-    if (!file || filePath.endsWith(TEMP_SCRIPT_SUFFIX)) {
+    if (browserWindow.isDestroyed()) {
       return
     }
 
-    browserWindow.webContents.send(UIHandler.RemoveFile, file)
-  })
+    browserWindow.webContents.send(channel, file)
+  }
+
+  watcher.on('add', (filePath) => send(UIHandler.AddFile, filePath))
+  watcher.on('unlink', (filePath) => send(UIHandler.RemoveFile, filePath))
 }
 
-export async function closeWatcher() {
-  // stop watching files to avoid crash on exit
-  if (k6StudioState.watcher) {
-    await k6StudioState.watcher.close()
+export async function closeWatcher(windowId: number) {
+  const watcher = watchers.get(windowId)
+
+  if (!watcher) {
+    return
   }
+
+  watchers.delete(windowId)
+
+  // stop watching files to avoid crash on exit
+  await watcher.close()
+}
+
+export async function closeWatchers() {
+  await Promise.all([...watchers.keys()].map(closeWatcher))
 }

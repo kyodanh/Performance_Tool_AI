@@ -14,23 +14,48 @@ describe('parseVuGen', () => {
     expect(parseVuGen('curl https://example.com')).toBeNull()
   })
 
-  it('imports every step and skips EXTRARES sub-resources', () => {
+  it('imports every step plus its EXTRARES sub-resources', () => {
     const result = parseVuGen(source)
 
-    expect(result?.requests).toHaveLength(4)
-    // 2 EXTRARES items, nothing else dropped.
-    expect(result?.skipped).toBe(2)
+    // 4 steps + 2 EXTRARES items, nothing dropped.
+    expect(result?.requests).toHaveLength(6)
+    expect(result?.subResources).toBe(2)
+    expect(result?.skipped).toBe(0)
   })
 
-  it('groups requests by transaction', () => {
+  it('keeps sub-resources in the transaction of the step that listed them', () => {
     const groups = parseVuGen(source)?.requests.map(({ group }) => group)
 
     expect(groups).toEqual([
       '2_trans_Dashboard',
       '2_trans_Dashboard',
+      '2_trans_Dashboard',
+      '2_trans_Dashboard',
       '6_trans_ProjectMonitoring',
       '6_trans_ProjectMonitoring',
     ])
+  })
+
+  it('resolves a relative EXTRARES url against its referer and sends it as GET', () => {
+    const [, , image, script] = parseVuGen(source)?.requests ?? []
+
+    expect(image).toMatchObject({
+      method: 'GET',
+      url: 'https://pro360-test.fis.vn/assets/images/dashboard.png',
+      content: '',
+    })
+    expect(image?.headers).toContainEqual({
+      name: 'Referer',
+      value: 'https://pro360-test.fis.vn/dashboard',
+    })
+    // The auto header still applies, the parent's one-off header does not.
+    expect(image?.headers).toContainEqual({
+      name: 'Authorization',
+      value: 'Bearer {token}',
+    })
+    expect(script?.url).toBe(
+      'https://pro360-test.fis.vn/703.0a273d4eb84d55a0.js'
+    )
   })
 
   it('applies auto headers to every later step and plain headers only once', () => {
@@ -70,7 +95,7 @@ describe('parseVuGen', () => {
   })
 
   it('reads web_custom_request bodies with their escaped quotes', () => {
-    const third = parseVuGen(source)?.requests[2]
+    const third = parseVuGen(source)?.requests[4]
 
     expect(third?.method).toBe('POST')
     expect(third?.content).toBe('{"bg":"x","ou":[]}')
@@ -81,7 +106,7 @@ describe('parseVuGen', () => {
   })
 
   it('encodes web_submit_data item data as a form body', () => {
-    const fourth = parseVuGen(source)?.requests[3]
+    const fourth = parseVuGen(source)?.requests[5]
 
     expect(fourth?.method).toBe('POST')
     expect(fourth?.content).toBe('username=%7Buser%7D&password=secret')
@@ -91,7 +116,7 @@ describe('parseVuGen', () => {
   it('attaches lr_think_time to the request it follows in the same transaction', () => {
     const requests = parseVuGen(source)?.requests ?? []
 
-    expect(requests[2]?.thinkTime).toBe(5)
+    expect(requests[4]?.thinkTime).toBe(5)
   })
 
   it('drops a pause that sits between two transactions', () => {
@@ -138,5 +163,80 @@ describe('cookies', () => {
       null,
       null,
     ])
+  })
+})
+
+describe('correlation rules', () => {
+  // Regression: an exported script carries its rules as web_reg_save_param
+  // registrations, and importing dropped them — the generator came back with
+  // 200+ requests and no rules, so every token stayed a literal `{name}`.
+  it('recreates a rule per web_reg_save_param registration', () => {
+    const result = parseVuGen(`
+      web_reg_save_param_json(
+        "ParamName=preloadToken",
+        "QueryString=$[0]['data']['studentExamLoadEncrypted']['preloadToken']",
+        SEARCH_FILTERS,
+        "Scope=Body",
+        "RequestUrl=*https://example.com/api/graphql*",
+        LAST);
+      web_custom_request("POST /api/graphql",
+        "URL=https://example.com/api/graphql",
+        "Method=POST",
+        LAST);
+
+      web_reg_save_param_ex(
+        "ParamName=sessionId",
+        "LB=Set-Cookie: ",
+        "RB=\\r\\n",
+        SEARCH_FILTERS,
+        "Scope=Headers",
+        LAST);
+      web_url("home", "URL=https://example.com/", LAST);
+    `)
+
+    expect(
+      result?.correlations.map(({ type, enabled }) => [type, enabled])
+    ).toEqual([
+      ['correlation', true],
+      ['correlation', true],
+    ])
+    expect(result?.correlations.map(({ extractor }) => extractor)).toEqual([
+      {
+        filter: { path: 'https://example.com/api/graphql' },
+        selector: {
+          type: 'json',
+          from: 'body',
+          path: "$[0]['data']['studentExamLoadEncrypted']['preloadToken']",
+        },
+        variableName: 'preloadToken',
+        extractionMode: 'single',
+      },
+      // No RequestUrl filter: the registration reads the response of the step
+      // below it.
+      {
+        filter: { path: 'https://example.com/' },
+        selector: { type: 'header-name', from: 'headers', name: 'Set-Cookie' },
+        variableName: 'sessionId',
+        extractionMode: 'single',
+      },
+    ])
+  })
+
+  it('reads regexp registrations and their scope', () => {
+    const result = parseVuGen(`
+      web_reg_save_param_regexp(
+        "ParamName=csrf",
+        "RegExp=name=\\"csrf\\" value=\\"(.+?)\\"",
+        SEARCH_FILTERS,
+        "Scope=All",
+        LAST);
+      web_url("home", "URL=https://example.com/", LAST);
+    `)
+
+    expect(result?.correlations[0]?.extractor.selector).toEqual({
+      type: 'regex',
+      from: 'url',
+      regex: 'name="csrf" value="(.+?)"',
+    })
   })
 })

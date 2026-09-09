@@ -1,7 +1,6 @@
 import eventEmitter from 'events'
 
 import { RecordingSession } from '@/recorder/launchers/types'
-import { FSWatcher } from '@/utils/fs'
 
 import { ProxyStatus } from '../types'
 import { AppSettings } from '../types/settings'
@@ -18,9 +17,6 @@ export type k6StudioState = {
   wasProxyStoppedByClient: boolean
   proxyRetryCount: number
   appShuttingDown: boolean
-  currentClientRoute: string
-  wasAppClosedByClient: boolean
-  watcher: FSWatcher | null
 }
 
 export function initialize() {
@@ -38,9 +34,5 @@ export function initialize() {
 
     // Used mainly to avoid starting a new proxy when closing the active one on shutdown
     appShuttingDown: false,
-    // Used to track the current route in the client side
-    currentClientRoute: '/',
-    wasAppClosedByClient: false,
-    watcher: null,
   }
 }

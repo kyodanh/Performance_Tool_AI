@@ -48,6 +48,39 @@ export function sendToast(webContents: WebContents, toast: AddToastPayload) {
   webContents.send(UIHandler.Toast, toast)
 }
 
+/**
+ * Send to every open window. For app-level events that belong to no window in
+ * particular — proxy traffic, file-watcher changes, log updates — every window
+ * shows the same workspace, so every window needs them.
+ */
+export function broadcast(channel: string, ...args: unknown[]) {
+  for (const browserWindow of BrowserWindow.getAllWindows()) {
+    if (browserWindow.isDestroyed()) {
+      continue
+    }
+
+    try {
+      browserWindow.webContents.send(channel, ...args)
+    } catch {
+      // ponytail: `send` throws once the render frame is disposed during
+      // teardown and every way of asking about the frame throws the same way,
+      // so catching the send is the only guard. See logger.onLogChange.
+    }
+  }
+}
+
+export function broadcastToast(toast: AddToastPayload) {
+  broadcast(UIHandler.Toast, toast)
+}
+
+/**
+ * Where an event that carries no window of its own — a deep link, a file
+ * opened from Finder — should land.
+ */
+export function getTargetWindow(): BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+}
+
 export const findOpenPort = (startPort: number = 3000): Promise<number> => {
   return new Promise((resolve, reject) => {
     const server = net.createServer()

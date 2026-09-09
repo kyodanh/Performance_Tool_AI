@@ -5,7 +5,13 @@ import { useState } from 'react'
 import { Table } from '@/components/Table'
 import { RunErrorGroup } from '@/utils/k6/stats'
 
-import { describeCode, describeError, formatCount } from './format'
+import {
+  describeCategory,
+  describeCode,
+  describeError,
+  errorCategories,
+  formatCount,
+} from './format'
 
 function errorKey(error: RunErrorGroup) {
   return `${error.code}|${error.message}|${error.url}|${error.group}`
@@ -31,13 +37,24 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
   // The column is dead weight for a run with no data file, which is most of
   // them — only the scripts that parameterize get the tag.
   const hasDataRows = errors.some((error) => error.dataRows.length > 0)
+  const categories = errorCategories(errors)
 
   return (
     <>
+      {categories.length > 0 && (
+        <Text as="p" size="1" color="gray" mb="2">
+          {categories
+            .map(({ category, count }) => `${category}: ${formatCount(count)}`)
+            .join(' · ')}
+        </Text>
+      )}
       <Table.Root size="1" variant="surface">
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell width="80px">Code</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell width="110px">
+              Category
+            </Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell width="80px" align="right">
               Count
             </Table.ColumnHeaderCell>
@@ -59,6 +76,7 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
               css={rowStyles}
             >
               <Table.Cell>{describeCode(error)}</Table.Cell>
+              <Table.Cell>{describeCategory(error)}</Table.Cell>
               <Table.Cell align="right">{formatCount(error.count)}</Table.Cell>
               <Table.Cell css={truncate}>{describeError(error)}</Table.Cell>
               <Table.Cell>{error.group || '—'}</Table.Cell>
@@ -90,7 +108,7 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
             <Box css={detailBox}>
               {selectedError &&
                 [
-                  `[HTTP ${describeCode(selectedError)} · k6 code ${selectedError.code}]`,
+                  `[${describeCategory(selectedError)} · HTTP ${describeCode(selectedError)} · k6 code ${selectedError.code}]`,
                   describeError(selectedError),
                   selectedError.group &&
                     `\nTransaction: ${selectedError.group}`,

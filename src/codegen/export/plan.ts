@@ -2,6 +2,7 @@ import { correlationVariableName } from '@/rules/correlation.utils'
 import { applyRules } from '@/rules/rules'
 import { stripJsonPathPrefix } from '@/rules/selectors/json'
 import { matchFilter } from '@/rules/utils'
+import { parseStatusCodes, statusCodesToRegex } from '@/schemas/generator'
 import { Header, Method, ProxyData, Response } from '@/types'
 import { GeneratorFileData } from '@/types/generator'
 import { ExtractorSelector, VerificationRule } from '@/types/rules'
@@ -221,6 +222,8 @@ function resolveAssertionValue(
       return rule.value.number
     case 'variable':
       return `\${VARS['${rule.value.variableName}']}`
+    case 'statusList':
+      return statusCodesToRegex(parseStatusCodes(rule.value.codes))
   }
 }
 

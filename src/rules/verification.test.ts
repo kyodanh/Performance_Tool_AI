@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { statusCodesToRegex } from '@/schemas/generator'
 import {
   createProxyData,
   createRequest,
@@ -45,6 +46,47 @@ const createInstance = (rule = createMockVerificationRule()) =>
 
 describe('createVerificationRuleInstance', () => {
   describe('basic functionality', () => {
+    it('keeps a regex pattern intact instead of escaping it', () => {
+      const instance = createInstance(
+        createMockVerificationRule({
+          target: 'body',
+          operator: 'matches',
+          value: { type: 'regex', regex: String.raw`^user_\d+$` },
+        })
+      )
+
+      const result = instance.apply(createMockRequestSnippet())
+
+      expect(result.checks[0]).toMatchObject({
+        expression: String.raw`(r) => new RegExp("^user_\\d+$").test(r.body)`,
+      })
+    })
+
+    it('accepts a list of status codes and classes', () => {
+      const instance = createInstance(
+        createMockVerificationRule({
+          target: 'status',
+          operator: 'matches',
+          value: { type: 'statusList', codes: '200, 3xx' },
+        })
+      )
+
+      const result = instance.apply(
+        createMockRequestSnippet({ response: { statusCode: 302 } })
+      )
+
+      expect(result.checks[0]).toMatchObject({
+        description: 'status matches 200, 3xx',
+        expression: String.raw`(r) => /^(?:200|3\d\d)$/.test(r.status)`,
+      })
+
+      const pattern = new RegExp(statusCodesToRegex(['200', '3xx']))
+
+      expect(pattern.test('200')).toBe(true)
+      expect(pattern.test('302')).toBe(true)
+      expect(pattern.test('404')).toBe(false)
+    })
+
     it('verifies status code matches recorded value', () => {
       const instance = createInstance()
       const mockRequestSnippet = createMockRequestSnippet({

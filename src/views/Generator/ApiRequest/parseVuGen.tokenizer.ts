@@ -1,3 +1,9 @@
+export interface VuGenSubResource {
+  url: string
+  /** `Referer=` the item carried — the page LoadRunner fetched it for. */
+  referer: string | null
+}
+
 export interface Call {
   name: string
   /** String literal arguments, in order, unescaped and concatenated. */
@@ -8,8 +14,8 @@ export interface Call {
   options: Map<string, string>
   /** `"Name=x", "Value=y", ENDITEM` triples of `web_submit_data`. */
   itemData: Array<[string, string]>
-  /** Sub-resources listed after `EXTRARES`, which we do not import. */
-  extraResources: number
+  /** Sub-resources listed after `EXTRARES`, in order. */
+  extraResources: VuGenSubResource[]
 }
 
 /** Reads every `name(...)` call in a VuGen action, in source order. */
@@ -41,12 +47,12 @@ function toCall(name: string, inner: string): Call {
     words: [],
     options: new Map(),
     itemData: [],
-    extraResources: 0,
+    extraResources: [],
   }
 
   let inExtraResources = false
   let inItemData = false
-  let item: Partial<Record<'Name' | 'Value', string>> = {}
+  let item: Partial<Record<'Name' | 'Value' | 'Url' | 'Referer', string>> = {}
 
   for (const argument of splitArguments(inner)) {
     if (argument.type === 'word') {
@@ -63,7 +69,12 @@ function toCall(name: string, inner: string): Call {
 
       if (argument.value === 'ENDITEM') {
         if (inExtraResources) {
-          call.extraResources += 1
+          if (item.Url !== undefined) {
+            call.extraResources.push({
+              url: item.Url,
+              referer: item.Referer ?? null,
+            })
+          }
         } else if (item.Name !== undefined) {
           call.itemData.push([item.Name, item.Value ?? ''])
         }
@@ -90,8 +101,16 @@ function toCall(name: string, inner: string): Call {
       continue
     }
 
-    // Sub-resource `Url=` / `Referer=` must not overwrite the parent's options.
-    if (!inExtraResources && !call.options.has(key)) {
+    // Sub-resource `Url=` / `Referer=` belong to the item, and must not
+    // overwrite the parent's options.
+    if (inExtraResources) {
+      if (key === 'Url' || key === 'Referer') {
+        item[key] = value
+      }
+      continue
+    }
+
+    if (!call.options.has(key)) {
       call.options.set(key, value)
     }
   }

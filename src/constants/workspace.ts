@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 import * as path from '@/utils/path'
 
@@ -7,12 +8,25 @@ import * as path from '@/utils/path'
  * side — `~/k6-projects/Elearning`, `~/k6-projects/Pro360` — each with its own
  * Generators / Recordings / Scripts / Data / Browser / Results folders.
  *
- * It is read at startup from `settings.workspace.root` and never changes while
- * the app runs: the file watcher, the open tabs and the recording session all
- * hold on to paths derived from it, so switching would leave them pointing at
- * the previous project. Changing the setting asks for a restart instead.
+ * It is read at startup from `settings.workspace.root` and is the fallback for
+ * work that belongs to no window in particular. A window opened on another
+ * project overrides it for the duration of every call that window makes — see
+ * `runInProject`.
  */
 let activeRoot: string | null = null
+
+const projectContext = new AsyncLocalStorage<string>()
+
+/**
+ * Run `fn` with `root` as the project every path lookup inside it resolves
+ * against, however deep, and across awaits. Each window has its own project and
+ * an IPC call belongs to the window that sent it; the alternative is threading
+ * a root argument through the eighty-odd call sites of `getProjectPath` and
+ * friends.
+ */
+export function runInProject<T>(root: string, fn: () => T): T {
+  return projectContext.run(path.normalize(root), fn)
+}
 
 export function getDefaultWorkspaceRoot() {
   return path.join(app.getPath('documents'), 'k6-studio')
@@ -23,7 +37,7 @@ export function setActiveWorkspaceRoot(root: string) {
 }
 
 export function getProjectPath() {
-  return activeRoot ?? getDefaultWorkspaceRoot()
+  return projectContext.getStore() ?? activeRoot ?? getDefaultWorkspaceRoot()
 }
 
 /**

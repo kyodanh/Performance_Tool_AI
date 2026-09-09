@@ -48,6 +48,38 @@ export const RegexValueSchema = z.object({
   ),
 })
 
+const STATUS_CODE_REGEX = /^[1-5](?:\d{2}|xx)$/i
+
+export function parseStatusCodes(value: string) {
+  return value
+    .split(',')
+    .map((code) => code.trim())
+    .filter((code) => code !== '')
+}
+
+/** Turns "200, 3xx" into `^(?:200|3\d\d)$` so a status can be checked against a set. */
+export function statusCodesToRegex(codes: string[]) {
+  const alternatives = codes.map((code) =>
+    code.toLowerCase().replace(/xx$/, '\\d\\d')
+  )
+
+  return `^(?:${alternatives.join('|')})$`
+}
+
+export const StatusListValueSchema = z.object({
+  type: z.literal('statusList'),
+  codes: z.string().refine(
+    (value) => {
+      const codes = parseStatusCodes(value)
+
+      return (
+        codes.length > 0 && codes.every((code) => STATUS_CODE_REGEX.test(code))
+      )
+    },
+    { message: 'Enter status codes separated by commas, e.g. 200, 3xx' }
+  ),
+})
+
 export const FilterSchema = z.object({
   path: z.string(),
 })
@@ -195,6 +227,7 @@ export const StatusVerificationRuleSchema = BaseVerificationRuleSchema.extend({
     RecordedValueSchema,
     NumberValueSchema,
     RegexValueSchema,
+    StatusListValueSchema,
   ]),
 })
 

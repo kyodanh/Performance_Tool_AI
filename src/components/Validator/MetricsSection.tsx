@@ -21,7 +21,14 @@ import { isDistributedRun, RunStats, StatsBucket } from '@/utils/k6/stats'
 
 import { ChecksTable } from './ChecksTable'
 import { ErrorsTable } from './ErrorsTable'
-import { formatBytes, formatCount, formatDuration, formatTime } from './format'
+import {
+  formatBytes,
+  formatCount,
+  formatDuration,
+  formatErrorRate,
+  formatOptionalTime,
+  formatTime,
+} from './format'
 import { GeneratorsTable } from './GeneratorsTable'
 import {
   MAX_SERIES,
@@ -262,9 +269,25 @@ export function MetricsSection({ stats, resources = [] }: MetricsSectionProps) {
                   </DataList.Value>
                 </DataList.Item>
                 <DataList.Item>
+                  <DataList.Label minWidth="88px">Error rate</DataList.Label>
+                  <DataList.Value>
+                    <Text color={stats.failedRequests > 0 ? 'red' : undefined}>
+                      {formatErrorRate(stats.failedRequests, stats.requests)}
+                    </Text>{' '}
+                    of requests
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
                   <DataList.Label minWidth="88px">Iterations</DataList.Label>
                   <DataList.Value>
                     {formatCount(stats.iterations)}
+                    {stats.failedIterations > 0 && (
+                      <Text color="red">
+                        {' '}
+                        ({stats.failedIterationsCapped ? '≥' : ''}
+                        {formatCount(stats.failedIterations)} failed)
+                      </Text>
+                    )}
                     {stats.droppedIterations > 0 && (
                       <Text color="red">
                         {' '}
@@ -278,6 +301,15 @@ export function MetricsSection({ stats, resources = [] }: MetricsSectionProps) {
                   <DataList.Value>
                     {formatTime(stats.avgDuration)} avg /{' '}
                     {formatTime(stats.maxDuration)} max
+                  </DataList.Value>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.Label minWidth="88px">Percentiles</DataList.Label>
+                  <DataList.Value>
+                    {formatOptionalTime(stats.percentiles?.p50)} median /{' '}
+                    {formatOptionalTime(stats.percentiles?.p90)} 90% /{' '}
+                    {formatOptionalTime(stats.percentiles?.p95)} 95% /{' '}
+                    {formatOptionalTime(stats.percentiles?.p99)} 99%
                   </DataList.Value>
                 </DataList.Item>
                 <DataList.Item>

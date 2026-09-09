@@ -213,10 +213,18 @@ async function fetchA2AReader(
 
   if (!response.ok) {
     const text = await safeResponseText(response)
+
+    // Logged here, not only thrown: the AI SDK hands this to `onError` and
+    // rejects with its own generic message, so the status is the one thing
+    // worth keeping in the log file.
+    log.error(LOG_PREFIX, `A2A request failed (${response.status}): ${text}`)
+
     throw new Error(`A2A request failed (${response.status}): ${text}`)
   }
 
   if (!response.body) {
+    log.error(LOG_PREFIX, 'A2A response has no body')
+
     throw new Error('A2A response has no body')
   }
 

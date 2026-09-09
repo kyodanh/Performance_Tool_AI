@@ -60,6 +60,11 @@ export function ValueEditor() {
         setValue('operator', 'matches')
       }
 
+      if (value === 'statusList') {
+        setValue('value.codes', '200, 3xx')
+        setValue('operator', 'matches')
+      }
+
       setValue('value.type', value)
     },
     [setValue]
@@ -85,7 +90,7 @@ export function ValueEditor() {
         />
       </FieldGroup>
 
-      {!['recordedValue', 'regex'].includes(valueType) && (
+      {!['recordedValue', 'regex', 'statusList'].includes(valueType) && (
         <Grid gap="2" columns="auto 1fr">
           <FieldGroup name="operator" errors={errors} label="Operator">
             <ControlledSelect
@@ -125,6 +130,17 @@ export function ValueEditor() {
             />
           )}
         </Grid>
+      )}
+
+      {valueType === 'statusList' && (
+        <FieldGroup
+          name="value.codes"
+          errors={errors}
+          label="Accepted status codes"
+          hint="Comma separated. Use 3xx for a whole class."
+        >
+          <TextField.Root placeholder="200, 3xx" {...register('value.codes')} />
+        </FieldGroup>
       )}
 
       {valueType === 'regex' && (

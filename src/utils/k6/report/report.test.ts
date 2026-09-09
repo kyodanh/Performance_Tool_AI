@@ -31,6 +31,8 @@ function makeStats(overrides: Partial<RunStats> = {}): RunStats {
     requests: 6,
     failedRequests: 1,
     iterations: 3,
+    failedIterations: 0,
+    failedIterationsCapped: false,
     droppedIterations: 0,
     checksPassed: 5,
     checksFailed: 1,

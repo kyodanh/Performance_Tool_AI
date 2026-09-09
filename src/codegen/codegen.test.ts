@@ -78,6 +78,10 @@ describe('Code generation', () => {
       const HTTP_TIMEOUT = '120s'
 
       export default function() {
+        // Tags every sample of this iteration so the run stats can count how many
+        // iterations hit an error — the number a controller reports as failed
+        // Vusers. k6 has no per-iteration verdict of its own.
+        execution.vu.tags['iter'] = execution.scenario.iterationInTest
         let params
         let resp
         let match

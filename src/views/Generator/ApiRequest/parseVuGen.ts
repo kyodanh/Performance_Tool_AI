@@ -1,7 +1,8 @@
 import { DEFAULT_GROUP_NAME } from '@/constants'
+import { CorrelationRule, ExtractorSelector } from '@/types/rules'
 
 import { ApiRequestFormData, HTTP_METHODS, hasBody } from './ApiRequest.utils'
-import { Call, readCalls } from './parseVuGen.tokenizer'
+import { Call, VuGenSubResource, readCalls } from './parseVuGen.tokenizer'
 
 export interface VuGenRequest extends ApiRequestFormData {
   /** `lr_think_time` seconds to wait after this request, if the script had one. */
@@ -12,19 +13,40 @@ export interface VuGenRequest extends ApiRequestFormData {
 export interface VuGenImport {
   requests: VuGenRequest[]
   /**
-   * Steps we cannot turn into a request: `EXTRARES` sub-resources, a step with
-   * no parsable absolute URL, or a method k6 Studio does not support.
+   * Steps we cannot turn into a request: a step with no parsable absolute URL,
+   * a method k6 Studio does not support, or an `EXTRARES` sub-resource whose
+   * URL will not resolve.
    */
   skipped: number
+  /**
+   * `EXTRARES` sub-resources imported as their own GET, inside the transaction
+   * of the step that listed them — LoadRunner measures them there too.
+   */
+  subResources: number
   /**
    * `lr_think_time` calls that sit between two transactions. Our model can only
    * sleep *inside* a group, so keeping them would add their seconds to the
    * previous transaction's measured duration. Dropped instead of lying.
    */
   droppedThinkTime: number
+  /**
+   * `web_reg_save_param*` registrations turned back into correlation rules, so
+   * a script exported from k6 Studio round-trips with its rules. They carry no
+   * replacer: the imported requests already reference the value as `{name}`,
+   * which `placeholderExpressions` resolves to the correlation variable.
+   */
+  correlations: CorrelationRule[]
 }
 
 const STEPS = ['web_url', 'web_custom_request', 'web_submit_data']
+
+/** `web_reg_save_param` is the pre-`_ex` spelling; both carry LB/RB. */
+const SAVE_PARAM = [
+  'web_reg_save_param_json',
+  'web_reg_save_param_regexp',
+  'web_reg_save_param_ex',
+  'web_reg_save_param',
+]
 
 /**
  * Turns a VuGen action (`Action.c`) into requests. LoadRunner scripts carry no
@@ -42,7 +64,12 @@ export function parseVuGen(source: string): VuGenImport | null {
 
   const requests: VuGenRequest[] = []
   let skipped = 0
+  let subResources = 0
   let droppedThinkTime = 0
+  const correlations: CorrelationRule[] = []
+  // A registration inspects the response of the step below it, so a rule
+  // without its own `RequestUrl` filter waits here for that step's URL.
+  let pendingCorrelations: CorrelationRule[] = []
 
   // VuGen steps read the state left by the calls above them.
   const autoHeaders = new Map<string, string>()
@@ -127,25 +154,61 @@ export function parseVuGen(source: string): VuGenImport | null {
       }
 
       default: {
+        if (SAVE_PARAM.includes(call.name)) {
+          const rule = toCorrelationRule(call)
+
+          if (rule !== null) {
+            pendingCorrelations.push(rule)
+          }
+          break
+        }
+
         if (!STEPS.includes(call.name)) {
           break
         }
 
-        skipped += call.extraResources
-
-        const request = toRequest(call, {
+        const state: RequestState = {
           autoHeaders,
           headers,
           cookieJar,
           group,
           rendezvous,
-        })
+        }
+        const request = toRequest(call, state)
 
         if (request === null) {
-          skipped += 1
+          skipped += 1 + call.extraResources.length
         } else {
           requests.push(request)
           thinkTimeTarget = request
+
+          for (const rule of pendingCorrelations) {
+            if (rule.extractor.filter.path === '') {
+              rule.extractor.filter.path = request.url
+            }
+
+            correlations.push(rule)
+          }
+
+          pendingCorrelations = []
+
+          // LoadRunner downloads these inside the same transaction, so their
+          // time counts toward it. Leaving them out made every group measure
+          // faster than the LoadRunner run it came from.
+          for (const resource of call.extraResources) {
+            const sub = toSubResource(resource, request, state)
+
+            if (sub === null) {
+              skipped += 1
+              continue
+            }
+
+            requests.push(sub)
+            subResources += 1
+            // A pause after the step waits for the whole page, resources
+            // included, so it attaches to the last of them.
+            thinkTimeTarget = sub
+          }
         }
 
         headers = []
@@ -154,7 +217,95 @@ export function parseVuGen(source: string): VuGenImport | null {
     }
   }
 
-  return { requests, skipped, droppedThinkTime }
+  return {
+    requests,
+    skipped,
+    subResources,
+    droppedThinkTime,
+    correlations: [...correlations, ...pendingCorrelations],
+  }
+}
+
+/** Inverse of the `web_reg_save_param*` calls the VuGen export writes. */
+function toCorrelationRule(call: Call): CorrelationRule | null {
+  const variableName = call.options.get('ParamName')
+  const selector = toExtractorSelector(call)
+
+  if (variableName === undefined || selector === null) {
+    return null
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    type: 'correlation',
+    enabled: true,
+    extractor: {
+      // The export wraps the filter in `*` because k6 Studio matches it as a
+      // substring.
+      filter: {
+        path: (call.options.get('RequestUrl') ?? '').replace(/\*/g, ''),
+      },
+      selector,
+      variableName,
+      extractionMode: 'single',
+    },
+  }
+}
+
+function toExtractorSelector(call: Call): ExtractorSelector | null {
+  const from = scope(call.options.get('Scope'))
+
+  if (call.name === 'web_reg_save_param_json') {
+    const path = call.options.get('QueryString')
+
+    // A JSONPath `$['a']['b']` is read with `lodash.get`, which understands it
+    // once the `$` is stripped — no conversion needed here.
+    return path === undefined ? null : { type: 'json', from: 'body', path }
+  }
+
+  if (call.name === 'web_reg_save_param_regexp') {
+    const regex = call.options.get('RegExp')
+
+    return regex === undefined || !isValidRegex(regex)
+      ? null
+      : { type: 'regex', from, regex }
+  }
+
+  const begin = call.options.get('LB')
+  const end = call.options.get('RB')
+
+  if (begin === undefined || end === undefined) {
+    return null
+  }
+
+  // How the export writes a header extraction: `"Name: "` up to the CRLF.
+  if (from === 'headers' && end === '\r\n' && begin.endsWith(': ')) {
+    return { type: 'header-name', from: 'headers', name: begin.slice(0, -2) }
+  }
+
+  return { type: 'begin-end', from, begin, end }
+}
+
+/** `Scope=All` is what the export writes for a URL selector. */
+function scope(value: string | undefined): 'headers' | 'body' | 'url' {
+  switch (value?.toLowerCase()) {
+    case 'headers':
+      return 'headers'
+    case 'all':
+      return 'url'
+    default:
+      return 'body'
+  }
+}
+
+function isValidRegex(value: string): boolean {
+  try {
+    new RegExp(value)
+
+    return true
+  } catch {
+    return false
+  }
 }
 
 interface RequestState {
@@ -168,7 +319,7 @@ interface RequestState {
 function toRequest(call: Call, state: RequestState): VuGenRequest | null {
   const url = call.options.get('URL')
 
-  if (url === undefined || !isAbsoluteUrl(url)) {
+  if (url === undefined || toAbsoluteUrl(url) === null) {
     return null
   }
 
@@ -180,22 +331,7 @@ function toRequest(call: Call, state: RequestState): VuGenRequest | null {
     return null
   }
 
-  const cookies = [...state.cookieJar.values()].filter((cookie) =>
-    appliesToHost(cookie, new URL(url).hostname)
-  )
-
-  const headers = [
-    ...state.autoHeaders,
-    ...state.headers,
-    ...(cookies.length > 0
-      ? [
-          [
-            'Cookie',
-            cookies.map(({ name, value }) => `${name}=${value}`).join('; '),
-          ] as [string, string],
-        ]
-      : []),
-  ].map(([name, value]) => ({ name, value }))
+  const headers = toHeaders(url, state)
 
   const content = hasBody(method) ? body(call) : ''
 
@@ -214,6 +350,65 @@ function toRequest(call: Call, state: RequestState): VuGenRequest | null {
     thinkTime: null,
     rendezvous: state.rendezvous,
   }
+}
+
+/**
+ * An `EXTRARES` sub-resource as its own GET in the parent's transaction.
+ *
+ * ponytail: LoadRunner fetches these in parallel behind the page, we send them
+ * in order — a group's duration reads as their sum, not their slowest. Switch
+ * to `http.batch` in codegen if the timings have to line up with LoadRunner.
+ */
+function toSubResource(
+  resource: VuGenSubResource,
+  parent: VuGenRequest,
+  state: RequestState
+): VuGenRequest | null {
+  // `Referer=` is the page the resource hangs off, which is what a relative
+  // `Url=` resolves against; the parent step is only the fallback.
+  const url = toAbsoluteUrl(resource.url, resource.referer ?? parent.url)
+
+  if (url === null) {
+    return null
+  }
+
+  return {
+    method: 'GET',
+    // `web_add_header` applies to the next step only, so a sub-resource gets
+    // the auto headers and the cookie jar, never the parent's one-off headers.
+    headers: [
+      ...toHeaders(url, { ...state, headers: [] }),
+      ...(resource.referer === null
+        ? []
+        : [{ name: 'Referer', value: resource.referer }]),
+    ],
+    url,
+    content: '',
+    group: parent.group,
+    thinkTime: null,
+    // `lr_rendezvous` releases the VU into the step below it, not into the
+    // resources that step pulls.
+    rendezvous: false,
+  }
+}
+
+function toHeaders(url: string, state: RequestState) {
+  const cookies = [...state.cookieJar.values()].filter((cookie) =>
+    appliesToHost(cookie, new URL(url).hostname)
+  )
+
+  return [
+    ...state.autoHeaders,
+    ...state.headers,
+    ...(cookies.length > 0
+      ? [
+          [
+            'Cookie',
+            cookies.map(({ name, value }) => `${name}=${value}`).join('; '),
+          ] as [string, string],
+        ]
+      : []),
+  ].map(([name, value]) => ({ name, value }))
 }
 
 /** `web_custom_request` carries a raw body, `web_submit_data` name/value pairs. */
@@ -276,12 +471,13 @@ function appliesToHost(cookie: VuGenCookie, host: string): boolean {
   return host === domain || host.endsWith(`.${domain}`)
 }
 
-function isAbsoluteUrl(value: string): boolean {
+/** Absolute URLs pass through unchanged; a relative one needs `base`. */
+function toAbsoluteUrl(value: string, base?: string): string | null {
   try {
-    const { protocol } = new URL(value)
+    const { protocol, href } = new URL(value, base)
 
-    return protocol === 'http:' || protocol === 'https:'
+    return protocol === 'http:' || protocol === 'https:' ? href : null
   } catch {
-    return false
+    return null
   }
 }

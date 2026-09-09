@@ -53,6 +53,8 @@ function ValueLabel({ rule }: { rule: VerificationRule }) {
       )
     case 'regex':
       return <Strong>{new RegExp(rule.value.regex).toString()}</Strong>
+    case 'statusList':
+      return <Strong>{rule.value.codes}</Strong>
     default:
       return exhaustive(rule.value)
   }

@@ -107,10 +107,11 @@ describe('RunStatsCollector', () => {
     })
   })
 
-  it('ignores the header and non-metric output', () => {
+  it('consumes the header without counting it as data', () => {
     const collector = new RunStatsCollector()
 
-    expect(collector.push(HEADER)).toBe(false)
+    // Consumed, not ignored: the header names the columns — see `#readHeader`.
+    expect(collector.push(HEADER)).toBe(true)
     expect(collector.push('  http_reqs............: 1       293.42723/s')).toBe(
       false
     )
@@ -218,7 +219,12 @@ describe('RunStatsCollector', () => {
       'http_req_duration,100,40.000000,,,,true,::1_Trans_Home,GET,https://a/,,default,,200,,,https://a/,,'
     )
 
-    expect(collector.snapshot().requestStats).toEqual([
+    // Percentiles are asserted on their own, below.
+    expect(
+      collector
+        .snapshot()
+        .requestStats.map(({ percentiles: _p, ...request }) => request)
+    ).toEqual([
       {
         method: 'GET',
         name: 'https://a/',
@@ -316,7 +322,9 @@ describe('RunStatsCollector', () => {
       'group_duration,101,275.958875,,,,,::2_Trans_Contacts,,,,default,,,,,,,'
     )
 
-    expect(collector.snapshot().groups).toEqual([
+    expect(
+      collector.snapshot().groups.map(({ percentiles: _p, ...group }) => group)
+    ).toEqual([
       {
         name: '1_Trans_TrangChu',
         count: 2,
@@ -388,7 +396,9 @@ describe('RunStatsCollector', () => {
       'http_req_failed,100,0.000000,,,,true,::2_Trans_Contacts,GET,https://b/,,default,,200,,,https://b/,,'
     )
 
-    const [group] = collector.snapshot().groups
+    const [group] = collector
+      .snapshot()
+      .groups.map(({ percentiles: _p, ...rest }) => rest)
 
     expect(group).toEqual({
       name: '1_Trans_TrangChu',
@@ -403,7 +413,39 @@ describe('RunStatsCollector', () => {
     })
   })
 
-  it('takes the larger of failed requests and failed checks per group', () => {
+  it('counts an iteration once however many of its requests failed', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'http_req_failed,100,1.000000,,,,false,::1_Trans_TrangChu,GET,https://a/,,default,,500,,,https://a/,iter=7,'
+    )
+    collector.push(
+      'http_req_failed,100,1.000000,,,,false,::2_Trans_KhoaHoc,GET,https://b/,,default,,401,,,https://b/,iter=7,'
+    )
+    collector.push(
+      'http_req_failed,100,1.000000,,,,false,::1_Trans_TrangChu,GET,https://a/,,default,,500,,,https://a/,iter=9,'
+    )
+    collector.push(
+      'http_req_failed,100,0.000000,,,,true,::1_Trans_TrangChu,GET,https://a/,,default,,200,,,https://a/,iter=11,'
+    )
+
+    const stats = collector.snapshot()
+
+    expect(stats.failedIterations).toBe(2)
+    expect(stats.failedIterationsCapped).toBe(false)
+  })
+
+  it('reports no failed iterations for a script without the iter tag', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'http_req_failed,100,1.000000,,,,false,::1_Trans_TrangChu,GET,https://a/,,default,,500,,,https://a/,,'
+    )
+
+    expect(collector.snapshot().failedIterations).toBe(0)
+  })
+
+  it('never reports more failed executions than a group ran', () => {
     const collector = new RunStatsCollector()
 
     collector.push(
@@ -419,7 +461,29 @@ describe('RunStatsCollector', () => {
       'checks,100,0.000000,body contains x,,,,::1_Trans_TrangChu,,,,default,,,,,,,'
     )
 
-    expect(collector.snapshot().groups[0]?.failed).toBe(2)
+    // One execution, one failed request and two failed checks inside it: a
+    // transaction that ran once cannot have failed twice.
+    expect(collector.snapshot().groups[0]?.failed).toBe(1)
+  })
+
+  it('counts failed transaction executions by iteration', () => {
+    const collector = new RunStatsCollector()
+
+    for (const iter of [7, 7, 8]) {
+      collector.push(
+        `group_duration,100,120.000000,,,,,::1_Trans_TrangChu,,,,default,,,,,,iter=${iter},`
+      )
+      collector.push(
+        `http_req_failed,100,1.000000,,,,false,::1_Trans_TrangChu,GET,https://a/,,default,,500,,,https://a/,iter=${iter},`
+      )
+    }
+
+    // Iteration 7 failed twice inside the same transaction; it is still one
+    // failed execution out of the three the group ran.
+    expect(collector.snapshot().groups[0]).toMatchObject({
+      count: 3,
+      failed: 2,
+    })
   })
 
   it('reports peak concurrency, ignoring the preallocated vus_max pool', () => {
@@ -585,5 +649,84 @@ describe('distributed runs', () => {
 
     expect(buckets).toHaveLength(1)
     expect(buckets[0]?.requests).toBe(2)
+  })
+})
+
+describe('percentiles', () => {
+  it('reports the run, request and transaction distribution', () => {
+    const collector = new RunStatsCollector()
+
+    // 1..100 ms, so the nearest-rank percentile of the series is the value
+    // itself — anything the histogram reports has to land within its 2% width.
+    for (let ms = 1; ms <= 100; ms++) {
+      collector.push(
+        `http_req_duration,100,${ms}.000000,,,,,::login,GET,/a,,default,,200,,,,,`
+      )
+      collector.push(
+        `group_duration,100,${ms}.000000,,,,,::login,,,,default,,,,,,,`
+      )
+    }
+
+    const stats = collector.snapshot()
+    const request = stats.requestStats[0]
+    const group = stats.groups[0]
+
+    for (const percentiles of [
+      stats.percentiles,
+      request?.percentiles,
+      group?.percentiles,
+    ]) {
+      expect(percentiles?.p50).toBeCloseTo(50, 0)
+      expect(percentiles?.p90).toBeCloseTo(90, 0)
+      expect(percentiles?.p95).toBeCloseTo(95, 0)
+      expect(percentiles?.p99).toBeCloseTo(99, 0)
+    }
+  })
+
+  it('reports zero for a run with no duration samples', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push('http_reqs,100,1.000000,,,,,,GET,/a,,default,,200,,,,,')
+
+    expect(collector.snapshot().percentiles).toEqual({
+      p50: 0,
+      p90: 0,
+      p95: 0,
+      p99: 0,
+    })
+  })
+})
+
+describe('column layout', () => {
+  it('follows the stream header when a script changes its system tags', () => {
+    const collector = new RunStatsCollector()
+
+    // `--system-tags` dropped everything but these, so `status` and `name` sit
+    // where the default layout has other tags.
+    expect(
+      collector.push('metric_name,timestamp,metric_value,name,status,group')
+    ).toBe(true)
+    collector.push('http_reqs,100,1.000000,/checkout,500,::pay')
+    collector.push('http_req_failed,100,1.000000,/checkout,500,::pay')
+    collector.push('http_req_duration,100,20.000000,/checkout,500,::pay')
+
+    const stats = collector.snapshot()
+
+    expect(stats.requestStats).toMatchObject([
+      { name: '/checkout', status: '500', group: 'pay', failed: 1, avg: 20 },
+    ])
+    expect(stats.groups).toMatchObject([{ name: 'pay', failed: 1 }])
+  })
+
+  it('keeps the default layout as the fallback until a header arrives', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'http_reqs,100,1.000000,,,1404,false,::pay,GET,/checkout,HTTP/1.1,default,,404,,,/checkout,,'
+    )
+
+    expect(collector.snapshot().errors).toMatchObject([
+      { code: '1404', url: '/checkout', group: 'pay', count: 1 },
+    ])
   })
 })

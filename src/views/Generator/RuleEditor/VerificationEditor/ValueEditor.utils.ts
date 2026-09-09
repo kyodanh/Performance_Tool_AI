@@ -12,6 +12,7 @@ export const VALUE_LABELS: Record<VerificationRule['value']['type'], string> = {
   variable: 'Variable',
   number: 'Number',
   regex: 'Regex pattern',
+  statusList: 'Status code list',
 }
 
 export const OPERATOR_LABELS = {
@@ -29,7 +30,7 @@ export function getAvailableOperators(
   target: VerificationRule['target'],
   valueType?: VerificationRule['value']['type']
 ) {
-  if (valueType === 'regex') {
+  if (valueType === 'regex' || valueType === 'statusList') {
     return [StatusVerificationRuleSchema.shape.operator.enum.matches]
   }
 
