@@ -21,7 +21,6 @@ import { ExportReportButton } from '@/components/Validator/ExportReportButton'
 import { MetricsSection } from '@/components/Validator/MetricsSection'
 import { SlaSection } from '@/components/Validator/SlaSection'
 import { useDeleteResults } from '@/hooks/useDeleteResults'
-import { useSla } from '@/hooks/useSla'
 import { evaluateSla } from '@/utils/k6/sla'
 
 import { groupRuns, runLabel } from './Analysis.utils'
@@ -39,7 +38,6 @@ export function Analysis() {
   const [selected, setSelected] = useState<string | null>(null)
   const [compareId, setCompareId] = useState<string>(NO_COMPARE)
   const [tab, setTab] = useState<'metrics' | 'sla'>('metrics')
-  const [sla] = useSla()
   const deleteResults = useDeleteResults()
 
   const { data: results = [] } = useQuery({
@@ -70,13 +68,13 @@ export function Analysis() {
     queries: versions.map((run) => ({
       queryKey: ['run-result', run.id],
       queryFn: () => window.studio.ui.readResult(run.id),
-      enabled: sla.enabled,
     })),
   })
+  // Only runs saved with the SLA check on carry one — the rest show no verdict.
   const verdictOf = (index: number) => {
-    const stats = versionResults[index]?.data?.stats
+    const data = versionResults[index]?.data
 
-    return stats === undefined ? null : evaluateSla(stats, sla)
+    return data?.sla ? evaluateSla(data.stats, data.sla) : null
   }
 
   const { data: result } = useQuery({
@@ -117,7 +115,6 @@ export function Analysis() {
             label: runLabel(run),
           }))}
           selectedId={id}
-          sla={sla}
         />
       }
     >
@@ -231,14 +228,15 @@ export function Analysis() {
                       currentLabel={
                         currentRun ? runLabel(currentRun) : 'Current'
                       }
-                      sla={sla}
+                      baseSla={baseResult.sla}
+                      currentSla={result.sla}
                     />
                   </Box>
                 )}
               </ScrollArea>
             ) : (
               <>
-                {sla.enabled && (
+                {result?.sla && (
                   <SegmentedControl.Root
                     size="1"
                     value={tab}
@@ -253,10 +251,10 @@ export function Analysis() {
                     </SegmentedControl.Item>
                   </SegmentedControl.Root>
                 )}
-                {sla.enabled && tab === 'sla' ? (
+                {result?.sla && tab === 'sla' ? (
                   <SlaSection
-                    sla={sla}
-                    verdict={result ? evaluateSla(result.stats, sla) : null}
+                    sla={result.sla}
+                    verdict={evaluateSla(result.stats, result.sla)}
                   />
                 ) : (
                   <MetricsSection stats={result?.stats ?? null} />

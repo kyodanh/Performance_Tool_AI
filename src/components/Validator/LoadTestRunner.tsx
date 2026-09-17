@@ -182,6 +182,7 @@ export function LoadTestRunner({
         verbose,
         httpDebug,
         useLocalGenerator,
+        ...(sla.enabled ? { sla } : {}),
         ...(override ? toProfileOverrides(profile) : {}),
       })
       .catch((error: Error) => {
@@ -198,6 +199,7 @@ export function LoadTestRunner({
     scriptPath,
     testName,
     useLocalGenerator,
+    sla,
   ])
 
   const verdict = useMemo(() => evaluateSla(stats, sla), [sla, stats])
@@ -261,7 +263,7 @@ export function LoadTestRunner({
           stats={stats}
           testName={testName}
           isRunning={isRunning}
-          sla={sla}
+          sla={sla.enabled ? sla : undefined}
         />
         {!isRunning && <SlaBadge verdict={verdict} />}
         <Text as="label" size="2" color="gray">

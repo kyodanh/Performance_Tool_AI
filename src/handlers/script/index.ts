@@ -134,6 +134,7 @@ export function initialize() {
         verbose,
         httpDebug,
         useLocalGenerator,
+        sla,
       }: RunLoadTestOptions
     ) => {
       console.info(`${ScriptHandler.RunLoad} event received`)
@@ -166,6 +167,7 @@ export function initialize() {
           verbose,
           httpDebug,
           useLocalGenerator,
+          sla,
         })
       } catch (error) {
         browserWindow.webContents.send(ScriptHandler.Failed)

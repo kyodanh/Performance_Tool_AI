@@ -281,11 +281,14 @@ describe('buildReportHtml', () => {
       'Service Level Agreement'
     )
     expect(
-      buildReportHtml(makeStats(), { ...META, sla: { ...sla, enabled: false } })
+      buildReportHtml(
+        [{ stats: makeStats(), sla: { ...sla, enabled: false } }],
+        META
+      )
     ).not.toContain('Service Level Agreement')
 
     // 1 failed request of 6 is 16.7%, over the 1% ceiling.
-    const html = buildReportHtml(makeStats(), { ...META, sla })
+    const html = buildReportHtml([{ stats: makeStats(), sla }], META)
     expect(html).toContain('Service Level Agreement')
     expect(html).toContain('class="verdict fail"')
   })

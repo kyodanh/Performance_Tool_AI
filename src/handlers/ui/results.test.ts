@@ -85,6 +85,28 @@ describe('run results', () => {
     expect(versions[0]?.ranAt).not.toBeNull()
   })
 
+  it('keeps the SLA a run was saved with when the version is named', async () => {
+    const sla = {
+      enabled: true,
+      statistic: 'p95' as const,
+      responseTimeMs: 1500,
+      errorRatePercent: 2,
+    }
+
+    await saveRunResult('sla-run', stats(1787400000), undefined, sla)
+    const renamed = await saveRunResult('sla-run', stats(1787400000), 'v2')
+    const result = await readRunResult(basename(renamed ?? ''))
+
+    expect(result?.sla).toEqual(sla)
+  })
+
+  it('saves no SLA when the check was off', async () => {
+    const filePath = await saveRunResult('no-sla', stats(1787500000))
+    const result = await readRunResult(basename(filePath ?? ''))
+
+    expect(result?.sla).toBeUndefined()
+  })
+
   it('does not hide a run whose test name starts with a dot', async () => {
     const filePath = await saveRunResult('.tmp-k6studio', stats())
 

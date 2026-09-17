@@ -1,4 +1,5 @@
 import { LoadProfileOverrides } from '@/utils/k6/loadProfile'
+import { Sla } from '@/utils/k6/sla'
 
 export enum ScriptHandler {
   Select = 'script:select',
@@ -48,4 +49,6 @@ export interface RunLoadTestOptions extends LoadProfileOverrides {
    * Defaults to on.
    */
   useLocalGenerator?: boolean
+  /** Saved with the result so Analysis judges the run by it. Off: left out. */
+  sla?: Sla
 }

@@ -1,4 +1,5 @@
 import { StudioFile } from '@/types'
+import { Sla } from '@/utils/k6/sla'
 import { RunStats } from '@/utils/k6/stats'
 
 export interface ExportReportPayload {
@@ -24,6 +25,8 @@ export interface RunResult {
   /** The user's own name for this version, when they gave it one. */
   label?: string
   stats: RunStats
+  /** The SLA checked during the run; absent when the check was off. */
+  sla?: Sla
 }
 
 /** One saved run, as listed by the Analysis view. */

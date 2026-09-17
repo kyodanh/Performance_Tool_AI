@@ -25,6 +25,7 @@ import { createWriteStream, unlink } from '@/utils/fs'
 import { K6Client } from '@/utils/k6/client'
 import { LoadProfileOverrides } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
+import { Sla } from '@/utils/k6/sla'
 import { RunStats } from '@/utils/k6/stats'
 import { TestRun } from '@/utils/k6/testRun'
 import { createTrackingServer } from '@/utils/k6/tracking'
@@ -208,6 +209,8 @@ interface RunLoadTestOptions extends LoadProfileOverrides {
   httpDebug?: boolean
   /** Whether this machine takes a share of the load. Defaults to on. */
   useLocalGenerator?: boolean
+  /** Saved with the result when the SLA check was on. */
+  sla?: Sla
 }
 
 /**
@@ -230,6 +233,7 @@ export const runLoadTest = async ({
   verbose,
   httpDebug,
   useLocalGenerator = true,
+  sla,
 }: RunLoadTestOptions) => {
   const client = new K6Client()
 
@@ -331,7 +335,7 @@ export const runLoadTest = async ({
 
     // A run that failed before its first sample has nothing to analyse.
     if (stats !== null && stats.buckets.length > 0) {
-      void saveRunResult(name ?? path.name(scriptPath), stats)
+      void saveRunResult(name ?? path.name(scriptPath), stats, undefined, sla)
     }
   })
 

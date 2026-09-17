@@ -31,7 +31,9 @@ interface CompareRunsTableProps {
   current: RunStats
   baseLabel: string
   currentLabel: string
-  sla: Sla
+  /** Each run's own SLA, as saved with it; absent when its check was off. */
+  baseSla?: Sla
+  currentSla?: Sla
 }
 
 /** The headline tiles — the numbers a regression shows up in first. */
@@ -80,7 +82,8 @@ export function CompareRunsTable({
   current,
   baseLabel,
   currentLabel,
-  sla,
+  baseSla,
+  currentSla,
 }: CompareRunsTableProps) {
   const sections = compareRuns(base, current)
   const rows = sections.flatMap((section) => section.rows)
@@ -88,8 +91,8 @@ export function CompareRunsTable({
   const mismatch = loadMismatch(base, current)
   const worse = rows.filter((row) => row.verdict === 'worse').length
   const better = rows.filter((row) => row.verdict === 'better').length
-  const baseVerdict = evaluateSla(base, sla)
-  const currentVerdict = evaluateSla(current, sla)
+  const baseVerdict = baseSla ? evaluateSla(base, baseSla) : null
+  const currentVerdict = currentSla ? evaluateSla(current, currentSla) : null
   const regressions = slaRegressions(baseVerdict, currentVerdict)
 
   return (

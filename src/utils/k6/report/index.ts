@@ -32,8 +32,6 @@ export interface ReportMeta {
   testName: string
   author: string
   organization: string
-  /** The service level each run is judged against; left out when it is off. */
-  sla?: Sla
 }
 
 /** Response-time chart series are capped so the legend stays readable. */
@@ -191,10 +189,10 @@ function transactionResponseTime(stats: RunStats) {
  * Every page one run contributes — what the report prints between the cover and
  * the glossary.
  */
-function runSections(stats: RunStats, meta: ReportMeta) {
+function runSections(stats: RunStats, meta: ReportMeta, runSla?: Sla) {
   const names = runNames(meta)
   const responseTime = transactionResponseTime(stats)
-  const sla = slaSection(stats, meta.sla)
+  const sla = slaSection(stats, runSla)
 
   return [
     `<section class="page">
@@ -340,6 +338,8 @@ export interface ReportRun {
   stats: RunStats
   /** Names the run in its own sections when the report covers several. */
   label?: string
+  /** The SLA the run was checked against; adds the SLA page when set. */
+  sla?: Sla
 }
 
 /**
@@ -371,7 +371,8 @@ export function buildReportHtml(
         run.stats,
         single || run.label === undefined
           ? meta
-          : { ...meta, title: `${meta.title} — ${run.label}` }
+          : { ...meta, title: `${meta.title} — ${run.label}` },
+        run.sla
       )
     ),
     TERMINOLOGY,

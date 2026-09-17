@@ -53,7 +53,7 @@ interface ExportReportButtonProps {
   versions?: ExportVersion[]
   /** The version on screen — checked when the dialog opens. */
   selectedId?: string | null
-  /** Adds the SLA page to every run the report covers. */
+  /** The live run's SLA. Saved versions carry their own. */
   sla?: Sla
 }
 
@@ -105,7 +105,7 @@ export function ExportReportButton({
   /** The runs the report covers: the picked versions, or the live run. */
   const collectRuns = async (): Promise<ReportRun[]> => {
     if (versions === undefined) {
-      return stats === null ? [] : [{ stats }]
+      return stats === null ? [] : [{ stats, sla }]
     }
 
     const results = await Promise.all(
@@ -119,7 +119,7 @@ export function ExportReportButton({
         return []
       }
 
-      return [{ stats: result.stats, label: version.label }]
+      return [{ stats: result.stats, label: version.label, sla: result.sla }]
     })
   }
 
@@ -131,7 +131,7 @@ export function ExportReportButton({
     localStorage.setItem(AUTHOR_KEY, author)
     localStorage.setItem(ORGANIZATION_KEY, organization)
 
-    const meta = { title, testName, author, organization, sla }
+    const meta = { title, testName, author, organization }
     setExporting(true)
 
     try {

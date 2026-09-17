@@ -3,6 +3,7 @@ import log from 'electron-log/main'
 
 import { getResultsPath } from '@/constants/workspace'
 import { mkdir, readdir, readFile, unlink, writeFile } from '@/utils/fs'
+import { Sla } from '@/utils/k6/sla'
 import { RunStats } from '@/utils/k6/stats'
 import * as path from '@/utils/path'
 
@@ -37,24 +38,40 @@ function runKey(testName: string, stats: RunStats) {
   )}`
 }
 
-/**
- * Drops earlier saves of the same run under a different name — naming a version
- * renames it, it does not fork it.
- */
-async function removeOtherNames(key: string, keep: string) {
+/** Earlier saves of the same run under a different name. */
+async function otherNames(key: string, keep: string) {
   const entries = await readdir(getResultsPath()).catch(() => [])
 
-  await Promise.all(
-    entries
-      .filter(
-        (entry) =>
-          entry.isFile() &&
-          entry.name !== keep &&
-          (entry.name === `${key}.json` ||
-            entry.name.startsWith(`${key}${LABEL_SEPARATOR}`))
-      )
-      .map((entry) => unlink(path.join(getResultsPath(), entry.name)))
-  )
+  return entries
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name !== keep &&
+        (entry.name === `${key}.json` ||
+          entry.name.startsWith(`${key}${LABEL_SEPARATOR}`))
+    )
+    .map((entry) => path.join(getResultsPath(), entry.name))
+}
+
+/**
+ * The SLA an earlier save of this run carried. Naming a version from the
+ * renderer re-saves the stats alone, and must not drop the SLA the run was
+ * checked against when it stopped.
+ */
+async function previousSla(files: string[]) {
+  for (const file of files) {
+    try {
+      const { sla } = JSON.parse(await readFile(file, 'utf-8')) as RunResult
+
+      if (sla !== undefined) {
+        return sla
+      }
+    } catch {
+      // Unreadable earlier save — nothing to carry over.
+    }
+  }
+
+  return undefined
 }
 
 /**
@@ -67,14 +84,9 @@ async function removeOtherNames(key: string, keep: string) {
 export async function saveRunResult(
   testName: string,
   stats: RunStats,
-  label?: string
+  label?: string,
+  sla?: Sla
 ) {
-  const result: RunResult = {
-    testName,
-    ranAt: new Date().toISOString(),
-    stats,
-    ...(label === undefined ? {} : { label }),
-  }
   const key = runKey(testName, stats)
   const named = label === undefined ? '' : safeName(label)
   const fileName =
@@ -83,8 +95,19 @@ export async function saveRunResult(
 
   try {
     await mkdir(getResultsPath(), { recursive: true })
+
+    const others = await otherNames(key, fileName)
+    const keptSla = sla ?? (await previousSla([filePath, ...others]))
+    const result: RunResult = {
+      testName,
+      ranAt: new Date().toISOString(),
+      stats,
+      ...(label === undefined ? {} : { label }),
+      ...(keptSla === undefined ? {} : { sla: keptSla }),
+    }
+
     await writeFile(filePath, JSON.stringify(result))
-    await removeOtherNames(key, fileName)
+    await Promise.all(others.map((file) => unlink(file)))
 
     return filePath
   } catch (error) {
