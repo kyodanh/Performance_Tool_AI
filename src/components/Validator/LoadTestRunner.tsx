@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LoadGenerators } from '@/components/LoadGenerators'
 import { LoadProfile } from '@/components/TestOptions/LoadProfile'
 import TextSpinner from '@/components/TextSpinner/TextSpinner'
-import { useSyncedLocalStorage } from '@/hooks/useSyncedLocalStorage'
+import { useSla } from '@/hooks/useSla'
 import { useLoadRunStore } from '@/store/loadRun'
 import { MachineSample } from '@/types/systemMetrics'
 import { LoadProfileExecutorOptions } from '@/types/testOptions'
@@ -35,7 +35,7 @@ import {
   toProfileOverrides,
 } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
-import { DEFAULT_SLA, evaluateSla, SlaSchema } from '@/utils/k6/sla'
+import { evaluateSla } from '@/utils/k6/sla'
 import * as path from '@/utils/path'
 
 import { ExecutionDetails } from './ExecutionDetails'
@@ -131,13 +131,7 @@ export function LoadTestRunner({
 
   // Kept here rather than in the generator list because the run needs it, and
   // the list only needs to render it.
-  // The service level is a contract agreed once, not a per-run setting, so it
-  // is remembered across restarts the way the report's author line is.
-  const [sla, setSla] = useSyncedLocalStorage(
-    'k6-studio-sla',
-    SlaSchema,
-    DEFAULT_SLA
-  )
+  const [sla, setSla] = useSla()
 
   const [useLocalGenerator, setUseLocalGenerator] = useState(true)
   const [verbose, setVerbose] = useState(false)
@@ -267,6 +261,7 @@ export function LoadTestRunner({
           stats={stats}
           testName={testName}
           isRunning={isRunning}
+          sla={sla}
         />
         {!isRunning && <SlaBadge verdict={verdict} />}
         <Text as="label" size="2" color="gray">

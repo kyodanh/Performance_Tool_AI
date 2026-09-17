@@ -31,7 +31,7 @@ export function definitionTable(title: string, rows: Row[]) {
   return `<h2>${escapeHtml(title)}</h2><table class="definition">${body}</table>`
 }
 
-function table(headers: string[], rows: string[][]) {
+export function table(headers: string[], rows: string[][]) {
   if (rows.length === 0) {
     return '<p class="empty">Nothing was recorded.</p>'
   }

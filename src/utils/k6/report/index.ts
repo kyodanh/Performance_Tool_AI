@@ -1,3 +1,4 @@
+import { Sla } from '@/utils/k6/sla'
 import { RunStats } from '@/utils/k6/stats'
 
 import { barChart, ChartSeries, lineChart } from './charts'
@@ -21,6 +22,7 @@ import {
   workloadSummaryTable,
   worstUrlsSection,
 } from './sections'
+import { slaSection } from './sla'
 import { REPORT_STYLES } from './styles'
 import { TERMINOLOGY } from './terminology'
 
@@ -30,6 +32,8 @@ export interface ReportMeta {
   testName: string
   author: string
   organization: string
+  /** The service level each run is judged against; left out when it is off. */
+  sla?: Sla
 }
 
 /** Response-time chart series are capped so the legend stays readable. */
@@ -190,6 +194,7 @@ function transactionResponseTime(stats: RunStats) {
 function runSections(stats: RunStats, meta: ReportMeta) {
   const names = runNames(meta)
   const responseTime = transactionResponseTime(stats)
+  const sla = slaSection(stats, meta.sla)
 
   return [
     `<section class="page">
@@ -198,6 +203,7 @@ function runSections(stats: RunStats, meta: ReportMeta) {
       ${businessProcessSection(stats, names)}
       ${scriptTransactionsSection(stats, names)}
     </section>`,
+    ...(sla === '' ? [] : [`<section class="page">${sla}</section>`]),
     `<section class="page">
       ${workloadSection(stats)}
       ${workloadSummaryTable(stats)}

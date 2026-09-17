@@ -157,19 +157,35 @@ function Chart({ series, start, end, format, height }: ChartProps) {
   )
 }
 
+/** A short stroke in the series' colour and dash, so the legend matches. */
+export function SeriesSwatch({
+  color,
+  dash,
+}: {
+  color: string
+  dash?: string
+}) {
+  return (
+    <svg width="24" height="4" aria-hidden>
+      <line
+        x1="0"
+        x2="24"
+        y1="2"
+        y2="2"
+        stroke={color}
+        strokeDasharray={dash}
+        strokeWidth="3"
+      />
+    </svg>
+  )
+}
+
 function Legend({ series }: { series: PanelSeries[] }) {
   return (
     <Flex gap="3" wrap="wrap">
       {series.map((line) => (
         <Flex key={line.name} gap="2" align="center">
-          <span
-            css={css`
-              width: 12px;
-              height: 3px;
-              border-radius: var(--radius-1);
-              background-color: ${line.color};
-            `}
-          />
+          <SeriesSwatch color={line.color} dash={line.dash} />
           <Text size="1" color="gray">
             {line.name}
           </Text>

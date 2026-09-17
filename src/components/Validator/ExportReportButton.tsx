@@ -17,6 +17,7 @@ import {
   ReportRun,
   reportHeaderLines,
 } from '@/utils/k6/report'
+import { Sla } from '@/utils/k6/sla'
 import { RunStats } from '@/utils/k6/stats'
 
 /** Cover details are per-team rather than per-run, so they are remembered. */
@@ -52,6 +53,8 @@ interface ExportReportButtonProps {
   versions?: ExportVersion[]
   /** The version on screen — checked when the dialog opens. */
   selectedId?: string | null
+  /** Adds the SLA page to every run the report covers. */
+  sla?: Sla
 }
 
 export function ExportReportButton({
@@ -60,6 +63,7 @@ export function ExportReportButton({
   isRunning,
   versions,
   selectedId = null,
+  sla,
 }: ExportReportButtonProps) {
   const showToast = useToast()
   const [open, setOpen] = useState(false)
@@ -127,7 +131,7 @@ export function ExportReportButton({
     localStorage.setItem(AUTHOR_KEY, author)
     localStorage.setItem(ORGANIZATION_KEY, organization)
 
-    const meta = { title, testName, author, organization }
+    const meta = { title, testName, author, organization, sla }
     setExporting(true)
 
     try {

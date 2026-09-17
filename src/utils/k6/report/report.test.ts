@@ -268,4 +268,25 @@ describe('buildReportHtml', () => {
       buildReportHtml(makeStats(), META)
     )
   })
+
+  it('adds the SLA page only when a service level is switched on', () => {
+    const sla = {
+      enabled: true,
+      statistic: 'p95' as const,
+      responseTimeMs: 2000,
+      errorRatePercent: 1,
+    }
+
+    expect(buildReportHtml(makeStats(), META)).not.toContain(
+      'Service Level Agreement'
+    )
+    expect(
+      buildReportHtml(makeStats(), { ...META, sla: { ...sla, enabled: false } })
+    ).not.toContain('Service Level Agreement')
+
+    // 1 failed request of 6 is 16.7%, over the 1% ceiling.
+    const html = buildReportHtml(makeStats(), { ...META, sla })
+    expect(html).toContain('Service Level Agreement')
+    expect(html).toContain('class="verdict fail"')
+  })
 })

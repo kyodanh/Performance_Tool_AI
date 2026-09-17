@@ -42,5 +42,8 @@ export const REPORT_STYLES = `
   .runs { margin: 4px 0 0; padding-left: 18px; font-size: 11px; }
   .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0; margin: 4px 0 0; }
   .legend li { display: flex; align-items: center; gap: 5px; font-size: 10px; }
+  .verdict { font-weight: 600; margin: 4px 0 8px; }
+  .verdict.pass { color: #1a7f37; }
+  .verdict.fail { color: #cf222e; }
   .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 `
