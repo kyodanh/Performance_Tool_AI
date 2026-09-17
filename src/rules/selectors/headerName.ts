@@ -13,7 +13,9 @@ export function replaceHeaderByName(
   )
 
   if (!headerExists) {
-    return request
+    return selector.addIfMissing
+      ? { ...request, headers: [...request.headers, [selector.name, value]] }
+      : request
   }
 
   const replacedHeaders = request.headers.map(

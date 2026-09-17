@@ -8,7 +8,12 @@ import { LogEntry } from '@/schemas/k6'
 import { LogFilter } from './LogFilter'
 import { withSource } from './LogsSection.utils'
 import { LogsTable } from './LogsTable'
-import { ConsoleFilter, LogSource, SourcesOptions } from './types'
+import {
+  ConsoleFilter,
+  DisplayLogEntry,
+  LogSource,
+  SourcesOptions,
+} from './types'
 
 const ALL_LOG_LEVELS: Array<LogEntry['level']> = [
   'info',
@@ -71,7 +76,7 @@ function LogMessage({ children }: { children: ReactNode }) {
 
 interface LogsContentProps {
   filter: ConsoleFilter
-  logs: LogEntry[]
+  logs: DisplayLogEntry[]
 }
 
 function LogsContent({ filter, logs }: LogsContentProps) {
@@ -98,7 +103,7 @@ function LogsContent({ filter, logs }: LogsContentProps) {
 interface LogsSectionProps {
   sources: SourcesOptions
   filter: ConsoleFilter
-  logs: LogEntry[]
+  logs: DisplayLogEntry[]
   autoScroll: boolean
   onFilterChange: (filter: ConsoleFilter) => void
 }

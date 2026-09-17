@@ -1,4 +1,4 @@
-import { Box, Flex } from '@radix-ui/themes'
+import { Badge, Box, Flex } from '@radix-ui/themes'
 import { memo } from 'react'
 
 import { HighlightedText } from '@/components/HighlightedText'
@@ -16,6 +16,7 @@ import { SearchResults } from '@/components/WebLogView/SearchResults'
 import { useGeneratorStore } from '@/store/generator'
 
 import { RendezvousBadge } from './RendezvousBadge'
+import { useIsRequestDisabled } from './RequestListContext'
 import { RowActions } from './RowActions'
 import { RuleBadges } from './RuleBadges'
 import { ThinkTimeBadge } from './ThinkTimeBadge'
@@ -42,6 +43,7 @@ export const RequestRow = memo(function RequestRow({
   const manualRequest = useGeneratorStore((state) =>
     state.manualRequests.find((request) => request.id === data.id)
   )
+  const isDisabled = useIsRequestDisabled(data.id)
   const previewOriginalRequests = useGeneratorStore(
     (state) => state.previewOriginalRequests
   )
@@ -52,6 +54,7 @@ export const RequestRow = memo(function RequestRow({
         data={data}
         onSelectRequest={onSelectRequest}
         isSelected={isSelected}
+        dimmed={isDisabled}
       >
         <MethodCell data={data} isSelected={isSelected} />
         <StatusCell data={data} />
@@ -64,6 +67,7 @@ export const RequestRow = memo(function RequestRow({
               size="1"
               css={{
                 fontFamily: 'var(--code-font-family)',
+                textDecoration: isDisabled ? 'line-through' : undefined,
                 flex: '0 1 auto',
                 minWidth: 0,
               }}
@@ -74,6 +78,11 @@ export const RequestRow = memo(function RequestRow({
                 highlightAllMatches
               />
             </TextWithTooltip>
+            {isDisabled && (
+              <Badge size="1" color="gray" variant="soft">
+                Disabled
+              </Badge>
+            )}
             <RuleBadges data={data} />
             <ThinkTimeBadge data={data} />
             <RendezvousBadge data={data} />

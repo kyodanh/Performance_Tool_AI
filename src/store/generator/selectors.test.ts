@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createGeneratorState } from '@/test/factories/generator'
 import { createProxyData, createRequest } from '@/test/factories/proxyData'
 
-import { selectFilteredRequests } from './selectors'
+import { selectFilteredRequests, selectListedRequests } from './selectors'
 
 describe('selectFilteredRequests', () => {
   // A GraphQL recording is nothing but repeats of `POST /api/graphql`, so an
@@ -57,6 +57,23 @@ describe('selectFilteredRequests', () => {
     expect(result.map((data) => data.request.content)).toEqual([
       '{"op":"edited"}',
       '{"op":"end"}',
+    ])
+  })
+
+  it('leaves disabled requests out of the script but keeps them listed', () => {
+    const disabledState = {
+      ...state,
+      manualRequests: [graphql('manual', '{"op":"manual"}')],
+      disabledRequests: ['POST http://example.com/api/graphql#0', 'manual'],
+    }
+
+    expect(selectFilteredRequests(disabledState).map(({ id }) => id)).toEqual([
+      '2',
+    ])
+    expect(selectListedRequests(disabledState).map(({ id }) => id)).toEqual([
+      '1',
+      '2',
+      'manual',
     ])
   })
 })

@@ -47,11 +47,13 @@ export function TableRow({
   onSelectRequest,
   isSelected,
   children,
-}: RowProps & { children: React.ReactNode }) {
+  dimmed = false,
+}: RowProps & { children: React.ReactNode; dimmed?: boolean }) {
   return (
     <Table.Row
       onClick={() => onSelectRequest(data)}
       css={{
+        opacity: dimmed ? 0.5 : undefined,
         backgroundColor: isSelected ? 'var(--accent-3)' : 'transparent',
         '&:hover': {
           backgroundColor: isSelected ? 'var(--accent-3)' : 'var(--accent-2)',

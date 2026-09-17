@@ -23,6 +23,9 @@ interface State {
   // Recorded requests removed from the test, by `requestKey`. Kept as keys
   // rather than ids so the removal survives reloading the recording.
   excludedRequests: string[]
+  // Requests shown in the list but left out of the script. Recorded ones by
+  // occurrence key, manual ones by id.
+  disabledRequests: string[]
   // Recorded requests edited by hand, by the occurrence key from
   // `exclusionKeys`. Keyed for the same reason as `excludedRequests`: a
   // recording repeats the same method and URL, so `requestKey` alone would put
@@ -55,6 +58,7 @@ interface Actions {
   updateManualRequest: (id: string, request: ProxyData) => void
   removeManualRequest: (id: string) => void
   toggleExcludedRequest: (key: string) => void
+  toggleDisabledRequest: (key: string) => void
   setRequestOverride: (key: string, request: ProxyData) => void
   clearRequestOverride: (key: string) => void
   setRequestGroup: (occurrenceKey: string, group: string) => void
@@ -91,6 +95,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
   emptyGroups: [],
   groupOrder: [],
   excludedRequests: [],
+  disabledRequests: [],
   requestOverrides: {},
   groupMoves: {},
   groupRenames: {},
@@ -178,6 +183,12 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
         ? state.excludedRequests.filter((excluded) => excluded !== key)
         : [...state.excludedRequests, key]
     }),
+  toggleDisabledRequest: (key: string) =>
+    set((state) => {
+      state.disabledRequests = state.disabledRequests.includes(key)
+        ? state.disabledRequests.filter((disabled) => disabled !== key)
+        : [...state.disabledRequests, key]
+    }),
   setRequestOverride: (key: string, request: ProxyData) =>
     set((state) => {
       state.requestOverrides[key] = request
@@ -255,6 +266,7 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
       state.groupOrder = []
       state.allowlist = []
       state.excludedRequests = []
+      state.disabledRequests = []
       state.requestOverrides = {}
       state.groupMoves = {}
       state.recordingPath = ''

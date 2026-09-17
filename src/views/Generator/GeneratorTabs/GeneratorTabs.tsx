@@ -8,6 +8,7 @@ import { ExportFormat } from '@/hooks/useExportPreview'
 import { ScriptPreview as ScriptPreviewType } from '@/hooks/useScriptPreview'
 import {
   selectFilteredRequests,
+  selectListedRequests,
   selectHasRecording,
   useGeneratorStore,
 } from '@/store/generator'
@@ -50,6 +51,8 @@ export function GeneratorTabs({
   // store write - a keystroke in the rule editor - would re-render this subtree
   // and hand `RequestList` a new array to re-derive everything from.
   const filteredRequests = useGeneratorStore(useShallow(selectFilteredRequests))
+  // The list also shows disabled requests, so they can be enabled again.
+  const listedRequests = useGeneratorStore(useShallow(selectListedRequests))
   const hasRecording = useGeneratorStore(selectHasRecording)
 
   return (
@@ -110,7 +113,7 @@ export function GeneratorTabs({
           `}
         >
           <RequestList
-            requests={filteredRequests}
+            requests={listedRequests}
             selectedRequest={selectedRequest}
             onSelectRequest={onSelectRequest}
             onChangeRecording={onChangeRecording}

@@ -80,7 +80,14 @@ export function useIsGeneratorDirty(savedData: GeneratorFileData) {
  * an edit the user has to be warned about.
  */
 function serializeGeneratorData({ scriptName: _, ...data }: GeneratorFileData) {
-  return JSON.stringify(data)
+  // An empty `disabledRequests` is dropped: files saved before the field - or
+  // read by a main process built before it - lack it, and would otherwise
+  // open as unsaved and block every navigation away.
+  return JSON.stringify(data, (key, value: unknown) =>
+    key === 'disabledRequests' && Array.isArray(value) && value.length === 0
+      ? undefined
+      : value
+  )
 }
 
 export function useScriptExport(generatorFilePath: string) {

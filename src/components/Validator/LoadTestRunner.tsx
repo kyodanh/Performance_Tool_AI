@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LoadGenerators } from '@/components/LoadGenerators'
 import { LoadProfile } from '@/components/TestOptions/LoadProfile'
 import TextSpinner from '@/components/TextSpinner/TextSpinner'
+import { useSyncedLocalStorage } from '@/hooks/useSyncedLocalStorage'
 import { useLoadRunStore } from '@/store/loadRun'
 import { MachineSample } from '@/types/systemMetrics'
 import { LoadProfileExecutorOptions } from '@/types/testOptions'
@@ -34,6 +35,7 @@ import {
   toProfileOverrides,
 } from '@/utils/k6/loadProfile'
 import { K6TestOptions } from '@/utils/k6/schema'
+import { DEFAULT_SLA, evaluateSla, SlaSchema } from '@/utils/k6/sla'
 import * as path from '@/utils/path'
 
 import { ExecutionDetails } from './ExecutionDetails'
@@ -41,6 +43,8 @@ import { ExportReportButton } from './ExportReportButton'
 import { formatDuration } from './format'
 import { SaveRunButton } from './SaveRunButton'
 import { ScheduleBuilder } from './ScheduleBuilder'
+import { SlaPanel } from './SlaPanel'
+import { SlaBadge } from './SlaSection'
 
 interface LoadTestRunnerProps {
   scriptPath: string | null
@@ -127,6 +131,14 @@ export function LoadTestRunner({
 
   // Kept here rather than in the generator list because the run needs it, and
   // the list only needs to render it.
+  // The service level is a contract agreed once, not a per-run setting, so it
+  // is remembered across restarts the way the report's author line is.
+  const [sla, setSla] = useSyncedLocalStorage(
+    'k6-studio-sla',
+    SlaSchema,
+    DEFAULT_SLA
+  )
+
   const [useLocalGenerator, setUseLocalGenerator] = useState(true)
   const [verbose, setVerbose] = useState(false)
   const [httpDebug, setHttpDebug] = useState(false)
@@ -194,6 +206,8 @@ export function LoadTestRunner({
     useLocalGenerator,
   ])
 
+  const verdict = useMemo(() => evaluateSla(stats, sla), [sla, stats])
+
   const handleStop = useCallback(() => {
     window.studio.script.stopScript()
     stopRun()
@@ -254,6 +268,7 @@ export function LoadTestRunner({
           testName={testName}
           isRunning={isRunning}
         />
+        {!isRunning && <SlaBadge verdict={verdict} />}
         <Text as="label" size="2" color="gray">
           <Flex gap="2" align="center">
             <Checkbox
@@ -327,24 +342,49 @@ export function LoadTestRunner({
       )}
 
       <Flex flexGrow="1" minHeight="0" gap="3">
-        {override && (
-          <ScrollArea
-            scrollbars="vertical"
-            css={css`
-              flex: 0 0 320px;
-              border-right: 1px solid var(--gray-5);
-              padding-right: var(--space-3);
-            `}
-          >
-            <ScheduleBuilder
-              key={scriptPath ?? ''}
-              vus={peakVus(seed)}
-              onChange={setProfile}
-              disabled={isRunning}
-            />
-            <Card size="2" mt="3">
+        <ScrollArea
+          scrollbars="vertical"
+          css={css`
+            flex: 0 0 320px;
+            border-right: 1px solid var(--gray-5);
+            padding-right: var(--space-3);
+          `}
+        >
+          {override && (
+            <>
+              <ScheduleBuilder
+                key={scriptPath ?? ''}
+                vus={peakVus(seed)}
+                onChange={setProfile}
+                disabled={isRunning}
+              />
+              <Card size="2" mt="3">
+                <details
+                  css={css`
+                    summary {
+                      cursor: pointer;
+                      font-size: var(--font-size-1);
+                      color: var(--gray-11);
+                    }
+                  `}
+                >
+                  <summary>About the load profile</summary>
+                  <Text as="p" size="1" color="gray" mt="2">
+                    A gradual start becomes a linear ramp of the same length —
+                    k6 interpolates between stages instead of stepping. Running
+                    until completion runs one iteration per VU.
+                  </Text>
+                </details>
+                <Text as="p" size="1" color="gray" mt="2">
+                  k6 runs: {describeProfile(profile)}
+                </Text>
+              </Card>
               <details
                 css={css`
+                  margin-top: var(--space-3);
+                  border-top: 1px solid var(--gray-5);
+                  padding-top: var(--space-3);
+
                   summary {
                     cursor: pointer;
                     font-size: var(--font-size-1);
@@ -352,77 +392,58 @@ export function LoadTestRunner({
                   }
                 `}
               >
-                <summary>About the load profile</summary>
-                <Text as="p" size="1" color="gray" mt="2">
-                  A gradual start becomes a linear ramp of the same length — k6
-                  interpolates between stages instead of stepping. Running until
-                  completion runs one iteration per VU.
-                </Text>
-              </details>
-              <Text as="p" size="1" color="gray" mt="2">
-                k6 runs: {describeProfile(profile)}
-              </Text>
-            </Card>
-            <details
-              css={css`
-                margin-top: var(--space-3);
-                border-top: 1px solid var(--gray-5);
-                padding-top: var(--space-3);
-
-                summary {
-                  cursor: pointer;
-                  font-size: var(--font-size-1);
-                  color: var(--gray-11);
-                }
-              `}
-            >
-              <summary>Edit the k6 load profile</summary>
-              <fieldset
-                disabled={isRunning}
-                css={css`
-                  border: 0;
-                  margin: var(--space-2) 0 0;
-                  padding: 0;
-                  min-width: 0;
-                `}
-              >
-                <LoadProfile
-                  value={profile}
-                  onChange={setProfile}
-                  executors={['ramping-vus', 'shared-iterations']}
-                />
-              </fieldset>
-            </details>
-            <Card size="2" mt="3">
-              <Flex direction="column" gap="2">
-                <Flex justify="between" align="baseline" gap="2">
-                  <Text
-                    size="1"
-                    color="gray"
-                    weight="medium"
-                    css={css`
-                      text-transform: uppercase;
-                      letter-spacing: 0.08em;
-                    `}
-                  >
-                    Current run
-                  </Text>
-                  <Text size="3" weight="bold">
-                    {formatDuration(stats?.elapsed ?? 0)}
-                  </Text>
-                </Flex>
-                {planned !== null && (
-                  <Progress
-                    value={Math.min(
-                      100,
-                      ((stats?.elapsed ?? 0) / planned) * 100
-                    )}
+                <summary>Edit the k6 load profile</summary>
+                <fieldset
+                  disabled={isRunning}
+                  css={css`
+                    border: 0;
+                    margin: var(--space-2) 0 0;
+                    padding: 0;
+                    min-width: 0;
+                  `}
+                >
+                  <LoadProfile
+                    value={profile}
+                    onChange={setProfile}
+                    executors={['ramping-vus', 'shared-iterations']}
                   />
-                )}
+                </fieldset>
+              </details>
+            </>
+          )}
+          <div
+            css={css`
+              margin-top: var(--space-3);
+            `}
+          >
+            <SlaPanel value={sla} onChange={setSla} disabled={isRunning} />
+          </div>
+          <Card size="2" mt="3">
+            <Flex direction="column" gap="2">
+              <Flex justify="between" align="baseline" gap="2">
+                <Text
+                  size="1"
+                  color="gray"
+                  weight="medium"
+                  css={css`
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                  `}
+                >
+                  Current run
+                </Text>
+                <Text size="3" weight="bold">
+                  {formatDuration(stats?.elapsed ?? 0)}
+                </Text>
               </Flex>
-            </Card>
-          </ScrollArea>
-        )}
+              {planned !== null && (
+                <Progress
+                  value={Math.min(100, ((stats?.elapsed ?? 0) / planned) * 100)}
+                />
+              )}
+            </Flex>
+          </Card>
+        </ScrollArea>
         <Flex direction="column" flexGrow="1" minHeight="0" minWidth="0">
           <ExecutionDetails
             isRunning={isRunning}
@@ -430,6 +451,7 @@ export function LoadTestRunner({
             checks={checks}
             stats={stats}
             resources={resources}
+            sla={sla}
             defaultTab="metrics"
           />
         </Flex>

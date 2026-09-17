@@ -36,21 +36,37 @@ export function selectHasRecording(state: GeneratorStore) {
   )
 }
 
-export function selectFilteredRequests(
-  state: Pick<
-    GeneratorStore,
-    | 'requests'
-    | 'manualRequests'
-    | 'allowlist'
-    | 'includeStaticAssets'
-    | 'excludedRequests'
-    | 'requestOverrides'
-    | 'groupMoves'
-    | 'groupRenames'
-    | 'groupOrder'
-  >
-) {
+type RequestFilterState = Pick<
+  GeneratorStore,
+  | 'requests'
+  | 'manualRequests'
+  | 'allowlist'
+  | 'includeStaticAssets'
+  | 'excludedRequests'
+  | 'requestOverrides'
+  | 'groupMoves'
+  | 'groupRenames'
+  | 'groupOrder'
+> &
+  // Optional so generators saved before the field still filter.
+  Partial<Pick<GeneratorStore, 'disabledRequests'>>
+
+/** The requests that run: what the script, exports and rules are built from. */
+export function selectFilteredRequests(state: RequestFilterState) {
+  return filterRequests(state, false)
+}
+
+/**
+ * The requests the list shows: the ones that run plus the disabled ones, which
+ * stay visible so they can be enabled again.
+ */
+export function selectListedRequests(state: RequestFilterState) {
+  return filterRequests(state, true)
+}
+
+function filterRequests(state: RequestFilterState, includeDisabled: boolean) {
   const excluded = new Set(state.excludedRequests)
+  const disabled = new Set(includeDisabled ? [] : state.disabledRequests)
   const keys = exclusionKeys(state.requests)
 
   // The occurrence key travels with the request: it is what identifies a
@@ -61,6 +77,7 @@ export function selectFilteredRequests(
       return (
         state.allowlist.includes(request.request.host) &&
         !excluded.has(occurrenceKey) &&
+        !disabled.has(occurrenceKey) &&
         // Generators saved before exclusions were per occurrence hold a bare
         // `requestKey`, which still removes every identical request.
         !excluded.has(requestKey(request))
@@ -101,7 +118,10 @@ export function selectFilteredRequests(
 
   // Manual requests skip the allowlist and static asset filters, they were
   // added on purpose so they always belong in the script.
-  const requests = [...recordedRequests, ...state.manualRequests]
+  const requests = [
+    ...recordedRequests,
+    ...state.manualRequests.filter((request) => !disabled.has(request.id)),
+  ]
 
   // Sorting here rather than in the view so the script, the exports and the
   // request list all run the groups in the same order.
@@ -129,6 +149,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     allowlist,
     manualRequests,
     excludedRequests,
+    disabledRequests,
     requestOverrides,
     groupMoves,
     groupRenames,
@@ -158,6 +179,7 @@ export function selectGeneratorData(state: GeneratorStore): GeneratorFileData {
     allowlist,
     manualRequests,
     excludedRequests,
+    disabledRequests,
     requestOverrides,
     groupMoves,
     groupRenames,

@@ -56,7 +56,7 @@ export function CorrelationEditor() {
   }
 
   return (
-    <Grid columns="1fr auto 1fr" gap="4">
+    <Grid columns="minmax(0, 1fr) auto minmax(0, 1fr)" gap="4">
       <Box>
         <Heading size="2" weight="medium" mb="2">
           Extractor
@@ -163,7 +163,7 @@ function ExtractedValue({
   return (
     <Text size="2">
       <Text color="gray">Extracted value:</Text>{' '}
-      <pre>
+      <pre css={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         <Code>{JSON.stringify(extractedValue, null, 2)}</Code>
       </pre>
     </Text>

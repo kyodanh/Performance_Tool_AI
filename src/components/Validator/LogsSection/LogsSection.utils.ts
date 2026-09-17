@@ -1,6 +1,6 @@
 import { LogEntry } from '@/schemas/k6'
 
-import { LogEntryWithSource } from './types'
+import { DisplayLogEntry, LogEntryWithSource } from './types'
 
 export function formatTime(time: string) {
   const date = new Date(time)
@@ -31,7 +31,7 @@ export function getSource(entry: LogEntry) {
   return 'runtime'
 }
 
-export function withSource(entry: LogEntry): LogEntryWithSource {
+export function withSource(entry: DisplayLogEntry): LogEntryWithSource {
   return {
     source: getSource(entry),
     entry,

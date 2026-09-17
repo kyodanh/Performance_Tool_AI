@@ -16,6 +16,9 @@ export const GeneratorFileDataSchema = z.object({
   // Recorded requests dropped from the test, keyed by `requestKey` since the
   // requests themselves get fresh ids on every recording load.
   excludedRequests: z.string().array().default([]),
+  // Requests kept in the list but left out of the script, like commented-out
+  // code. Recorded ones by occurrence key (`METHOD URL#n`), manual ones by id.
+  disabledRequests: z.string().array().default([]),
   // Recorded requests edited by hand, keyed by occurrence (`METHOD URL#n`)
   // like exclusions: a recording repeats the same method and URL, and only the
   // edited occurrence should change. Files saved before this hold a bare

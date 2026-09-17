@@ -185,6 +185,7 @@ describe('RunStatsCollector', () => {
         group: '',
         count: 2,
         dataRows: [],
+        occurrences: [],
       },
       {
         code: '1101',
@@ -193,6 +194,7 @@ describe('RunStatsCollector', () => {
         group: '',
         count: 1,
         dataRows: [],
+        occurrences: [],
       },
     ])
     expect(stats.failedRequests).toBe(1)
@@ -271,6 +273,7 @@ describe('RunStatsCollector', () => {
         group: '3_Trans_Broken',
         count: 1,
         dataRows: [],
+        occurrences: [],
       },
     ])
   })
@@ -295,8 +298,40 @@ describe('RunStatsCollector', () => {
         group: '',
         count: 3,
         dataRows: ['users=0', 'users=1'],
+        occurrences: [
+          { vu: '', iter: '', dataRow: 'users=0' },
+          { vu: '', iter: '', dataRow: 'users=1' },
+          { vu: '', iter: '', dataRow: 'users=1' },
+        ],
       },
     ])
+  })
+
+  it('names the VU and iteration that hit an error', () => {
+    const collector = new RunStatsCollector()
+
+    collector.push(
+      'http_reqs,100,1.000000,,dial: connection refused,1212,false,,GET,http://a/,,default,,0,,,http://a/,iter=7&vu=3,'
+    )
+
+    expect(collector.snapshot().errors[0]?.occurrences).toEqual([
+      { vu: '3', iter: '7', dataRow: '' },
+    ])
+  })
+
+  it('keeps more failing samples than distinct data rows', () => {
+    const collector = new RunStatsCollector()
+
+    for (let vu = 1; vu <= 20; vu++) {
+      collector.push(
+        `http_reqs,100,1.000000,,,1500,false,,GET,http://a/,,default,,0,,,http://a/,iter=0&vu=${vu}&data_row=users=${vu},`
+      )
+    }
+
+    const [error] = collector.snapshot().errors
+
+    expect(error?.dataRows).toHaveLength(5)
+    expect(error?.occurrences).toHaveLength(20)
   })
 
   it('ignores other tags sharing the extra_tags field', () => {

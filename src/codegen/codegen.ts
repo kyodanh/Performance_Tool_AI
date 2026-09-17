@@ -21,6 +21,7 @@ import {
 } from './codegen.utils'
 import { generateImportStatement } from './imports'
 import { generateOptions } from './options'
+import { SERVER_ERROR_LOG_HELPER } from './serverErrorLog'
 
 interface GenerateScriptParams {
   recording: ProxyData[]
@@ -48,6 +49,8 @@ export function generateScript({
     // endpoints, lower it to make a hung server fail fast.
     const HTTP_TIMEOUT = '${generator.options.httpTimeout}s'
 
+    ${SERVER_ERROR_LOG_HELPER}
+
     ${generateVariableDeclarations(generator.testData.variables)}
     ${generateDataFileDeclarations(generator.testData.files, scriptPath)}
     ${generateGetUniqueItemFunction(generator.testData.files)}
@@ -57,6 +60,7 @@ export function generateScript({
       // iterations hit an error — the number a controller reports as failed
       // Vusers. k6 has no per-iteration verdict of its own.
       execution.vu.tags['iter'] = execution.scenario.iterationInTest
+      execution.vu.tags['vu'] = execution.vu.idInTest
       ${generateDataRowTag(generator.testData.files)}
       ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous, generator.testData.variables)}
     }
@@ -335,6 +339,7 @@ export function generateSingleRequestSnippet(
   const main = `
     url = http.url${url}
     resp = http.request(${method}, url, ${content}, params)
+    logServerError(resp)
   `
 
   return [params, ...before, main, generateChecks(checks), ...after].join('\n')
@@ -383,17 +388,26 @@ export function generateRequestParams(
   // way round: empty `cookies`, a `Cookie` header nothing put in the jar, and
   // `shouldIncludeHeaderInScript` drops that header — so read it back here or
   // the cookie is never sent at all.
-  const cookieHeader = request.headers.find(
-    ([name]) => name.toLowerCase() === 'cookie'
-  )?.[1]
+  // HTTP/2 splits cookies into one `cookie` header each — read them all, not
+  // just the first. A correlation that targets Headers lands here rather than
+  // in `cookies`, so correlated header cookies are pinned too.
+  const headerCookies = request.headers
+    .filter(([name]) => name.toLowerCase() === 'cookie')
+    .flatMap(([, value]) => parseCookieHeader(value))
 
-  const cookies = (
-    request.cookies.length === 0 && cookieHeader !== undefined
-      ? parseCookieHeader(cookieHeader)
-      : request.cookies.filter(([, value]) =>
-          value.includes('${correlation_vars[')
-        )
-  )
+  const isCorrelated = ([, value]: [string, string]) =>
+    value.includes('${correlation_vars[')
+
+  const cookies = [
+    ...new Map(
+      request.cookies.length === 0
+        ? headerCookies
+        : [
+            ...request.cookies.filter(isCorrelated),
+            ...headerCookies.filter(isCorrelated),
+          ]
+    ),
+  ]
     .map(
       ([name, value]) =>
         `'${name}': {value: \`${escapeTemplateLiteral(value)}\`, replace: true}`

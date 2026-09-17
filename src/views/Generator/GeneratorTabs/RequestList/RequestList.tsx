@@ -42,6 +42,25 @@ export function RequestList({
 
   const { requestsWithRulesApplied, selectedRuleInstance } = useApplyRules()
 
+  // Rules only run over enabled requests, so a listed request missing from
+  // their output is a disabled one. Those are shown as recorded, in place.
+  const { shownRequests, disabledRequestIds } = useMemo(() => {
+    const withRules = new Map(
+      requestsWithRulesApplied.map((request) => [request.id, request])
+    )
+
+    return {
+      shownRequests: previewOriginalRequests
+        ? requests
+        : requests.map((request) => withRules.get(request.id) ?? request),
+      disabledRequestIds: new Set(
+        requests
+          .filter((request) => !withRules.has(request.id))
+          .map((request) => request.id)
+      ),
+    }
+  }, [previewOriginalRequests, requests, requestsWithRulesApplied])
+
   const {
     filter,
     setFilter,
@@ -49,7 +68,7 @@ export function RequestList({
     filterAllData,
     setFilterAllData,
   } = useFilterRequests({
-    proxyData: previewOriginalRequests ? requests : requestsWithRulesApplied,
+    proxyData: shownRequests,
   })
   const allRequests = useGeneratorStore((state) => state.requests)
   const hasManualRequests = useGeneratorStore(
@@ -128,8 +147,12 @@ export function RequestList({
   )
 
   const listContext = useMemo(
-    () => ({ selectedRuleInstance, originalRequests }),
-    [selectedRuleInstance, originalRequests]
+    () => ({
+      selectedRuleInstance,
+      originalRequests,
+      disabledRequestIds,
+    }),
+    [selectedRuleInstance, originalRequests, disabledRequestIds]
   )
 
   if (recordingError !== null && !hasManualRequests) {

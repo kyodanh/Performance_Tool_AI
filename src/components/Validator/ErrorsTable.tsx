@@ -1,10 +1,11 @@
 import { css } from '@emotion/react'
-import { Box, Button, Dialog, Flex, Text } from '@radix-ui/themes'
+import { Text } from '@radix-ui/themes'
 import { useState } from 'react'
 
 import { Table } from '@/components/Table'
 import { RunErrorGroup } from '@/utils/k6/stats'
 
+import { ErrorDetailDialog } from './ErrorDetailDialog'
 import {
   describeCategory,
   describeCode,
@@ -91,43 +92,10 @@ export function ErrorsTable({ errors }: ErrorsTableProps) {
         </Table.Body>
       </Table.Root>
 
-      <Dialog.Root
-        open={selectedError !== undefined}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelected(null)
-          }
-        }}
-      >
-        <Dialog.Content maxWidth="800px" width="90vw">
-          <Dialog.Title size="4">Error detail</Dialog.Title>
-          <Flex direction="column" gap="1">
-            <Text size="1" color="gray">
-              Detailed message text
-            </Text>
-            <Box css={detailBox}>
-              {selectedError &&
-                [
-                  `[${describeCategory(selectedError)} · HTTP ${describeCode(selectedError)} · k6 code ${selectedError.code}]`,
-                  describeError(selectedError),
-                  selectedError.group &&
-                    `\nTransaction: ${selectedError.group}`,
-                  selectedError.url && `\n${selectedError.url}`,
-                  `\n${formatCount(selectedError.count)} occurrence(s)`,
-                  selectedError.dataRows.length > 0 &&
-                    `\nData rows (first 5 distinct): ${describeDataRows(selectedError)}`,
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-            </Box>
-          </Flex>
-          <Flex justify="end" mt="3">
-            <Dialog.Close>
-              <Button variant="soft">Close</Button>
-            </Dialog.Close>
-          </Flex>
-        </Dialog.Content>
-      </Dialog.Root>
+      <ErrorDetailDialog
+        error={selectedError}
+        onClose={() => setSelected(null)}
+      />
     </>
   )
 }
@@ -145,16 +113,4 @@ const truncate = css`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-`
-
-const detailBox = css`
-  border: 1px solid var(--gray-5);
-  border-radius: var(--radius-2);
-  padding: var(--space-2);
-  min-height: 64px;
-  font-family: var(--code-font-family);
-  font-size: var(--font-size-1);
-  user-select: text;
-  white-space: pre-wrap;
-  word-break: break-all;
 `

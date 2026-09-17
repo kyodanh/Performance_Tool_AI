@@ -95,6 +95,8 @@ export const HeaderNameSelectorSchema = z.object({
   type: z.literal('header-name'),
   from: z.enum(['headers']),
   name: z.string(),
+  /** Parameterization only: add the header to requests that lack it. */
+  addIfMissing: z.boolean().optional(),
 })
 
 export const RegexSelectorSchema = z.object({

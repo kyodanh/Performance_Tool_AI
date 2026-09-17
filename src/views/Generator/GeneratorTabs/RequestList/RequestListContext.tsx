@@ -18,10 +18,13 @@ interface RequestListContextValue {
   selectedRuleInstance?: RuleInstance
   /** The recorded requests before rules ran, by id. */
   originalRequests: Map<string, ProxyData>
+  /** Requests shown in the list but left out of the script. */
+  disabledRequestIds: Set<string>
 }
 
 const RequestListContext = createContext<RequestListContextValue>({
   originalRequests: new Map(),
+  disabledRequestIds: new Set(),
 })
 
 export const RequestListProvider = RequestListContext.Provider
@@ -38,4 +41,8 @@ export function useSelectedRuleInstance() {
  */
 export function useOriginalRequestInList(id: string) {
   return useContext(RequestListContext).originalRequests.get(id)?.request
+}
+
+export function useIsRequestDisabled(id: string) {
+  return useContext(RequestListContext).disabledRequestIds.has(id)
 }

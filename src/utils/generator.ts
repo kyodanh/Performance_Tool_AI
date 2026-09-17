@@ -14,6 +14,7 @@ export function createNewGeneratorFile(
     recordingPath,
     manualRequests: [],
     excludedRequests: [],
+    disabledRequests: [],
     requestOverrides: {},
     groupMoves: {},
     groupRenames: {},

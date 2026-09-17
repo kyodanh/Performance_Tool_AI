@@ -53,6 +53,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
       allowlist,
       manualRequests,
       excludedRequests,
+      disabledRequests,
       requestOverrides,
       groupMoves,
       groupRenames,
@@ -93,6 +94,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         // Older generator files predate the field, and so does any main
         // process still running from before it existed.
         state.excludedRequests = excludedRequests ?? []
+        state.disabledRequests = disabledRequests ?? []
         state.requestOverrides = requestOverrides ?? {}
         state.groupMoves = groupMoves ?? {}
         state.groupRenames = groupRenames ?? {}

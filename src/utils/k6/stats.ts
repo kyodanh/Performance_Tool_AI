@@ -64,11 +64,18 @@ const MAX_REQUESTS = 200
 // growing the list unbounded.
 const MAX_DATA_ROWS = 5
 
+// ponytail: every failed VU/iteration of a normal run, capped so a script that
+// fails every request for hours does not hold millions of samples.
+const MAX_OCCURRENCES = 1000
+
 /** The tag `generateDataRowTag` sets, naming the data-file row of the iteration. */
 const DATA_ROW_TAG = 'data_row='
 
 /** The tag the generated script sets, unique per iteration across the run. */
 const ITER_TAG = 'iter='
+
+/** The tag the generated script sets, naming the VU running the iteration. */
+const VU_TAG = 'vu='
 
 // ponytail: a run where everything fails would otherwise hold one Set entry per
 // iteration. Past the cap the count saturates — `failedIterationsCapped` says so.
@@ -165,6 +172,18 @@ export interface RunErrorGroup {
    * `MAX_DATA_ROWS` distinct ones, empty when the script uses no data file.
    */
   dataRows: string[]
+  /**
+   * The first `MAX_OCCURRENCES` failing samples, naming who hit the error. Empty
+   * fields when the script does not set the tag; missing on saved results
+   * from before it was collected.
+   */
+  occurrences?: ErrorOccurrence[]
+}
+
+export interface ErrorOccurrence {
+  vu: string
+  iter: string
+  dataRow: string
 }
 
 export interface StatsBucket {
@@ -969,15 +988,27 @@ export class RunStatsCollector {
 
     const url = columns[this.#column.name] || columns[this.#column.url] || ''
     const group = groupName(columns[this.#column.group] ?? '')
-    const dataRow = tagValue(
-      columns[this.#column.extraTags] ?? '',
-      DATA_ROW_TAG
-    )
+    const extraTags = columns[this.#column.extraTags] ?? ''
+    const dataRow = tagValue(extraTags, DATA_ROW_TAG)
+    const occurrence: ErrorOccurrence = {
+      vu: tagValue(extraTags, VU_TAG),
+      iter: tagValue(extraTags, ITER_TAG),
+      dataRow,
+    }
+    const hasOccurrence = Object.values(occurrence).some(Boolean)
     const key = `${code}|${message}|${url}|${group}`
     const existing = this.#errors.get(key)
 
     if (existing) {
       existing.count += 1
+
+      if (
+        hasOccurrence &&
+        existing.occurrences &&
+        existing.occurrences.length < MAX_OCCURRENCES
+      ) {
+        existing.occurrences.push(occurrence)
+      }
 
       // The row stays out of the key: grouping by it would turn one broken
       // request into a row per iteration.
@@ -1003,6 +1034,7 @@ export class RunStatsCollector {
       group,
       count: 1,
       dataRows: dataRow === '' ? [] : [dataRow],
+      occurrences: hasOccurrence ? [occurrence] : [],
     })
   }
 

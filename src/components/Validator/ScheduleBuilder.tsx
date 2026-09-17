@@ -17,7 +17,7 @@ interface ScheduleBuilderProps {
 }
 
 /** The all-caps card heading a controller labels its panels with. */
-function PanelTitle({ children }: { children: React.ReactNode }) {
+export function PanelTitle({ children }: { children: React.ReactNode }) {
   return (
     <Text
       size="1"

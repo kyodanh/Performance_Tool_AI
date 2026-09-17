@@ -3,6 +3,8 @@ import {
   EllipsisIcon,
   FolderInputIcon,
   PencilIcon,
+  PowerIcon,
+  PowerOffIcon,
   RotateCcwIcon,
   TimerIcon,
   Trash2Icon,
@@ -61,6 +63,9 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
   const toggleExcludedRequest = useGeneratorStore(
     (store) => store.toggleExcludedRequest
   )
+  const toggleDisabledRequest = useGeneratorStore(
+    (store) => store.toggleDisabledRequest
+  )
   const showToast = useToast()
   const groupNames = useGroupNames()
   const key = requestKey(data)
@@ -83,6 +88,12 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
     recorded && occurrenceKey !== null
       ? findRequestOverride(store.requestOverrides, recorded, occurrenceKey)
       : undefined
+  )
+  // Manual requests keep their id across saves, recorded ones don't.
+  const disableKey = manualRequest ? manualRequest.id : occurrenceKey
+  const isDisabled = useGeneratorStore(
+    (store) =>
+      disableKey !== null && store.disabledRequests.includes(disableKey)
   )
   const groupMove = useGeneratorStore((store) =>
     occurrenceKey !== null ? store.groupMoves[occurrenceKey] : undefined
@@ -277,6 +288,15 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                 )}
 
                 <DropdownMenu.Separator />
+
+                {disableKey !== null && (
+                  <DropdownMenu.Item
+                    onSelect={() => toggleDisabledRequest(disableKey)}
+                  >
+                    {isDisabled ? <PowerIcon /> : <PowerOffIcon />}
+                    {isDisabled ? 'Enable request' : 'Disable request'}
+                  </DropdownMenu.Item>
+                )}
 
                 <DropdownMenu.Item color="red" onSelect={handleRemove}>
                   <Trash2Icon />

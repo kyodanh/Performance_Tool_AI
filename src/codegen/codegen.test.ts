@@ -37,6 +37,7 @@ import {
   generateDataRowTag,
   isBinaryContent,
 } from './codegen'
+import { SERVER_ERROR_LOG_HELPER } from './serverErrorLog'
 
 vi.mock('./options', () => ({
   generateOptions: () => '{}',
@@ -77,11 +78,14 @@ describe('Code generation', () => {
       // endpoints, lower it to make a hung server fail fast.
       const HTTP_TIMEOUT = '120s'
 
+      ${SERVER_ERROR_LOG_HELPER}
+
       export default function() {
         // Tags every sample of this iteration so the run stats can count how many
         // iterations hit an error — the number a controller reports as failed
         // Vusers. k6 has no per-iteration verdict of its own.
         execution.vu.tags['iter'] = execution.scenario.iterationInTest
+        execution.vu.tags['vu'] = execution.vu.idInTest
         let params
         let resp
         let match
@@ -99,6 +103,7 @@ describe('Code generation', () => {
           generator: {
             version: '3.0',
             groupMoves: {},
+            disabledRequests: [],
             groupRenames: {},
             groupOrder: [],
             recordingPath: 'test',
@@ -159,6 +164,7 @@ describe('Code generation', () => {
     const generator: GeneratorFileData = {
       version: '3.0',
       groupMoves: {},
+      disabledRequests: [],
       groupRenames: {},
       groupOrder: [],
       recordingPath: 'test',
@@ -378,6 +384,7 @@ describe('Code generation', () => {
           timeout: HTTP_TIMEOUT, headers: {}, cookies: {} }
         url = http.url\`/api/v1/users\`
         resp = http.request('GET', url, null, params)
+        logServerError(resp)
       `
 
       const result = generateRequestSnippetsFromSchemas([schema], thinkTime)
@@ -532,6 +539,7 @@ describe('Code generation', () => {
 
           url = http.url\`http://test.k6.io/api/v1/foo\`
           resp = http.request('POST', url, null, params)
+          logServerError(resp)
 
           var extractionError = undefined
           try {
@@ -580,6 +588,7 @@ describe('Code generation', () => {
 
           url = http.url\`http://test.k6.io/api/v1/login?project_id=\${correlation_vars['correlation_0']}\`
           resp = http.request('POST', url, null, params)
+          logServerError(resp)
 
           var extractionError = undefined
           try {
@@ -608,6 +617,7 @@ describe('Code generation', () => {
 
           url = http.url\`http://test.k6.io/api/v1/users/\${correlation_vars['correlation_2']}\`
           resp = http.request('GET', url, null, params)
+          logServerError(resp)
 
           params = {
           timeout: HTTP_TIMEOUT,
@@ -621,6 +631,7 @@ describe('Code generation', () => {
             \`{"user_id":"\${correlation_vars['correlation_2']}","is_admin":\${correlation_vars['correlation_1']}}\`,
             params
           )
+          logServerError(resp)
         })
 
         sleep(1)
@@ -648,6 +659,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://test.k6.io/api/v1/foo\`
             resp = http.request('POST', url, null, params)
+            logServerError(resp)
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -656,6 +668,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://test.k6.io/api/v1/login?project_id=555\`
             resp = http.request('POST', url, null, params)
+            logServerError(resp)
           })
 
           group('two', function () {
@@ -666,6 +679,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://test.k6.io/api/v1/users/333\`
             resp = http.request('GET', url, null, params)
+            logServerError(resp)
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -679,6 +693,7 @@ describe('Code generation', () => {
               \`${JSON.stringify({ user_id: '333', is_admin: false })}\`,
               params
             )
+            logServerError(resp)
           })
 
           sleep(1)
@@ -777,6 +792,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://test.k6.io/api/v1/users\`
             resp = http.request('POST', url, \`${JSON.stringify({ user_id: 'TEST_ID' })}\`, params)
+            logServerError(resp)
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -786,6 +802,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://example.com/api/v1/users?project_id=\${getParameterizationValue1()}&csrf=\${getParameterizationValue2()}\`
             resp = http.request('GET', url, null, params)
+            logServerError(resp)
 
 
             params = {
@@ -796,6 +813,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://example.com/api/v1/users?project_id=\${getParameterizationValue1()}\`
             resp = http.request('GET', url, null, params)
+            logServerError(resp)
           })
 
           sleep(1)
@@ -833,6 +851,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://test.k6.io/api/v1/users\`
             resp = http.request('POST', url, \`${JSON.stringify({ user_id: '333' })}\`, params)
+            logServerError(resp)
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -842,6 +861,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://example.com/api/v1/users?project_id=123&csrf=321\`
             resp = http.request('GET', url, null, params)
+            logServerError(resp)
 
 
             params = {
@@ -852,6 +872,7 @@ describe('Code generation', () => {
 
             url = http.url\`http://example.com/api/v1/users?project_id=123\`
             resp = http.request('GET', url, null, params)
+            logServerError(resp)
           })
 
           sleep(1)
@@ -996,6 +1017,47 @@ describe('Code generation', () => {
       `)
       expect(await prettify(generateRequestParams(request))).toBe(
         expectedResult
+      )
+    })
+
+    // HTTP/2 recordings split cookies into one `cookie` header each, and a
+    // Headers-target correlation only rewrites the header, not `cookies`.
+    it('pins cookies from every cookie header, incl. header-only correlation', async () => {
+      const headers: Header[] = [
+        ['cookie', '_pk_ses=1'],
+        ['cookie', "at=${correlation_vars['token']}"],
+        ['cookie', 'em=a@b.c'],
+      ]
+
+      const expectedResult = await prettify(`
+        params = {
+          timeout: HTTP_TIMEOUT,
+          headers: {},
+          cookies: {
+            '_pk_ses': {value: \`1\`, replace: true},
+            'at': {value: \`\${correlation_vars['token']}\`, replace: true},
+            'em': {value: \`a@b.c\`, replace: true}
+          }
+        }
+      `)
+      expect(
+        await prettify(generateRequestParams(generateRequest(headers, [])))
+      ).toBe(expectedResult)
+
+      const recorded = generateRequest(headers, [
+        ['_pk_ses', '1'],
+        ['at', 'raw-token'],
+      ])
+      expect(await prettify(generateRequestParams(recorded))).toBe(
+        await prettify(`
+          params = {
+            timeout: HTTP_TIMEOUT,
+            headers: {},
+            cookies: {
+              'at': {value: \`\${correlation_vars['token']}\`, replace: true}
+            }
+          }
+        `)
       )
     })
 

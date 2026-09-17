@@ -45,5 +45,23 @@ describe('Header name selector', () => {
       const result = replaceHeaderByName(request, selector, 'TEST_VALUE')
       expect(result).toBe(request)
     })
+
+    it('should add the header when missing and addIfMissing is set', () => {
+      const request = createRequest({
+        headers: [['content-type', 'application/json']],
+      })
+      const selector: Selector = {
+        type: 'header-name',
+        from: 'headers',
+        name: 'Authorization',
+        addIfMissing: true,
+      }
+      expect(
+        replaceHeaderByName(request, selector, 'Bearer ${token}').headers
+      ).toEqual([
+        ['content-type', 'application/json'],
+        ['Authorization', 'Bearer ${token}'],
+      ])
+    })
   })
 })

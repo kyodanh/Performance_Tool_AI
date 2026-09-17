@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTrackScriptCopy } from '@/hooks/useTrackScriptCopy'
 import { Check, LogEntry } from '@/schemas/k6'
 import { MachineResources } from '@/types/systemMetrics'
+import { evaluateSla, Sla } from '@/utils/k6/sla'
 import { runSummary, RunStats } from '@/utils/k6/stats'
 
 import { ReadOnlyEditor } from '../Monaco/ReadOnlyEditor'
@@ -15,7 +16,9 @@ import { checksFromStats } from './ChecksSection.utils'
 import { FailedSection, failureCount, hasFailures } from './FailedSection'
 import { describeCode, describeError, formatCount } from './format'
 import { LogsSection, useConsoleFilter } from './LogsSection'
+import { DisplayLogEntry } from './LogsSection/types'
 import { MetricsSection } from './MetricsSection'
+import { SlaSection } from './SlaSection'
 import { TransactionsTable } from './TransactionsTable'
 
 /**
@@ -23,26 +26,42 @@ import { TransactionsTable } from './TransactionsTable'
  * they would only ever show in the Failed tab. Mirror them into the log as
  * error entries — grouped, so one line per code + message + request.
  */
-function errorLogs(stats: RunStats | null): LogEntry[] {
+function errorLogs(stats: RunStats | null): DisplayLogEntry[] {
   const lastBucket = stats?.buckets.at(-1)?.time
   const time = new Date(
     lastBucket !== undefined ? lastBucket * 1000 : Date.now()
   ).toISOString()
 
-  return (stats?.errors ?? []).map((error) => ({
-    level: 'error',
-    process: 'k6',
-    time,
-    msg: [
-      `[${describeCode(error)}] ${describeError(error)}`,
-      error.group && `· ${error.group}`,
-      error.url && `· ${error.url}`,
-      `(${formatCount(error.count)} occurrence(s))`,
-      error.dataRows.length > 0 && `· data rows: ${error.dataRows.join(', ')}`,
-    ]
+  return (stats?.errors ?? []).map((error) => {
+    // A log line with hundreds of tags is unreadable; the Failed tab has them all.
+    const occurrences = (error.occurrences ?? [])
+      .slice(0, 5)
+      .map(({ vu, iter, dataRow }) =>
+        [
+          vu && `VU ${vu}`,
+          // iterationInTest counts from 0; people count rounds from 1.
+          iter && `Iter ${Number(iter) + 1}`,
+          dataRow,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      )
       .filter(Boolean)
-      .join(' '),
-  }))
+
+    return {
+      level: 'error',
+      process: 'k6',
+      time,
+      msg: `[${describeCode(error)}] ${describeError(error)}`,
+      detail: error.url,
+      tags: [
+        error.group,
+        `×${formatCount(error.count)}`,
+        // Results saved before occurrences were collected only have the rows.
+        ...(occurrences.length > 0 ? occurrences : error.dataRows),
+      ].filter(Boolean),
+    }
+  })
 }
 
 /**
@@ -124,7 +143,14 @@ const aiButtonStyles = css`
   flex-shrink: 0;
 `
 
-type Tab = 'logs' | 'transactions' | 'checks' | 'failed' | 'metrics' | 'script'
+type Tab =
+  | 'logs'
+  | 'transactions'
+  | 'checks'
+  | 'failed'
+  | 'metrics'
+  | 'sla'
+  | 'script'
 
 const TABS: Tab[] = [
   'logs',
@@ -132,6 +158,7 @@ const TABS: Tab[] = [
   'checks',
   'failed',
   'metrics',
+  'sla',
   'script',
 ]
 
@@ -143,6 +170,8 @@ interface ExecutionDetailsProps {
   stats?: RunStats | null
   /** Machine CPU/memory of a live run; left out by debug runs. */
   resources?: MachineResources[]
+  /** The service level to judge the run against; left out by debug runs. */
+  sla?: Sla
   /** Tab to open on, for callers whose main view is not the script or logs. */
   defaultTab?: Tab
 }
@@ -154,6 +183,7 @@ export function ExecutionDetails({
   checks,
   stats = null,
   resources = [],
+  sla,
   defaultTab,
 }: ExecutionDetailsProps) {
   const [selectedTab, setSelectedTab] = useState<Tab>(
@@ -168,6 +198,11 @@ export function ExecutionDetails({
   )
 
   const groups = stats?.groups ?? []
+
+  const verdict = useMemo(
+    () => (sla === undefined ? null : evaluateSla(stats, sla)),
+    [sla, stats]
+  )
 
   const allLogs = useMemo(() => [...logs, ...errorLogs(stats)], [logs, stats])
 
@@ -219,6 +254,13 @@ export function ExecutionDetails({
             Failed ({failureCount(stats)})
           </Tabs.Trigger>
           <Tabs.Trigger value="metrics">Metrics</Tabs.Trigger>
+          {sla !== undefined && (
+            <Tabs.Trigger value="sla">
+              SLA
+              {verdict !== null &&
+                (verdict.passed ? ' ✓' : ` ✗ (${verdict.failedRows})`)}
+            </Tabs.Trigger>
+          )}
           {script !== undefined && (
             <Tabs.Trigger value="script">Script</Tabs.Trigger>
           )}
@@ -310,6 +352,17 @@ export function ExecutionDetails({
       >
         <MetricsSection stats={stats} resources={resources} />
       </Tabs.Content>
+      {sla !== undefined && (
+        <Tabs.Content
+          value="sla"
+          css={css`
+            flex: 1;
+            min-height: 0;
+          `}
+        >
+          <SlaSection sla={sla} verdict={verdict} />
+        </Tabs.Content>
+      )}
     </Tabs.Root>
   )
 }
