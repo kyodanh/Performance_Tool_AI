@@ -600,7 +600,7 @@ describe('Code generation', () => {
             throw new Error(
               "Correlation variable 'correlation_2' was not extracted from the live response." +
               "\\n  Expected JSON path 'user_id' in the response body" +
-              "\\n  Source request: POST http://test.k6.io/api/v1/login?project_id=555 (recorded 200)" +
+              "\\n  Source request: POST http://test.k6.io/api/v1/login?project_id=5555 (recorded 200)" +
               '\\n  Live response: status ' + resp.status + ', ' + String(resp.body || '').length + ' bytes' +
               '\\n  Body (first 200 chars): ' + String(resp.body || '').slice(0, 200) +
               (extractionError ? '\\n  Extractor threw: ' + extractionError : '') +
@@ -666,7 +666,7 @@ describe('Code generation', () => {
               headers: {}, cookies: {}
             }
 
-            url = http.url\`http://test.k6.io/api/v1/login?project_id=555\`
+            url = http.url\`http://test.k6.io/api/v1/login?project_id=5555\`
             resp = http.request('POST', url, null, params)
             logServerError(resp)
           })
@@ -677,7 +677,7 @@ describe('Code generation', () => {
               headers: {}, cookies: {}
             }
 
-            url = http.url\`http://test.k6.io/api/v1/users/333\`
+            url = http.url\`http://test.k6.io/api/v1/users/3333\`
             resp = http.request('GET', url, null, params)
             logServerError(resp)
 
@@ -690,7 +690,7 @@ describe('Code generation', () => {
             resp = http.request(
               'POST',
               url,
-              \`${JSON.stringify({ user_id: '333', is_admin: false })}\`,
+              \`${JSON.stringify({ user_id: '3333', is_admin: false })}\`,
               params
             )
             logServerError(resp)
