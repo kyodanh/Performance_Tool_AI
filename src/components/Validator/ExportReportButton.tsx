@@ -55,6 +55,12 @@ interface ExportReportButtonProps {
   selectedId?: string | null
   /** The live run's SLA. Saved versions carry their own. */
   sla?: Sla
+  /**
+   * Opened from outside — by a menu item, which cannot host the dialog itself
+   * because the menu unmounts as it closes. The button is then left out.
+   */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function ExportReportButton({
@@ -64,11 +70,18 @@ export function ExportReportButton({
   versions,
   selectedId = null,
   sla,
+  open: openProp,
+  onOpenChange,
 }: ExportReportButtonProps) {
   const showToast = useToast()
-  const [open, setOpen] = useState(false)
+  const [ownOpen, setOwnOpen] = useState(false)
+  const controlled = openProp !== undefined
+  const open = openProp ?? ownOpen
+  const setOpen = onOpenChange ?? setOwnOpen
   const [exporting, setExporting] = useState(false)
-  const [checked, setChecked] = useState<string[]>([])
+  // Null until something is ticked, so the version on screen is what a plain
+  // export means however the dialog was opened.
+  const [checked, setChecked] = useState<string[] | null>(null)
   const [title, setTitle] = useState(`${testName}_Performance_Report`)
   const [author, setAuthor] = useState(
     () => localStorage.getItem(AUTHOR_KEY) ?? ''
@@ -82,23 +95,25 @@ export function ExportReportButton({
       ? stats !== null && stats.buckets.length > 0
       : versions.length > 0
   const canExport = hasRun && !isRunning
+  const checkedIds = checked ?? (selectedId === null ? [] : [selectedId])
   const selected = (versions ?? []).filter((version) =>
-    checked.includes(version.id)
+    checkedIds.includes(version.id)
   )
   const nothingPicked = versions !== undefined && selected.length === 0
 
   const handleOpenChange = (next: boolean) => {
-    // The version on screen is the one a plain export means.
-    if (next) {
-      setChecked(selectedId === null ? [] : [selectedId])
+    // Closing forgets the ticks, so the next opening starts from the version
+    // on screen again.
+    if (!next) {
+      setChecked(null)
     }
 
     setOpen(next)
   }
 
   const handleToggle = (id: string, on: boolean) => {
-    setChecked((current) =>
-      on ? [...current, id] : current.filter((entry) => entry !== id)
+    setChecked(
+      on ? [...checkedIds, id] : checkedIds.filter((entry) => entry !== id)
     )
   }
 
@@ -165,17 +180,19 @@ export function ExportReportButton({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Tooltip content={exportHint(hasRun, isRunning)}>
-        {/* A disabled button swallows pointer events, so the tooltip needs a
-            wrapper to hang off. */}
-        <span>
-          <Dialog.Trigger>
-            <Button variant="soft" radius="full" disabled={!canExport}>
-              <FileTextIcon /> Export PDF report
-            </Button>
-          </Dialog.Trigger>
-        </span>
-      </Tooltip>
+      {!controlled && (
+        <Tooltip content={exportHint(hasRun, isRunning)}>
+          {/* A disabled button swallows pointer events, so the tooltip needs a
+              wrapper to hang off. */}
+          <span>
+            <Dialog.Trigger>
+              <Button variant="soft" radius="full" disabled={!canExport}>
+                <FileTextIcon /> Export PDF report
+              </Button>
+            </Dialog.Trigger>
+          </span>
+        </Tooltip>
+      )}
       <Dialog.Content maxWidth="420px">
         <Dialog.Title size="3">Export performance report</Dialog.Title>
         <Dialog.Description size="2" color="gray" mb="3">
@@ -195,7 +212,7 @@ export function ExportReportButton({
                     <Text as="label" size="2" key={version.id}>
                       <Flex gap="2" align="center">
                         <Checkbox
-                          checked={checked.includes(version.id)}
+                          checked={checkedIds.includes(version.id)}
                           onCheckedChange={(on) =>
                             handleToggle(version.id, on === true)
                           }

@@ -17,13 +17,16 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { View } from '@/components/Layout/View'
-import { ExportReportButton } from '@/components/Validator/ExportReportButton'
+import { checksFromStats } from '@/components/Validator/ChecksSection.utils'
 import { MetricsSection } from '@/components/Validator/MetricsSection'
 import { SlaSection } from '@/components/Validator/SlaSection'
+import { AnalyzeFailureRequest } from '@/handlers/ai/errorAnalysis/types'
 import { useDeleteResults } from '@/hooks/useDeleteResults'
 import { evaluateSla } from '@/utils/k6/sla'
+import { runSummary } from '@/utils/k6/stats'
 
 import { groupRuns, runLabel } from './Analysis.utils'
+import { AnalysisActions } from './AnalysisActions'
 import { CompareRunsTable } from './CompareRunsTable'
 
 const NO_COMPARE = 'none'
@@ -101,15 +104,43 @@ export function Analysis() {
       baseId === null ? null : window.studio.ui.readResult(baseId),
   })
 
+  // A saved run carries no console logs, so the model gets the metrics alone.
+  const aiRequest: AnalyzeFailureRequest = useMemo(
+    () => ({
+      checks: checksFromStats(result?.stats ?? null).filter(
+        (check) => check.fails > 0
+      ),
+      errors: result?.stats.errors ?? [],
+      requestStats: result?.stats.requestStats ?? [],
+      logs: [],
+      summary: runSummary(result?.stats ?? null),
+      sla: result?.sla,
+      slaVerdict:
+        result?.sla === undefined
+          ? undefined
+          : (evaluateSla(result.stats, result.sla) ?? undefined),
+    }),
+    [result]
+  )
+
   return (
     <View
       title="Analysis"
       subTitle={active?.testName}
       actions={
-        <ExportReportButton
-          stats={result?.stats ?? null}
+        <AnalysisActions
+          aiRequest={aiRequest}
+          run={
+            result
+              ? {
+                  stats: result.stats,
+                  testName: result.testName ?? active?.testName ?? 'k6',
+                  label: currentRun ? runLabel(currentRun) : undefined,
+                  sla: result.sla,
+                }
+              : null
+          }
           testName={result?.testName ?? active?.testName ?? 'k6'}
-          isRunning={false}
           versions={versions.map((run) => ({
             id: run.id,
             label: runLabel(run),

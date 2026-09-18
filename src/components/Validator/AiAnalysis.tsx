@@ -2,7 +2,7 @@ import { css } from '@emotion/react'
 import { Box, Button, Callout, Dialog, Flex, Spinner } from '@radix-ui/themes'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangleIcon, SparklesIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { SimpleMarkdown } from '@/components/Assistant/SimpleMarkdown'
 import { AnalyzeFailureRequest } from '@/handlers/ai/errorAnalysis/types'
@@ -15,14 +15,28 @@ interface AiAnalysisProps {
    * model towards a root-cause analysis; without them it reviews performance.
    */
   request: AnalyzeFailureRequest
+  /**
+   * Opened from outside — by a menu item, which cannot host the dialog itself
+   * because the menu unmounts as it closes. The built-in button is then left
+   * out and opening starts the analysis.
+   */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 /**
  * Sits next to the run's tabs: one click analyzes the run and shows the answer
  * in a dialog, so the reader never leaves the tab they were looking at.
  */
-export function AiAnalysis({ request }: AiAnalysisProps) {
-  const [open, setOpen] = useState(false)
+export function AiAnalysis({
+  request,
+  open: openProp,
+  onOpenChange,
+}: AiAnalysisProps) {
+  const [ownOpen, setOwnOpen] = useState(false)
+  const controlled = openProp !== undefined
+  const open = openProp ?? ownOpen
+  const setOpen = onOpenChange ?? setOwnOpen
 
   const { data: status } = useQuery({
     queryKey: ['errorAnalysisProvider', 'status'],
@@ -56,19 +70,40 @@ export function AiAnalysis({ request }: AiAnalysisProps) {
     analyze.mutate(request)
   }
 
+  // Opening from outside has to start the run the button would have started.
+  // Keyed on `open` alone, so it fires once per opening rather than on every
+  // render of a fresh request object.
+  useEffect(() => {
+    if (!controlled || !open) {
+      return
+    }
+
+    if (!configured) {
+      openSettingsDialog('aiProvider')
+      setOpen(false)
+
+      return
+    }
+
+    analyze.mutate(request)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled, open])
+
   return (
     <>
-      <Button
-        type="button"
-        size="2"
-        variant="soft"
-        radius="full"
-        loading={analyze.isPending}
-        onClick={handleClick}
-      >
-        <SparklesIcon size={14} />
-        AI analysis
-      </Button>
+      {!controlled && (
+        <Button
+          type="button"
+          size="2"
+          variant="soft"
+          radius="full"
+          loading={analyze.isPending}
+          onClick={handleClick}
+        >
+          <SparklesIcon size={14} />
+          AI analysis
+        </Button>
+      )}
 
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Content maxWidth="800px" width="90vw">

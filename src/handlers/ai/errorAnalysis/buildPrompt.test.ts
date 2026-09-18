@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { Check, LogEntry } from '@/schemas/k6'
+import { Sla, SlaVerdict } from '@/utils/k6/sla'
 import { RequestStats, RunErrorGroup } from '@/utils/k6/stats'
 
 import { buildFailureAnalysisPrompt } from './buildPrompt'
@@ -175,6 +176,57 @@ describe('buildFailureAnalysisPrompt', () => {
   it('asks for the answer in Vietnamese', () => {
     expect(buildFailureAnalysisPrompt(makeRequest())).toContain(
       'Answer in Vietnamese'
+    )
+  })
+
+  it('reports the SLA ceiling, the verdict and every breached row', () => {
+    const sla: Sla = {
+      enabled: true,
+      statistic: 'p95',
+      responseTimeMs: 2000,
+      errorRatePercent: 1,
+    }
+    const slaVerdict: SlaVerdict = {
+      passed: false,
+      failedRows: 1,
+      rows: [
+        {
+          scope: 'run',
+          name: 'All requests',
+          count: 100,
+          failed: 0,
+          responseTime: 800,
+          errorRate: 0,
+          passed: true,
+          breached: [],
+        },
+        {
+          scope: 'transaction',
+          name: 'Checkout',
+          count: 40,
+          failed: 4,
+          responseTime: 3500,
+          errorRate: 10,
+          passed: false,
+          breached: ['responseTime', 'errorRate'],
+        },
+      ],
+    }
+
+    const prompt = buildFailureAnalysisPrompt(makeRequest({ sla, slaVerdict }))
+
+    expect(prompt).toContain('p95 ≤ 2000 ms')
+    expect(prompt).toContain('FAIL — 1 row(s) over the ceiling')
+    expect(prompt).toContain('[transaction] Checkout: 3500ms, errors 10.00%')
+    expect(prompt).toContain('breached responseTime, errorRate')
+    // A missed SLA is a failure even when no request errored.
+    expect(prompt).toContain('root cause')
+    expect(prompt).not.toContain('All requests')
+  })
+
+  it('says so when the run was saved without an SLA', () => {
+    expect(buildFailureAnalysisPrompt(makeRequest())).toContain(
+      '(no SLA was set for this run)'
     )
   })
 

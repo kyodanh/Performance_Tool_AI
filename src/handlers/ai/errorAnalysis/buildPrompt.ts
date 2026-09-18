@@ -1,6 +1,9 @@
+import { describeSla, Sla, SlaVerdict } from '@/utils/k6/sla'
+
 import { AnalyzeFailureRequest, RunSummary } from './types'
 
 const MAX_CHECKS = 20
+const MAX_SLA_ROWS = 20
 const MAX_ERRORS = 20
 const MAX_REQUEST_STATS = 20
 const MAX_LOGS = 20
@@ -31,12 +34,30 @@ function summaryLines(summary: RunSummary): string[] {
   ]
 }
 
+/** The ceiling, the verdict, and every row that crossed it. */
+function slaLines(sla: Sla, verdict: SlaVerdict): string[] {
+  const failed = verdict.rows
+    .filter((row) => !row.passed)
+    .slice(0, MAX_SLA_ROWS)
+
+  return [
+    `- Ceiling: ${describeSla(sla)}`,
+    `- Verdict: ${verdict.passed ? 'PASS' : `FAIL — ${verdict.failedRows} row(s) over the ceiling`}`,
+    ...failed.map(
+      (row) =>
+        `- [${row.scope}] ${row.name}: ${row.responseTime === null ? 'response time not recorded' : `${row.responseTime.toFixed(0)}ms`}, errors ${row.errorRate.toFixed(2)}% (${row.failed}/${row.count}) — breached ${row.breached.join(', ')}`
+    ),
+  ]
+}
+
 export function buildFailureAnalysisPrompt({
   checks,
   errors,
   requestStats,
   logs,
   summary,
+  sla,
+  slaVerdict,
 }: AnalyzeFailureRequest): string {
   const failedChecks = checks
     .filter((check) => check.fails > 0)
@@ -57,7 +78,8 @@ export function buildFailureAnalysisPrompt({
   const failed =
     failedChecks.length > 0 ||
     topErrors.length > 0 ||
-    worstRequests.some((request) => request.failed > 0)
+    worstRequests.some((request) => request.failed > 0) ||
+    slaVerdict?.passed === false
 
   const sections = [
     ...(failed ? FAILURE_INTENT : PERFORMANCE_INTENT),
@@ -67,6 +89,11 @@ export function buildFailureAnalysisPrompt({
     '',
     '## Run summary',
     summary ? summaryLines(summary).join('\n') : '(not available)',
+    '',
+    '## SLA',
+    sla !== undefined && slaVerdict != null
+      ? slaLines(sla, slaVerdict).join('\n')
+      : '(no SLA was set for this run)',
     '',
     '## Failed checks',
     failedChecks.length > 0

@@ -1,4 +1,5 @@
 import { Check, LogEntry } from '@/schemas/k6'
+import { Sla, SlaVerdict } from '@/utils/k6/sla'
 import { RequestStats, RunErrorGroup, RunStats } from '@/utils/k6/stats'
 
 export enum ErrorAnalysisHandler {
@@ -56,6 +57,9 @@ export interface AnalyzeFailureRequest {
   requestStats: RequestStats[]
   logs: LogEntry[]
   summary?: RunSummary
+  /** The ceiling the run was judged against. Absent when none was set. */
+  sla?: Sla
+  slaVerdict?: SlaVerdict
 }
 
 export type AnalyzeFailureResult = { text: string } | { error: string }
