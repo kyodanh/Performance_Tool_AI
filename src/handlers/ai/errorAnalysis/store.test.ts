@@ -10,7 +10,6 @@ const mockDecryptString = vi.fn((value: string) => {
 
 const mockReadFile = vi.fn()
 const mockWriteFile = vi.fn()
-const mockUnlink = vi.fn()
 
 vi.mock('electron', () => ({
   app: {
@@ -30,7 +29,6 @@ vi.mock('@/main/encryption', () => ({
 vi.mock('@/utils/fs', () => ({
   readFile: mockReadFile,
   writeFile: mockWriteFile,
-  unlink: mockUnlink,
 }))
 
 function enoent(): NodeJS.ErrnoException {
@@ -41,10 +39,27 @@ function enoent(): NodeJS.ErrnoException {
   return error
 }
 
-describe('saveErrorAnalysisConfig / getErrorAnalysisConfig', () => {
+function writtenStore() {
+  const calls = mockWriteFile.mock.calls
+  return JSON.parse(calls[calls.length - 1]?.[1] as string) as {
+    providers: { id: string; apiKey: string }[]
+    activeId: string | null
+    typesafe: { apiKey: string; enabled: boolean } | null
+  }
+}
+
+const provider = {
+  name: 'Gateway',
+  baseUrl: 'https://example.com/v1',
+  model: 'gpt-4o-mini',
+  apiKey: 'secret-key',
+}
+
+describe('AI provider store', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    mockReadFile.mockRejectedValue(enoent())
     mockWriteFile.mockResolvedValue(undefined)
   })
 
@@ -52,61 +67,108 @@ describe('saveErrorAnalysisConfig / getErrorAnalysisConfig', () => {
     vi.restoreAllMocks()
   })
 
-  it('encrypts the API key before writing and round-trips it back on read', async () => {
-    const { saveErrorAnalysisConfig } = await import('./store')
+  it('encrypts the key, writes with mode 0o600 and round-trips the active provider', async () => {
+    const { saveProvider } = await import('./store')
 
-    await saveErrorAnalysisConfig({
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-4o-mini',
-      apiKey: 'secret-key',
-    })
-
-    expect(mockEncryptString).toHaveBeenCalledWith('secret-key')
-
-    const writtenJson = mockWriteFile.mock.calls[0]?.[1] as string
-    const writtenData = JSON.parse(writtenJson) as { apiKey: string }
-    expect(writtenData.apiKey).toBe('encrypted:secret-key')
-
-    mockReadFile.mockResolvedValue(writtenJson)
-    // saveErrorAnalysisConfig already primed the in-memory cache; re-import
-    // to force a fresh read from the mocked file system.
-    vi.resetModules()
-    const fresh = await import('./store')
-
-    const config = await fresh.getErrorAnalysisConfig()
-
-    expect(config).toEqual({
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-4o-mini',
-      apiKey: 'secret-key',
-    })
-  })
-
-  it('writes the config file with mode 0o600', async () => {
-    const { saveErrorAnalysisConfig } = await import('./store')
-
-    await saveErrorAnalysisConfig({
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-4o-mini',
-      apiKey: 'secret-key',
-    })
+    await saveProvider(provider)
 
     expect(mockWriteFile).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       { mode: 0o600 }
     )
+    expect(writtenStore().providers[0]?.apiKey).toBe('encrypted:secret-key')
+
+    mockReadFile.mockResolvedValue(mockWriteFile.mock.calls[0]?.[1])
+    vi.resetModules()
+    const fresh = await import('./store')
+
+    await expect(fresh.getErrorAnalysisConfig()).resolves.toEqual({
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'secret-key',
+    })
   })
 
-  it('returns null and does not throw when the config file does not exist', async () => {
-    mockReadFile.mockRejectedValue(enoent())
-
-    const { getErrorAnalysisConfig } = await import('./store')
+  it('reports Grafana (not configured) without exposing any key when empty', async () => {
+    const { getErrorAnalysisConfig, getErrorAnalysisStatus } =
+      await import('./store')
 
     await expect(getErrorAnalysisConfig()).resolves.toBeNull()
+    await expect(getErrorAnalysisStatus()).resolves.toEqual({
+      configured: false,
+      baseUrl: null,
+      model: null,
+      useForAssistant: false,
+      activeId: null,
+      providers: [],
+      typesafe: { configured: false, enabled: false, source: null },
+    })
   })
 
-  it('returns null when the stored API key fails to decrypt', async () => {
+  it('keeps several providers, runs on the selected one, and falls back to Grafana when it is deleted', async () => {
+    const store = await import('./store')
+
+    await store.saveProvider(provider)
+    await store.saveProvider({ ...provider, name: 'Local', model: 'llama' })
+
+    let status = await store.getErrorAnalysisStatus()
+    expect(status.providers.map((entry) => entry.name)).toEqual([
+      'Gateway',
+      'Local',
+    ])
+    // Saving selects.
+    expect(status.model).toBe('llama')
+    expect(JSON.stringify(status)).not.toContain('secret-key')
+
+    const [first, second] = status.providers
+    await store.setActiveProvider(first!.id)
+    expect((await store.getErrorAnalysisConfig())?.model).toBe('gpt-4o-mini')
+
+    await store.setActiveProvider('unknown')
+    expect((await store.getErrorAnalysisStatus()).activeId).toBe(first!.id)
+
+    await store.deleteProvider(first!.id)
+    status = await store.getErrorAnalysisStatus()
+    expect(status.configured).toBe(false)
+    expect(status.providers.map((entry) => entry.id)).toEqual([second!.id])
+  })
+
+  it('never reports useForAssistant while Grafana is active', async () => {
+    const store = await import('./store')
+
+    await store.setUseForAssistant(true)
+    expect((await store.getErrorAnalysisStatus()).useForAssistant).toBe(false)
+
+    await store.saveProvider(provider)
+    expect((await store.getErrorAnalysisStatus()).useForAssistant).toBe(true)
+  })
+
+  it('migrates a 1.0 file into an active provider', async () => {
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        version: '1.0',
+        baseUrl: 'https://example.com/v1',
+        model: 'gpt-4o-mini',
+        apiKey: 'encrypted:secret-key',
+        useForAssistant: true,
+      })
+    )
+
+    const store = await import('./store')
+
+    await expect(store.getErrorAnalysisStatus()).resolves.toMatchObject({
+      configured: true,
+      model: 'gpt-4o-mini',
+      useForAssistant: true,
+      providers: [{ name: 'gpt-4o-mini' }],
+    })
+    await expect(store.getErrorAnalysisConfig()).resolves.toMatchObject({
+      apiKey: 'secret-key',
+    })
+  })
+
+  it('returns null when the active key fails to decrypt', async () => {
     mockReadFile.mockResolvedValue(
       JSON.stringify({
         version: '1.0',
@@ -122,87 +184,39 @@ describe('saveErrorAnalysisConfig / getErrorAnalysisConfig', () => {
   })
 })
 
-describe('getErrorAnalysisStatus', () => {
+describe('TypeSafe key', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('reports configured: false without exposing the API key when unconfigured', async () => {
     mockReadFile.mockRejectedValue(enoent())
-
-    const { getErrorAnalysisStatus } = await import('./store')
-
-    await expect(getErrorAnalysisStatus()).resolves.toEqual({
-      configured: false,
-      baseUrl: null,
-      model: null,
-      useForAssistant: false,
-    })
-  })
-
-  it('reports configured: true with baseUrl/model but no apiKey field', async () => {
-    mockReadFile.mockResolvedValue(
-      JSON.stringify({
-        version: '1.0',
-        baseUrl: 'https://example.com/v1',
-        model: 'gpt-4o-mini',
-        apiKey: 'encrypted:secret-key',
-      })
-    )
-
-    const { getErrorAnalysisStatus } = await import('./store')
-    const status = await getErrorAnalysisStatus()
-
-    expect(status).toEqual({
-      configured: true,
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-4o-mini',
-      useForAssistant: false,
-    })
-    expect(status).not.toHaveProperty('apiKey')
-  })
-})
-
-describe('clearErrorAnalysisConfig', () => {
-  beforeEach(() => {
-    vi.resetModules()
-    vi.clearAllMocks()
+    mockWriteFile.mockResolvedValue(undefined)
+    vi.stubEnv('TYPESAFE_API_KEY', 'env-key')
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
   })
 
-  it('deletes the config file', async () => {
-    mockUnlink.mockResolvedValue(undefined)
+  it('uses the environment until a key is saved, then the saved one, and nothing when disabled', async () => {
+    const store = await import('./store')
 
-    const { clearErrorAnalysisConfig } = await import('./store')
+    await expect(store.getTypesafeApiKey()).resolves.toBe('env-key')
+    const source = async () =>
+      (await store.getErrorAnalysisStatus()).typesafe.source
+    expect(await source()).toBe('env')
 
-    await clearErrorAnalysisConfig()
+    await store.saveTypesafeConfig({ apiKey: 'saved-key', enabled: true })
+    expect(await source()).toBe('settings')
+    expect(writtenStore().typesafe?.apiKey).toBe('encrypted:saved-key')
+    await expect(store.getTypesafeApiKey()).resolves.toBe('saved-key')
 
-    expect(mockUnlink).toHaveBeenCalledWith(expect.any(String))
-  })
+    // Toggling without a key keeps the saved one.
+    await store.saveTypesafeConfig({ enabled: false })
+    await expect(store.getTypesafeApiKey()).resolves.toBeNull()
+    expect(await source()).toBeNull()
+    expect(writtenStore().typesafe?.apiKey).toBe('encrypted:saved-key')
 
-  it('does not throw when the file is already missing', async () => {
-    mockUnlink.mockRejectedValue(enoent())
-
-    const { clearErrorAnalysisConfig } = await import('./store')
-
-    await expect(clearErrorAnalysisConfig()).resolves.toBeUndefined()
-  })
-
-  it('re-throws unexpected errors', async () => {
-    const permissionError = new Error('EACCES') as NodeJS.ErrnoException
-    permissionError.code = 'EACCES'
-    mockUnlink.mockRejectedValue(permissionError)
-
-    const { clearErrorAnalysisConfig } = await import('./store')
-
-    await expect(clearErrorAnalysisConfig()).rejects.toThrow('EACCES')
+    await store.saveTypesafeConfig(null)
+    await expect(store.getTypesafeApiKey()).resolves.toBe('env-key')
   })
 })

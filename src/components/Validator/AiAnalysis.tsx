@@ -1,13 +1,18 @@
 import { css } from '@emotion/react'
-import { Box, Button, Callout, Dialog, Flex, Spinner } from '@radix-ui/themes'
+import { Button, Dialog } from '@radix-ui/themes'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangleIcon, SparklesIcon } from 'lucide-react'
+import { SparklesIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { SimpleMarkdown } from '@/components/Assistant/SimpleMarkdown'
-import { AnalyzeFailureRequest } from '@/handlers/ai/errorAnalysis/types'
+import { AssistantAuthGate } from '@/components/Assistant/AssistantAuthGate'
+import {
+  AnalysisEngine,
+  AnalyzeFailureRequest,
+} from '@/handlers/ai/errorAnalysis/types'
 import { useAssistantAuthStatus } from '@/hooks/useAssistantAuth'
 import { useStudioUIStore } from '@/store/ui'
+
+import { AiAnalysisReport } from './AiAnalysisReport/AiAnalysisReport'
 
 interface AiAnalysisProps {
   /**
@@ -22,6 +27,13 @@ interface AiAnalysisProps {
    */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** 'jev' runs TypeSafe Jev alone; its button hides until Settings enables it. */
+  engine?: AnalysisEngine
+}
+
+const TITLE: Record<AnalysisEngine, string> = {
+  ai: 'AI analysis',
+  jev: 'AI Jev',
 }
 
 /**
@@ -32,6 +44,7 @@ export function AiAnalysis({
   request,
   open: openProp,
   onOpenChange,
+  engine = 'ai',
 }: AiAnalysisProps) {
   const [ownOpen, setOwnOpen] = useState(false)
   const controlled = openProp !== undefined
@@ -43,8 +56,8 @@ export function AiAnalysis({
     queryFn: window.studio.ai.errorAnalysisGetStatus,
   })
 
-  // The analysis runs on the Grafana Assistant unless a custom provider is
-  // saved, so either one is enough to offer the button.
+  // AI runs on the Grafana Assistant unless a custom provider is saved; Jev
+  // needs only its own key.
   const { data: assistant } = useAssistantAuthStatus()
 
   const openSettingsDialog = useStudioUIStore(
@@ -55,43 +68,50 @@ export function AiAnalysis({
     mutationFn: window.studio.ai.errorAnalysisAnalyzeFailure,
   })
 
-  const configured = status?.configured || assistant?.authenticated
+  const configured =
+    engine === 'jev'
+      ? !!status?.typesafe.source
+      : status?.configured || assistant?.authenticated
   const result = analyze.data
 
+  // Jev has nothing to sign into — its key lives in Settings. Grafana AI
+  // signs in right inside the dialog instead (see AssistantAuthGate below).
+  const needsSettings = engine === 'jev' && status !== undefined && !configured
+
   const handleClick = () => {
-    // Without a provider there is nothing to call — send them to settings.
-    if (!configured) {
+    if (needsSettings) {
       openSettingsDialog('aiProvider')
 
       return
     }
 
     setOpen(true)
-    analyze.mutate(request)
   }
 
-  // Opening from outside has to start the run the button would have started.
-  // Keyed on `open` alone, so it fires once per opening rather than on every
-  // render of a fresh request object.
+  // One place starts the run: on opening once configured, or the moment the
+  // sign-in inside the dialog completes. Opening from outside (a menu item)
+  // lands here too.
   useEffect(() => {
-    if (!controlled || !open) {
+    if (!open) {
       return
     }
 
-    if (!configured) {
+    if (needsSettings) {
       openSettingsDialog('aiProvider')
       setOpen(false)
 
       return
     }
 
-    analyze.mutate(request)
+    if (configured) {
+      analyze.mutate({ request, engine })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controlled, open])
+  }, [open, configured])
 
   return (
     <>
-      {!controlled && (
+      {!controlled && (engine === 'ai' || configured) && (
         <Button
           type="button"
           size="2"
@@ -101,49 +121,32 @@ export function AiAnalysis({
           onClick={handleClick}
         >
           <SparklesIcon size={14} />
-          AI analysis
+          {TITLE[engine]}
         </Button>
       )}
 
       <Dialog.Root open={open} onOpenChange={setOpen}>
-        <Dialog.Content maxWidth="800px" width="90vw">
-          <Dialog.Title size="4">
-            <Flex align="center" gap="2">
-              <SparklesIcon size={16} />
-              AI analysis
-            </Flex>
-          </Dialog.Title>
-          <Box
-            css={css`
-              max-height: 60vh;
-              overflow: auto;
-            `}
+        <Dialog.Content
+          maxWidth="1080px"
+          width="90vw"
+          aria-describedby={undefined}
+          css={css`
+            padding: 0;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+          `}
+        >
+          <AiAnalysisReport
+            title={TITLE[engine]}
+            request={request}
+            result={result}
+            pending={analyze.isPending}
           >
-            {analyze.isPending && (
-              <Flex align="center" gap="2" py="4">
-                <Spinner />
-                Analyzing this run…
-              </Flex>
+            {engine === 'ai' && !configured && (
+              <AssistantAuthGate>{null}</AssistantAuthGate>
             )}
-
-            {result && 'error' in result && (
-              <Callout.Root size="1" color="red">
-                <Callout.Icon>
-                  <AlertTriangleIcon size={16} />
-                </Callout.Icon>
-                <Callout.Text>{result.error}</Callout.Text>
-              </Callout.Root>
-            )}
-
-            {!analyze.isPending && result && 'text' in result && (
-              <SimpleMarkdown text={result.text} />
-            )}
-          </Box>
-          <Flex justify="end" mt="3">
-            <Dialog.Close>
-              <Button variant="soft">Close</Button>
-            </Dialog.Close>
-          </Flex>
+          </AiAnalysisReport>
         </Dialog.Content>
       </Dialog.Root>
     </>

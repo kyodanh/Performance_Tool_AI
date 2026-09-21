@@ -1,7 +1,14 @@
 import { Button, DropdownMenu } from '@radix-ui/themes'
-import { ClipboardCopyIcon, FileTextIcon, SparklesIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import {
+  ClipboardCopyIcon,
+  FileTextIcon,
+  ScanSearchIcon,
+  SparklesIcon,
+} from 'lucide-react'
 import { useState } from 'react'
 
+import { AI_PROVIDER_QUERY_KEY } from '@/components/Settings/AiProviderForm'
 import { AiAnalysis } from '@/components/Validator/AiAnalysis'
 import {
   ExportReportButton,
@@ -35,7 +42,19 @@ export function AnalysisActions({
 }: AnalysisActionsProps) {
   const showToast = useToast()
   const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [jevOpen, setJevOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+
+  const { data: status } = useQuery({
+    queryKey: AI_PROVIDER_QUERY_KEY,
+    queryFn: window.studio.ai.errorAnalysisGetStatus,
+  })
+
+  const activeProvider = status?.providers.find(
+    (provider) => provider.id === status.activeId
+  )
+  // Jev's item follows Settings → AI: shown only while a key is enabled.
+  const jevEnabled = !!status?.typesafe.source
 
   const handleCopy = async () => {
     if (run === null) {
@@ -61,8 +80,14 @@ export function AnalysisActions({
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
           <DropdownMenu.Item onSelect={() => setAnalysisOpen(true)}>
-            <SparklesIcon size={14} /> AI analysis
+            <SparklesIcon size={14} /> AI analysis (
+            {activeProvider?.name ?? 'Grafana AI · k6'})
           </DropdownMenu.Item>
+          {jevEnabled && (
+            <DropdownMenu.Item onSelect={() => setJevOpen(true)}>
+              <ScanSearchIcon size={14} /> AI Jev
+            </DropdownMenu.Item>
+          )}
           <DropdownMenu.Item onSelect={() => void handleCopy()}>
             <ClipboardCopyIcon size={14} /> Copy for AI
           </DropdownMenu.Item>
@@ -80,6 +105,12 @@ export function AnalysisActions({
         request={aiRequest}
         open={analysisOpen}
         onOpenChange={setAnalysisOpen}
+      />
+      <AiAnalysis
+        engine="jev"
+        request={aiRequest}
+        open={jevOpen}
+        onOpenChange={setJevOpen}
       />
       <ExportReportButton
         stats={run?.stats ?? null}

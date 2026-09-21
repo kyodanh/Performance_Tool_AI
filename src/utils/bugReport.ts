@@ -10,6 +10,6 @@ export function reportNewIssue() {
   })
 
   return shell.openExternal(
-    `https://github.com/grafana/k6-studio/issues/new?${params.toString()}`
+    `https://github.com/kyodanh/Performance_Tool_AI/issues/new?${params.toString()}`
   )
 }

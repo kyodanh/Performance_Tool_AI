@@ -14,8 +14,8 @@ export const TelemetrySettings = () => {
     <SettingsSection>
       <Flex gap="2" mb="4">
         <Text size="2" as="label">
-          Grafana k6 Studio collects anonymous telemetry data to improve
-          performance and user experience.{' '}
+          LoadPilot inherits Grafana k6 Studio&apos;s anonymous telemetry, which
+          is sent to Grafana Labs.{' '}
           <ExternalLink href="https://grafana.com/docs/k6-studio/set-up/usage-collection/">
             Learn more.
           </ExternalLink>

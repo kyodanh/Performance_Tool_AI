@@ -49,7 +49,7 @@ export function ErrorElement() {
         >
           We apologize for the inconvenience. Please help us improve our
           application by reporting this issue on{' '}
-          <ExternalLink href="https://github.com/grafana/k6-studio/issues">
+          <ExternalLink href="https://github.com/kyodanh/Performance_Tool_AI/issues">
             GitHub
           </ExternalLink>{' '}
           and attaching the tail of{' '}

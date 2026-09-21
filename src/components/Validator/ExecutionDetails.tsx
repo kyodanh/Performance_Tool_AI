@@ -141,6 +141,8 @@ const tabPillStyles = css`
 
 const aiButtonStyles = css`
   flex-shrink: 0;
+  display: flex;
+  gap: var(--space-2);
 `
 
 type Tab =
@@ -228,6 +230,14 @@ export function ExecutionDetails({
 
   const handleCopy = useTrackScriptCopy(script, 'debugger')
 
+  const aiRequest = {
+    checks: resolvedChecks.filter((check) => check.fails > 0),
+    errors: stats?.errors ?? [],
+    requestStats: stats?.requestStats ?? [],
+    logs,
+    summary: runSummary(stats),
+  }
+
   return (
     <Tabs.Root
       value={selectedTab}
@@ -267,15 +277,8 @@ export function ExecutionDetails({
         </Tabs.List>
 
         <div css={aiButtonStyles}>
-          <AiAnalysis
-            request={{
-              checks: resolvedChecks.filter((check) => check.fails > 0),
-              errors: stats?.errors ?? [],
-              requestStats: stats?.requestStats ?? [],
-              logs,
-              summary: runSummary(stats),
-            }}
-          />
+          <AiAnalysis request={aiRequest} />
+          <AiAnalysis engine="jev" request={aiRequest} />
         </div>
       </div>
 

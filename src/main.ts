@@ -1,3 +1,4 @@
+import './main/userDataPath'
 import * as Sentry from '@sentry/electron/main'
 import { app, autoUpdater, BrowserWindow, nativeTheme } from 'electron'
 import log from 'electron-log/main'
@@ -33,6 +34,16 @@ import { setupProjectStructure } from './utils/workspace'
 // which Electron surfaces as a crash dialog.
 process.stdout?.on('error', () => {})
 process.stderr?.on('error', () => {})
+
+// Dev only: `pnpm start` runs from the project root, where a gitignored .env
+// can hold local keys (TYPESAFE_API_KEY). Shell variables win over the file.
+if (process.env.NODE_ENV === 'development') {
+  try {
+    process.loadEnvFile()
+  } catch {
+    // no .env — nothing to load
+  }
+}
 
 if (process.env.NODE_ENV !== 'development') {
   // initialize Sentry first so the autoUpdater error listener below can report
@@ -84,7 +95,7 @@ async function initializeApp() {
   if (getPlatform() === 'mac') {
     app.dock?.setIcon(icon)
   }
-  app.setName('Grafana k6 Studio')
+  app.setName('LoadPilot')
 
   // clean leftover proxies if any, this might happen on windows
   await cleanUpProxies()

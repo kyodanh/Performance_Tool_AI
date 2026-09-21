@@ -34,7 +34,7 @@ export function UpstreamProxySettings() {
         name="proxy.url"
         label="Server URL"
         errors={errors}
-        hint="Where Grafana k6 Studio should forward requests to"
+        hint="Where LoadPilot should forward requests to"
         hintType="text"
       >
         <TextField.Root

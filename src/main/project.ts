@@ -89,7 +89,7 @@ export async function openProject(browserWindow: BrowserWindow) {
   if (!(await exists(path.join(folder, 'Generators')))) {
     const { response } = await showMessageBox(browserWindow, {
       type: 'warning',
-      message: `"${path.basename(folder)}" is not a k6 Studio project`,
+      message: `"${path.basename(folder)}" is not a LoadPilot project`,
       detail:
         'It has no Generators folder. Opening it creates the project folders and starts with an empty workspace.',
       buttons: ['Open anyway', 'Cancel'],

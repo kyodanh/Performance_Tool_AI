@@ -141,7 +141,7 @@ export function EventDrawer({ open, events, onOpenChange }: EventDrawerProps) {
                 `}
               >
                 <ToolBoxLogo size={24} />
-                <span>k6 Studio</span>
+                <span>LoadPilot</span>
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Close event list"

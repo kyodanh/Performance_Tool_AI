@@ -104,7 +104,7 @@ const config: ForgeConfig = {
     postMake: getPostMakeHook(),
   },
   packagerConfig: {
-    executableName: 'k6-studio',
+    executableName: 'loadpilot',
     icon: './resources/icons/logo',
     asar: true,
     extraResource: [

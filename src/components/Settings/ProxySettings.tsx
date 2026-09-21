@@ -35,7 +35,7 @@ export const ProxySettings = () => {
         name="proxy.port"
         label="Port number"
         errors={errors}
-        hint="What port number Grafana k6 Studio proxy should listen to in this computer (between 1 and 65535)"
+        hint="What port number LoadPilot proxy should listen to in this computer (between 1 and 65535)"
         hintType="text"
       >
         <TextField.Root
@@ -57,8 +57,7 @@ export const ProxySettings = () => {
                 checked={field.value}
                 onCheckedChange={field.onChange}
               />{' '}
-              Allow Grafana k6 Studio to find an available port if this port is
-              in use
+              Allow LoadPilot to find an available port if this port is in use
             </Text>
           )}
         />
@@ -68,7 +67,7 @@ export const ProxySettings = () => {
         label="Proxy mode"
         name="proxy.mode"
         errors={errors}
-        hint="How Grafana k6 Studio proxy should handle requests"
+        hint="How LoadPilot proxy should handle requests"
         hintType="text"
       >
         <ControlledRadioGroup

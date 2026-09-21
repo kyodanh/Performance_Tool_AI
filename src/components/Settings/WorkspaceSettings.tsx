@@ -50,7 +50,7 @@ export const WorkspaceSettings = () => {
               own folder, or <Code>File ▸ Open Project…</Code> to switch to one.
             </Text>
             <Text>
-              k6 Studio restarts when you switch — the file list, the open tabs
+              LoadPilot restarts when you switch — the file list, the open tabs
               and the recorder all follow the project.
             </Text>
           </Flex>

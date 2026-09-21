@@ -41,7 +41,7 @@ export function Home() {
             font-weight: 400;
           `}
         >
-          Discover what you can do with Grafana k6 Studio
+          Discover what you can do with LoadPilot
         </Heading>
         <Text
           css={css`
@@ -100,7 +100,7 @@ export function Home() {
       <Text size="1" mb="4">
         <Flex justify="center" align="center" gap="1" asChild>
           <ExternalLink href="https://grafana.com/docs/k6-studio/">
-            Learn more about Grafana k6 Studio <ExternalLinkIcon />
+            Based on Grafana k6 Studio (AGPL-3.0) <ExternalLinkIcon />
           </ExternalLink>
         </Flex>
       </Text>

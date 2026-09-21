@@ -1,0 +1,11 @@
+LoadPilot
+Copyright (c) 2026 DanhNC — modifications and extensions (Controller, load
+generator, Postman/JMeter/LoadRunner import-export, SLA, run comparison,
+AI error analysis).
+
+Based on Grafana k6 Studio — https://github.com/grafana/k6-studio
+Copyright (c) Grafana Labs.
+
+Licensed under the GNU Affero General Public License v3.0 (see LICENSE).
+"Grafana" and "k6" are trademarks of Grafana Labs; LoadPilot is not affiliated
+with or endorsed by Grafana Labs.

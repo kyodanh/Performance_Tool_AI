@@ -1,191 +1,132 @@
-import { Button, Callout, Flex, Text, TextField } from '@radix-ui/themes'
+import { Button, Flex, Select, Separator, Text } from '@radix-ui/themes'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangleIcon, CheckIcon } from 'lucide-react'
+import { PencilIcon, PlusIcon, TrashIcon } from 'lucide-react'
 import { useState } from 'react'
 
-import { FieldGroup } from '@/components/Form'
+import { AiProviderSummary } from '@/handlers/ai/errorAnalysis/types'
 
+import { AI_PROVIDER_QUERY_KEY, AiProviderForm } from './AiProviderForm'
 import { SettingsSection } from './SettingsSection'
+import { TypesafeSettings } from './TypesafeSettings'
 
-const QUERY_KEY = ['errorAnalysisProvider', 'status']
+/** Select's value for "no provider": items cannot carry an empty value. */
+const GRAFANA = 'grafana'
 
 export function ErrorAnalysisProviderSettings() {
   const queryClient = useQueryClient()
   const { data: status } = useQuery({
-    queryKey: QUERY_KEY,
+    queryKey: AI_PROVIDER_QUERY_KEY,
     queryFn: window.studio.ai.errorAnalysisGetStatus,
   })
 
-  const [baseUrl, setBaseUrl] = useState('')
-  const [model, setModel] = useState('')
-  const [apiKey, setApiKey] = useState('')
+  /** 'new' adds a provider; null shows no form. */
+  const [editing, setEditing] = useState<AiProviderSummary | 'new' | null>(null)
 
-  const testConnection = useMutation({
-    mutationFn: window.studio.ai.errorAnalysisTestConnection,
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: AI_PROVIDER_QUERY_KEY })
+
+  const setActive = useMutation({
+    mutationFn: window.studio.ai.errorAnalysisSetActiveProvider,
+    onSuccess: refresh,
   })
 
-  const saveConfig = useMutation({
-    mutationFn: window.studio.ai.errorAnalysisSaveConfig,
-    onSuccess: async (result) => {
-      if ('error' in result) {
-        return
-      }
-      setApiKey('')
-      testConnection.reset()
-      await queryClient.invalidateQueries({ queryKey: QUERY_KEY })
-    },
+  const deleteProvider = useMutation({
+    mutationFn: window.studio.ai.errorAnalysisDeleteProvider,
+    onSuccess: refresh,
   })
 
-  const clearConfig = useMutation({
-    mutationFn: window.studio.ai.errorAnalysisClearConfig,
-    onSuccess: async () => {
-      setBaseUrl('')
-      setModel('')
-      setApiKey('')
-      testConnection.reset()
-      await queryClient.invalidateQueries({ queryKey: QUERY_KEY })
-    },
-  })
-
-  const effectiveBaseUrl = baseUrl || status?.baseUrl || ''
-  const effectiveModel = model || status?.model || ''
-  const canTestOrSave =
-    effectiveBaseUrl.trim() !== '' &&
-    effectiveModel.trim() !== '' &&
-    // A key is required the first time; once configured, an empty field
-    // means "keep the currently saved key".
-    (apiKey.trim() !== '' || status?.configured)
+  const providers = status?.providers ?? []
 
   return (
     <SettingsSection>
-      <Flex gap="2" mb="4">
-        <Text size="2" as="label">
-          Used by the &quot;Analyze with AI&quot; button in the Validator to
-          explain test failures. Works with any OpenAI-compatible endpoint
-          (self-hosted gateway, Azure, LiteLLM, Ollama, etc). Once configured it
-          can also drive guided setup instead of the Grafana Assistant — pick it
-          from the dropdown next to &quot;Configure with Assistant&quot;.
+      <Text size="2" mb="4">
+        The AI that explains test runs (AI analysis) and, when picked next to
+        &quot;Configure with Assistant&quot;, drives guided setup. Any
+        OpenAI-compatible endpoint works (llm-mux, LiteLLM, Azure, Ollama…).
+      </Text>
+
+      <Flex align="center" gap="3" mb="4">
+        <Text size="2" weight="bold">
+          Active AI
         </Text>
+        <Select.Root
+          value={status?.activeId ?? GRAFANA}
+          onValueChange={(value) =>
+            setActive.mutate(value === GRAFANA ? null : value)
+          }
+        >
+          <Select.Trigger />
+          <Select.Content>
+            <Select.Item value={GRAFANA}>Grafana Assistant</Select.Item>
+            {providers.map((provider) => (
+              <Select.Item key={provider.id} value={provider.id}>
+                {provider.name} ({provider.model})
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
       </Flex>
 
-      {status?.configured && (
-        <Callout.Root size="1" mb="4">
-          <Callout.Icon>
-            <CheckIcon size={16} />
-          </Callout.Icon>
-          <Callout.Text>
-            Configured — {status.baseUrl} ({status.model})
-          </Callout.Text>
-        </Callout.Root>
-      )}
-
-      <FieldGroup name="baseUrl" label="Base URL">
-        <TextField.Root
-          placeholder="https://api.example.com/v1"
-          value={baseUrl}
-          onChange={(event) => setBaseUrl(event.target.value)}
-        />
-      </FieldGroup>
-
-      <FieldGroup name="model" label="Model">
-        <TextField.Root
-          placeholder="gpt-4o-mini"
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        />
-      </FieldGroup>
-
-      <FieldGroup
-        name="apiKey"
-        label="API Key"
-        hint={
-          status?.configured
-            ? 'Leave blank to keep the currently saved key.'
-            : undefined
-        }
-        hintType="text"
-      >
-        <TextField.Root
-          type="password"
-          placeholder={status?.configured ? '••••••••' : 'API key'}
-          value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
-        />
-      </FieldGroup>
-
-      {saveConfig.data && 'error' in saveConfig.data && (
-        <Callout.Root size="1" mb="4" color="red">
-          <Callout.Icon>
-            <AlertTriangleIcon size={16} />
-          </Callout.Icon>
-          <Callout.Text>{saveConfig.data.error}</Callout.Text>
-        </Callout.Root>
-      )}
-
-      {testConnection.data && (
-        <Callout.Root
-          size="1"
-          mb="4"
-          color={testConnection.data.ok ? 'green' : 'red'}
-        >
-          <Callout.Icon>
-            {testConnection.data.ok ? (
-              <CheckIcon size={16} />
-            ) : (
-              <AlertTriangleIcon size={16} />
-            )}
-          </Callout.Icon>
-          <Callout.Text>
-            {testConnection.data.ok
-              ? 'Connection successful.'
-              : testConnection.data.message}
-          </Callout.Text>
-        </Callout.Root>
-      )}
-
-      <Flex gap="3">
-        <Button
-          type="button"
-          variant="outline"
-          loading={testConnection.isPending}
-          disabled={!canTestOrSave}
-          onClick={() =>
-            testConnection.mutate({
-              baseUrl: effectiveBaseUrl,
-              model: effectiveModel,
-              apiKey: apiKey || undefined,
-            })
-          }
-        >
-          Test connection
-        </Button>
-        <Button
-          type="button"
-          loading={saveConfig.isPending}
-          disabled={!canTestOrSave}
-          onClick={() =>
-            saveConfig.mutate({
-              baseUrl: effectiveBaseUrl,
-              model: effectiveModel,
-              // Omitted apiKey tells the main process to keep the saved one.
-              apiKey: apiKey || undefined,
-            })
-          }
-        >
-          Save
-        </Button>
-        {status?.configured && (
+      {providers.map((provider) => (
+        <Flex key={provider.id} align="center" gap="2" mb="2">
+          <Flex direction="column" flexGrow="1" minWidth="0">
+            <Text size="2" weight="medium">
+              {provider.name}
+            </Text>
+            <Text size="1" color="gray" truncate>
+              {provider.baseUrl} · {provider.model}
+            </Text>
+          </Flex>
           <Button
             type="button"
-            variant="outline"
-            color="red"
-            loading={clearConfig.isPending}
-            onClick={() => clearConfig.mutate()}
+            size="1"
+            variant="ghost"
+            aria-label={`Edit ${provider.name}`}
+            onClick={() => setEditing(provider)}
           >
-            Clear
+            <PencilIcon size={14} />
           </Button>
-        )}
-      </Flex>
+          <Button
+            type="button"
+            size="1"
+            variant="ghost"
+            color="red"
+            aria-label={`Delete ${provider.name}`}
+            onClick={() => deleteProvider.mutate(provider.id)}
+          >
+            <TrashIcon size={14} />
+          </Button>
+        </Flex>
+      ))}
+
+      {editing === null ? (
+        <Flex mt="2">
+          <Button
+            type="button"
+            variant="soft"
+            onClick={() => setEditing('new')}
+          >
+            <PlusIcon size={14} />
+            Add provider
+          </Button>
+        </Flex>
+      ) : (
+        <Flex direction="column" mt="3">
+          <Text size="2" weight="bold" mb="2">
+            {editing === 'new' ? 'New provider' : `Edit ${editing.name}`}
+          </Text>
+          <AiProviderForm
+            // A fresh form per target, so fields never carry over.
+            key={editing === 'new' ? 'new' : editing.id}
+            provider={editing === 'new' ? undefined : editing}
+            onDone={() => setEditing(null)}
+          />
+        </Flex>
+      )}
+
+      <Separator size="4" my="5" />
+
+      {status && <TypesafeSettings typesafe={status.typesafe} />}
     </SettingsSection>
   )
 }

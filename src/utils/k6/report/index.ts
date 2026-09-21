@@ -109,7 +109,7 @@ function generalSection(stats: RunStats, meta: ReportMeta) {
     { label: 'Run Date', value: timestamp(start) },
     { label: 'Period', value: `${timestamp(start)} - ${timestamp(end)}` },
     { label: 'Run Duration', value: duration(stats.elapsed) },
-    { label: 'Tool', value: 'k6 Studio' },
+    { label: 'Tool', value: 'LoadPilot' },
   ])
 }
 

@@ -50,15 +50,22 @@ function slaLines(sla: Sla, verdict: SlaVerdict): string[] {
   ]
 }
 
-export function buildFailureAnalysisPrompt({
-  checks,
-  errors,
-  requestStats,
-  logs,
-  summary,
-  sla,
-  slaVerdict,
-}: AnalyzeFailureRequest): string {
+/**
+ * `triage` is the classifier's per-error cause (see typesafe/triageErrors),
+ * left out of the prompt when empty.
+ */
+export function buildFailureAnalysisPrompt(
+  {
+    checks,
+    errors,
+    requestStats,
+    logs,
+    summary,
+    sla,
+    slaVerdict,
+  }: AnalyzeFailureRequest,
+  triage: string[] = []
+): string {
   const failedChecks = checks
     .filter((check) => check.fails > 0)
     .slice(0, MAX_CHECKS)
@@ -85,6 +92,8 @@ export function buildFailureAnalysisPrompt({
     ...(failed ? FAILURE_INTENT : PERFORMANCE_INTENT),
     'Be concise and specific. Reference request names/URLs and numbers from the data, not generic advice.',
     // ponytail: hard-coded — the app has no locale setting to read.
+    // The dialog splits the answer on these headings into numbered steps.
+    'Format the answer as exactly three Markdown sections headed "## 1. <title>", "## 2. <title>" and "## 3. <title>", with short paragraphs or bullet lists under each.',
     'Answer in Vietnamese. Keep metric names, request names, URLs and k6 terms as they appear in the data.',
     '',
     '## Run summary',
@@ -114,6 +123,13 @@ export function buildFailureAnalysisPrompt({
           )
           .join('\n')
       : '(none)',
+    ...(triage.length > 0
+      ? [
+          '',
+          '## Error triage (classifier verdicts — weigh against the data, not as fact)',
+          triage.join('\n'),
+        ]
+      : []),
     '',
     '## Request timing / failures (worst first)',
     worstRequests.length > 0

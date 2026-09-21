@@ -1,12 +1,14 @@
 import { ipcRenderer } from 'electron'
 
 import {
+  AnalysisEngine,
   AnalyzeFailureRequest,
   AnalyzeFailureResult,
   ErrorAnalysisHandler,
   ErrorAnalysisStatus,
   SaveConfigResult,
-  SaveErrorAnalysisConfigInput,
+  AiProviderInput,
+  SaveTypesafeInput,
   TestConnectionResult,
 } from './types'
 
@@ -16,22 +18,36 @@ export function errorAnalysisGetStatus() {
   ) as Promise<ErrorAnalysisStatus>
 }
 
-export function errorAnalysisSaveConfig(config: SaveErrorAnalysisConfigInput) {
+export function errorAnalysisSaveConfig(config: AiProviderInput) {
   return ipcRenderer.invoke(
     ErrorAnalysisHandler.SaveConfig,
     config
   ) as Promise<SaveConfigResult>
 }
 
-export function errorAnalysisClearConfig() {
+export function errorAnalysisDeleteProvider(id: string) {
   return ipcRenderer.invoke(
-    ErrorAnalysisHandler.ClearConfig
+    ErrorAnalysisHandler.DeleteProvider,
+    id
   ) as Promise<ErrorAnalysisStatus>
 }
 
-export function errorAnalysisTestConnection(
-  config: SaveErrorAnalysisConfigInput
-) {
+/** null selects the Grafana Assistant. */
+export function errorAnalysisSetActiveProvider(id: string | null) {
+  return ipcRenderer.invoke(
+    ErrorAnalysisHandler.SetActiveProvider,
+    id
+  ) as Promise<ErrorAnalysisStatus>
+}
+
+export function errorAnalysisSaveTypesafe(input: SaveTypesafeInput) {
+  return ipcRenderer.invoke(
+    ErrorAnalysisHandler.SaveTypesafe,
+    input
+  ) as Promise<ErrorAnalysisStatus>
+}
+
+export function errorAnalysisTestConnection(config: AiProviderInput) {
   return ipcRenderer.invoke(
     ErrorAnalysisHandler.TestConnection,
     config
@@ -45,9 +61,16 @@ export function errorAnalysisSetUseForAssistant(useForAssistant: boolean) {
   ) as Promise<ErrorAnalysisStatus>
 }
 
-export function errorAnalysisAnalyzeFailure(request: AnalyzeFailureRequest) {
+export function errorAnalysisAnalyzeFailure({
+  request,
+  engine = 'ai',
+}: {
+  request: AnalyzeFailureRequest
+  engine?: AnalysisEngine
+}) {
   return ipcRenderer.invoke(
     ErrorAnalysisHandler.Analyze,
-    request
+    request,
+    engine
   ) as Promise<AnalyzeFailureResult>
 }

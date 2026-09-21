@@ -182,7 +182,7 @@ export function ImportVuGenDialog({
 }
 
 function describeSkipped(skipped: number) {
-  return `${count(skipped, 'step')} skipped: a relative URL with no referer to resolve it, or a method k6 Studio does not support.`
+  return `${count(skipped, 'step')} skipped: a relative URL with no referer to resolve it, or a method LoadPilot does not support.`
 }
 
 function count(value: number, noun: string) {

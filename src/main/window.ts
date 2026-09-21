@@ -54,9 +54,7 @@ function getFocusedRoot() {
  * stay tellable apart — the default workspace shows no name, there is only one.
  */
 function buildWindowTitle(root: string) {
-  const base = DEV_GIT_BRANCH
-    ? `Grafana k6 Studio [${DEV_GIT_BRANCH}]`
-    : 'Grafana k6 Studio'
+  const base = DEV_GIT_BRANCH ? `LoadPilot [${DEV_GIT_BRANCH}]` : 'LoadPilot'
 
   if (path.equal(root, getDefaultWorkspaceRoot())) {
     return base

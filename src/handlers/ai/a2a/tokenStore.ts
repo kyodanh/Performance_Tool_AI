@@ -103,7 +103,10 @@ export async function getAssistantTokens(
       refreshExpiresAt: encrypted.refreshExpiresAt,
     }
   } catch (error) {
+    // Undecryptable (e.g. the keychain key changed with the app name): drop the
+    // entry so the UI reports "not connected" and the user can sign in again.
     log.warn('[TokenStore] Failed to decrypt tokens for stack', stackId, error)
+    await clearAssistantTokens(stackId).catch(() => {})
     return null
   }
 }
@@ -141,6 +144,5 @@ export async function clearAssistantTokens(stackId: string): Promise<void> {
 }
 
 export async function hasAssistantTokens(stackId: string): Promise<boolean> {
-  const store = await readStore()
-  return stackId in store.tokens
+  return (await getAssistantTokens(stackId)) !== null
 }

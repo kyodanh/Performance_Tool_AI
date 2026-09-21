@@ -19,8 +19,8 @@ export function ProxyHealthWarning() {
       <Callout.Text>
         <strong>Proxy health check failed</strong>
         <br />
-        Grafana k6 Studio cannot establish connection to the Internet. Unless
-        this is expected due to your internal network configuration, check{' '}
+        LoadPilot cannot establish connection to the Internet. Unless this is
+        expected due to your internal network configuration, check{' '}
         <TextButton onClick={() => openSettingsDialog('proxy')}>
           proxy settings
         </TextButton>{' '}
@@ -36,7 +36,7 @@ export function ProxyHealthWarning() {
 
 export function ProxyHealthBadge() {
   return (
-    <Tooltip content="Grafana k6 Studio cannot establish connection to the Internet. Unless this is expected due to your internal network configuration, check your proxy settings.">
+    <Tooltip content="LoadPilot cannot establish connection to the Internet. Unless this is expected due to your internal network configuration, check your proxy settings.">
       <Badge color="orange" ml="2">
         <TriangleAlert />
         Proxy health check failed
