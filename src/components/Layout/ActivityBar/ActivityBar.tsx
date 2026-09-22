@@ -97,7 +97,7 @@ export function ActivityBar({ activeTab, onTabChange }: ActivityBarProps) {
           active={activeTab === 'controller'}
           onClick={() => {
             onTabChange('controller')
-            navigate(getRoutePath('controller'))
+            void navigate(getRoutePath('controller'))
           }}
         />
         <VerticalTabButton
@@ -106,7 +106,7 @@ export function ActivityBar({ activeTab, onTabChange }: ActivityBarProps) {
           active={activeTab === 'analysis'}
           onClick={() => {
             onTabChange('analysis')
-            navigate(routeMap.analysis)
+            void navigate(routeMap.analysis)
           }}
         />
       </Flex>

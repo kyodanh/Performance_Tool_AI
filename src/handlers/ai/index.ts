@@ -44,7 +44,7 @@ export async function handleStreamChat(
 
   try {
     const messages = sanitizeModelMessages(
-      convertToModelMessages(request.messages)
+      await convertToModelMessages(request.messages)
     )
 
     // The user can point the Assistant at their own OpenAI-compatible

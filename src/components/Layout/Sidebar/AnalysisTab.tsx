@@ -99,7 +99,7 @@ export function AnalysisTab({ onCollapseSidebar }: AnalysisTabProps) {
 
                     // The list this was opened from is gone with it.
                     if (testName === active) {
-                      navigate(routeMap.analysis)
+                      void navigate(routeMap.analysis)
                     }
                   }}
                 >

@@ -48,7 +48,7 @@ export function SaveRunButton({ testName, stats }: SaveRunButtonProps) {
     // one just started later than every saved run — no need to spell out the
     // test name, which the save sanitizes for the file system anyway.
     await queryClient.invalidateQueries({ queryKey: ['run-results'] })
-    navigate(routeMap.analysis)
+    void navigate(routeMap.analysis)
   }
 
   return (
