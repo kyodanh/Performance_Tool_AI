@@ -1,0 +1,56 @@
+name: Sync upstream
+
+# Opens a PR merging grafana/k6-studio main into this repo. Never merges into
+# main by itself: local features must go through ci.yml and a human review.
+on:
+  schedule:
+    - cron: '0 2 * * 1' # Mondays 02:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      # PAT, not GITHUB_TOKEN: upstream edits .github/workflows (needs the
+      # Workflows scope) and PRs opened by GITHUB_TOKEN don't trigger ci.yml.
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+      - name: Merge upstream into a PR branch
+        run: |
+          git remote add upstream https://github.com/grafana/k6-studio.git
+          git fetch upstream main
+
+          if [ -z "$(git rev-list HEAD..upstream/main)" ]; then
+            echo "Already up to date with upstream"
+            exit 0
+          fi
+
+          SHA=$(git rev-parse --short=8 upstream/main)
+          BRANCH="chore/merge-upstream-$SHA"
+          if git ls-remote --exit-code origin "$BRANCH" >/dev/null; then
+            echo "$BRANCH already exists"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+
+          if git merge upstream/main --no-edit; then
+            git push -u origin "$BRANCH"
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore: Merge upstream grafana/k6-studio ($SHA)" \
+              --body "$(printf 'Upstream commits:\n\n'; git log --format='- %h %s' HEAD^1..upstream/main)"
+          else
+            FILES=$(git diff --name-only --diff-filter=U)
+            git merge --abort
+            gh issue create \
+              --title "Upstream sync conflict ($SHA)" \
+              --body "$(printf 'Merging grafana/k6-studio %s conflicts in:\n\n%s\n\nResolve manually on a %s branch.' "$SHA" "$FILES" "$BRANCH")"
+          fi
