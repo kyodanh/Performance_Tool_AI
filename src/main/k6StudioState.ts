@@ -13,6 +13,7 @@ export type k6StudioState = {
   proxyStatus: ProxyStatus
   proxyEmitter: eventEmitter
   appSettings: AppSettings
+  settingsFallbackWarning: string | null
   currentProxyProcess: ProxyProcess | null
   wasProxyStoppedByClient: boolean
   proxyRetryCount: number
@@ -28,6 +29,7 @@ export function initialize() {
       ready: [void]
     }>(),
     appSettings: defaultSettings,
+    settingsFallbackWarning: null,
     currentProxyProcess: null,
     wasProxyStoppedByClient: false,
     proxyRetryCount: 0,

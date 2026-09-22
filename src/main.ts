@@ -20,7 +20,7 @@ import {
   launchProxyAndAttachEmitter,
   stopProxyProcess,
 } from './main/proxy'
-import { getSettings, initSettings } from './main/settings'
+import { initSettings } from './main/settings'
 import { closeWatchers } from './main/watcher'
 import { createWindow } from './main/window'
 import { configureSystemProxy } from './services/http'
@@ -116,8 +116,9 @@ async function initializeApp() {
 
 app.whenReady().then(
   async () => {
-    await initSettings()
-    k6StudioState.appSettings = await getSettings()
+    const { settings, fallbackWarning } = await initSettings()
+    k6StudioState.appSettings = settings
+    k6StudioState.settingsFallbackWarning = fallbackWarning ?? null
     nativeTheme.themeSource = k6StudioState.appSettings.appearance.theme
 
     // Must happen before the folders are created, the watcher starts or any
