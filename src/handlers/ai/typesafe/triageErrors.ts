@@ -28,6 +28,8 @@ const CAUSES = {
     'A bug or failure in the backend application itself: 500 answered quickly, not a capacity problem',
   network: 'Connectivity problem: DNS, connection refused/reset, TLS handshake',
   script: 'A bug in the k6 script: wrong URL, method, body, or a JS exception',
+  client_resource:
+    'The machine running k6 itself is out of resources — CPU, memory, open file descriptors, ephemeral ports, or network bandwidth — so failures reflect the load generator, not the target’s capacity',
 }
 
 type Cause = keyof typeof CAUSES
@@ -40,6 +42,7 @@ const LABELS: Record<Cause, string> = {
   server_error: 'Lỗi server',
   network: 'Mạng',
   script: 'Lỗi script',
+  client_resource: 'Máy chạy test cạn tài nguyên',
 }
 
 /** Causes under this share are noise and left out of the line. */
@@ -101,13 +104,17 @@ function facts(
   const same = requestStats.filter(
     (stats) => stats.name === error.url && stats.group === error.group
   )
+  const n = Number(error.code)
   // Stats are split per status; an HTTP error (1000 + status) belongs to its
-  // own row, not to the successes of the same request.
-  const status = String(Number(error.code) - 1000)
+  // own row, not to the successes of the same request. Anything else
+  // (network/DNS/TCP/TLS/HTTP2) never got a response — k6 tags that "0".
+  // Falling back to an arbitrary row of `same` would show a *successful*
+  // request's timings under a request that failed outright.
+  const status = n >= 1400 && n < 1600 ? String(n - 1000) : '0'
 
   return {
     meaning: explainK6Code(error.code),
-    request: same.find((stats) => stats.status === status) ?? same[0],
+    request: same.find((stats) => stats.status === status),
   }
 }
 
@@ -166,6 +173,31 @@ export interface Triage {
 
 const NO_TRIAGE: Triage = { lines: [], rows: [], confidence: 0 }
 
+/**
+ * The answer's causes, most likely first. `choice` always leads — it's Jev's
+ * actual verdict, not just whichever probability happens to sort highest —
+ * and stays even under the noise threshold, since hiding the chosen answer
+ * would be worse than showing a low share for it.
+ */
+function causeBreakdown(
+  answer: ChoiceAnswer
+): { cause: Cause; label: string; share: number }[] {
+  const rest = (Object.entries(answer.probabilities) as [Cause, number][])
+    .filter(
+      ([cause, probability]) =>
+        cause !== answer.choice && probability >= MIN_SHARE
+    )
+    .sort(([, a], [, b]) => b - a)
+
+  return [
+    [answer.choice, answer.probabilities[answer.choice] ?? 0] as [
+      Cause,
+      number,
+    ],
+    ...rest,
+  ].map(([cause, share]) => ({ cause, label: LABELS[cause] ?? cause, share }))
+}
+
 function row(
   error: RunErrorGroup,
   requestStats: AnalyzeFailureRequest['requestStats'],
@@ -186,16 +218,7 @@ function row(
       avg: request.avg,
       max: request.max,
     },
-    causes: answer
-      ? (Object.entries(answer.probabilities) as [Cause, number][])
-          .filter(([, probability]) => probability >= MIN_SHARE)
-          .sort(([, a], [, b]) => b - a)
-          .map(([cause, share]) => ({
-            cause,
-            label: LABELS[cause] ?? cause,
-            share,
-          }))
-      : [],
+    causes: answer ? causeBreakdown(answer) : [],
     confidence: answer?.confidence ?? null,
   }
 }
@@ -286,12 +309,10 @@ export async function triageErrors(
         return `- ${shown}  \n  → không có kết quả`
       }
 
-      const shares = (Object.entries(answer.probabilities) as [Cause, number][])
-        .filter(([, probability]) => probability >= MIN_SHARE)
-        .sort(([, a], [, b]) => b - a)
+      const shares = causeBreakdown(answer)
         .map(
-          ([cause, probability], rank) =>
-            `${rank === 0 ? '**' : ''}${LABELS[cause] ?? cause} ${Math.round(probability * 100)}%${rank === 0 ? '**' : ''}`
+          ({ label, share }, rank) =>
+            `${rank === 0 ? '**' : ''}${label} ${Math.round(share * 100)}%${rank === 0 ? '**' : ''}`
         )
         .join(' · ')
 

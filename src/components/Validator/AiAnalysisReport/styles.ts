@@ -30,4 +30,5 @@ export const CAUSE_COLOR: Record<string, string> = {
   test_data: 'var(--blue-8)',
   network: 'var(--violet-8)',
   script: 'var(--plum-8)',
+  client_resource: 'var(--cyan-8)',
 }
