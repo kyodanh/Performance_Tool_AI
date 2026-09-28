@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -m 2 http://127.0.0.1:9224/json/version)",
+      "Bash(ps -Ao args=)",
+      "Bash(chmod +x scripts/launch-recorder-chrome.sh)",
+      "Bash(./scripts/launch-recorder-chrome.sh https://thinking-tester-contact-list.herokuapp.com/)",
+      "Bash(bash -x scripts/launch-recorder-chrome.sh)",
+      "Bash(echo \"rc=$?\")",
+      "Bash(bash -c 'set -euo pipefail; P=\"$\\(ps -Ao args= | sed -n \"s/.*k6-studio-proxy .*--listen-port \\\\\\([0-9]*\\\\\\).*/\\\\1/p\" | head -1\\)\"; echo \"PORT=[$P]\"')",
+      "Bash(bash -c 'P=\"$\\(ps -Ao args= | sed -n \"s/.*k6-studio-proxy .*--listen-port \\\\\\([0-9]*\\\\\\).*/\\\\1/p\" | head -1\\)\"; echo \"PORT=[$P]\"')",
+      "Bash(sed -i '' 's/ps -Ao args=/ps -Awwo args=/g' scripts/launch-recorder-chrome.sh && grep -n \"ps -A\" scripts/launch-recorder-chrome.sh)",
+      "Bash(bash -c 'ps -Awwo args= | grep \"[k]6-studio-proxy\" | head -1 | wc -c')",
+      "Bash(ps -Awwo args=)",
+      "Bash(bash -c 'ps -Awwo args= | grep -c \"[k]6-studio-proxy\"')",
+      "Bash(bash -c 'set -euo pipefail; ps -Awwo args= | sed -n \"s/.*k6-studio-proxy .*--listen-port \\\\\\([0-9]*\\\\\\).*/\\\\1/p\" | head -1')",
+      "Bash(bash /tmp/t.sh)",
+      "Bash(bash -c 'set -euo pipefail; ps -Awwo args= | grep -c \"[k]6-studio-proxy\"; ps -Awwo args= | grep \"[k]6-studio-proxy\" | head -1 | cut -c1-200')",
+      "Bash(bash -c 'ps -Awwo args= | sed -n '\"'\"'s/.*k6-studio-proxy .*--listen-port \\\\\\([0-9]*\\\\\\).*/\\\\1/p'\"'\"' | head -3')",
+      "Bash(echo \"[rc=$?]\")",
+      "Bash(bash -c 'ps -Awwo args= | sed -n '\"'\"'s/.*--listen-port \\\\\\([0-9][0-9]*\\\\\\).*/\\\\1/p'\"'\"' | head -3')",
+      "mcp__chrome-recorded__list_pages",
+      "Edit(/.claude/skills/record-flow/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/dannymacmini/k6-studio/scripts"
+    ]
+  }
+}
