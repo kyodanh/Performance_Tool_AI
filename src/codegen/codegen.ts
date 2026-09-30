@@ -314,6 +314,10 @@ export function generateVUCode(
     `
     let params
     let resp
+    // Set by a failed request or check. Like LoadRunner with "continue on
+    // error" off, the Vuser ends its iteration after the failing transaction
+    // instead of running the rest of the script.
+    let trans_failed = false
     let match
     let regex
     let url
@@ -368,6 +372,7 @@ export function generateGroupSnippet(
   return `group('${groupName}', function() {
     ${requestSnippets}
   });
+  if (trans_failed) return;
   ${thinkTime.sleepType === 'groups' ? `${generateSleep(thinkTime.timing)}` : ''}`
 }
 
@@ -437,6 +442,7 @@ export function generateSingleRequestSnippet(
     url = http.url${url}
     resp = http.request(${method}, url, ${content}, params)
     logServerError(resp)
+    if (resp.status === 0 || resp.status >= 400) trans_failed = true
   `
 
   return [params, ...before, main, generateChecks(checks), ...after].join('\n')
@@ -598,5 +604,5 @@ function generateChecks(checks: RequestSnippetSchema['checks']) {
   // request context on a check sample, so an untagged check reports as a bare
   // name (see `CheckStats.request`). `url.name` is the same value `http.url`
   // tags the request with, so the two join exactly.
-  return `check(resp, { ${checksString} }, { name: url.name })`
+  return `if (!check(resp, { ${checksString} }, { name: url.name })) trans_failed = true`
 }

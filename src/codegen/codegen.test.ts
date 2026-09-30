@@ -89,6 +89,10 @@ describe('Code generation', () => {
         execution.vu.tags['vu'] = execution.vu.idInTest
         let params
         let resp
+        // Set by a failed request or check. Like LoadRunner with "continue on
+        // error" off, the Vuser ends its iteration after the failing transaction
+        // instead of running the rest of the script.
+        let trans_failed = false
         let match
         let regex
         let url
@@ -430,6 +434,7 @@ describe('Code generation', () => {
         url = http.url\`/api/v1/users\`
         resp = http.request('GET', url, null, params)
         logServerError(resp)
+        if (resp.status === 0 || resp.status >= 400) trans_failed = true
       `
 
       const result = generateRequestSnippetsFromSchemas([schema], thinkTime)
@@ -600,6 +605,10 @@ describe('Code generation', () => {
         const expectedResult = await prettify(`
         let params
         let resp
+        // Set by a failed request or check. Like LoadRunner with "continue on
+        // error" off, the Vuser ends its iteration after the failing transaction
+        // instead of running the rest of the script.
+        let trans_failed = false
         let match
         let regex
         let url
@@ -614,6 +623,7 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/foo\`
           resp = http.request('POST', url, null, params)
           logServerError(resp)
+          if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
           var extractionError = undefined
           try {
@@ -663,6 +673,7 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/login?project_id=\${correlation_vars['correlation_0']}\`
           resp = http.request('POST', url, null, params)
           logServerError(resp)
+          if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
           var extractionError = undefined
           try {
@@ -682,6 +693,7 @@ describe('Code generation', () => {
             )
           }
         })
+        if (trans_failed) return
 
         group('two', function () {
           params = {
@@ -692,6 +704,7 @@ describe('Code generation', () => {
           url = http.url\`http://test.k6.io/api/v1/users/\${correlation_vars['correlation_2']}\`
           resp = http.request('GET', url, null, params)
           logServerError(resp)
+          if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
           params = {
           timeout: HTTP_TIMEOUT,
@@ -706,7 +719,9 @@ describe('Code generation', () => {
             params
           )
           logServerError(resp)
+          if (resp.status === 0 || resp.status >= 400) trans_failed = true
         })
+        if (trans_failed) return
 
         sleep(1)
       `)
@@ -720,6 +735,10 @@ describe('Code generation', () => {
         const expectedResult = await prettify(`
           let params
           let resp
+          // Set by a failed request or check. Like LoadRunner with "continue on
+          // error" off, the Vuser ends its iteration after the failing transaction
+          // instead of running the rest of the script.
+          let trans_failed = false
           let match
           let regex
           let url
@@ -734,6 +753,7 @@ describe('Code generation', () => {
             url = http.url\`http://test.k6.io/api/v1/foo\`
             resp = http.request('POST', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -743,7 +763,9 @@ describe('Code generation', () => {
             url = http.url\`http://test.k6.io/api/v1/login?project_id=5555\`
             resp = http.request('POST', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
           })
+          if (trans_failed) return
 
           group('two', function () {
             params = {
@@ -754,6 +776,7 @@ describe('Code generation', () => {
             url = http.url\`http://test.k6.io/api/v1/users/3333\`
             resp = http.request('GET', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -768,7 +791,9 @@ describe('Code generation', () => {
               params
             )
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
           })
+          if (trans_failed) return
 
           sleep(1)
         `)
@@ -802,7 +827,7 @@ describe('Code generation', () => {
       expect(result).toContain('http.url`http://test.k6.io/api/v1/foo`')
       expect(result).toContain("http.request('POST', url, null, params)")
       expect(result).toContain(
-        "check(resp, { 'status equals 200': (r) => r.status === 200 }, { name: url.name })"
+        "if (!check(resp, { 'status equals 200': (r) => r.status === 200 }, { name: url.name })) trans_failed = true"
       )
     })
 
@@ -843,6 +868,10 @@ describe('Code generation', () => {
         const expectedResult = await prettify(`
           let params
           let resp
+          // Set by a failed request or check. Like LoadRunner with "continue on
+          // error" off, the Vuser ends its iteration after the failing transaction
+          // instead of running the rest of the script.
+          let trans_failed = false
           let match
           let regex
           let url
@@ -867,6 +896,7 @@ describe('Code generation', () => {
             url = http.url\`http://test.k6.io/api/v1/users\`
             resp = http.request('POST', url, \`${JSON.stringify({ user_id: 'TEST_ID' })}\`, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -877,6 +907,7 @@ describe('Code generation', () => {
             url = http.url\`http://example.com/api/v1/users?project_id=\${getParameterizationValue1()}&csrf=\${getParameterizationValue2()}\`
             resp = http.request('GET', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
 
             params = {
@@ -888,7 +919,9 @@ describe('Code generation', () => {
             url = http.url\`http://example.com/api/v1/users?project_id=\${getParameterizationValue1()}\`
             resp = http.request('GET', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
           })
+          if (trans_failed) return
 
           sleep(1)
 
@@ -909,6 +942,10 @@ describe('Code generation', () => {
         const expectedResult = await prettify(`
           let params
           let resp
+          // Set by a failed request or check. Like LoadRunner with "continue on
+          // error" off, the Vuser ends its iteration after the failing transaction
+          // instead of running the rest of the script.
+          let trans_failed = false
           let match
           let regex
           let url
@@ -926,6 +963,7 @@ describe('Code generation', () => {
             url = http.url\`http://test.k6.io/api/v1/users\`
             resp = http.request('POST', url, \`${JSON.stringify({ user_id: '333' })}\`, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
             params = {
           timeout: HTTP_TIMEOUT,
@@ -936,6 +974,7 @@ describe('Code generation', () => {
             url = http.url\`http://example.com/api/v1/users?project_id=123&csrf=321\`
             resp = http.request('GET', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
 
 
             params = {
@@ -947,7 +986,9 @@ describe('Code generation', () => {
             url = http.url\`http://example.com/api/v1/users?project_id=123\`
             resp = http.request('GET', url, null, params)
             logServerError(resp)
+            if (resp.status === 0 || resp.status >= 400) trans_failed = true
           })
+          if (trans_failed) return
 
           sleep(1)
 
@@ -964,6 +1005,7 @@ describe('Code generation', () => {
     it('should generate group snippet', () => {
       const expectedResult = `
       group('group_1', function(){});
+      if (trans_failed) return;
       sleep(1)
     `
 
