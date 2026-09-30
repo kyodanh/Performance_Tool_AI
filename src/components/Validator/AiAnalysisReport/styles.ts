@@ -31,4 +31,10 @@ export const CAUSE_COLOR: Record<string, string> = {
   network: 'var(--violet-8)',
   script: 'var(--plum-8)',
   client_resource: 'var(--cyan-8)',
+  // Where a slow request loses its time, on a run without errors.
+  server_processing: 'var(--red-9)',
+  server_contention: 'var(--orange-9)',
+  dependency: 'var(--amber-9)',
+  payload: 'var(--blue-8)',
+  none: 'var(--green-9)',
 }

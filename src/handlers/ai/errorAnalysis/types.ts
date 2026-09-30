@@ -102,9 +102,9 @@ export interface TriageRow {
   /** Last path segment of the URL. */
   endpoint: string
   group: string
-  /** k6 error code, e.g. `1500`. */
+  /** k6 error code, e.g. `1500`; empty for a latency row. */
   code: string
-  /** `HTTP 500 Internal Server Error`, or the error message. */
+  /** `HTTP 500 Internal Server Error`, the error message, or `GET · HTTP 200`. */
   meaning: string
   count: number
   /** Stats of the request row with the failing status, when recorded. */
@@ -116,6 +116,8 @@ export interface TriageRow {
 }
 
 export interface JevReport {
+  /** 'errors': causes per error group; 'latency': where each slow request loses its time. */
+  kind: 'errors' | 'latency'
   rows: TriageRow[]
   /** The least sure answer across the rows. */
   confidence: number

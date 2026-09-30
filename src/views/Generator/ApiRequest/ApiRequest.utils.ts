@@ -3,9 +3,13 @@ import { z } from 'zod'
 import { DEFAULT_GROUP_NAME } from '@/constants'
 import { SendHttpRequestOptions } from '@/handlers/httpRequest/types'
 import { ProxyData, Request, Response } from '@/types'
-import { getContentType } from '@/utils/headers'
+import {
+  getContentType,
+  getContentTypeWithCharsetHeader,
+} from '@/utils/headers'
 import { rawPath } from '@/utils/url'
 
+import { FormFieldSchema, buildMultipart, parseMultipart } from './formData'
 import { substitutePlaceholders } from './jsonBody'
 
 export const HTTP_METHODS = [
@@ -30,6 +34,9 @@ export const ApiRequestSchema = z.object({
     })
     .array(),
   content: z.string(),
+  // Optional so the importers, which only produce raw bodies, can leave it out.
+  bodyType: z.enum(['raw', 'form-data']).optional(),
+  formFields: FormFieldSchema.array().optional(),
   // Free text: typing a name that doesn't exist yet creates the group.
   group: z.string(),
 })
@@ -41,19 +48,44 @@ export const DEFAULT_API_REQUEST: ApiRequestFormData = {
   url: '',
   headers: [],
   content: '',
+  bodyType: 'raw',
+  formFields: [],
   group: DEFAULT_GROUP_NAME,
 }
 
 export function toRequest(
-  { method, url, headers, content }: ApiRequestFormData,
+  {
+    method,
+    url,
+    headers,
+    content,
+    bodyType,
+    formFields = [],
+  }: ApiRequestFormData,
   timing: Pick<Response, 'timestampStart' | 'timestampEnd'>
 ): Request {
   const parsedUrl = new URL(url)
-  const body = hasBody(method) && content.trim() !== '' ? content : null
+  const multipart =
+    hasBody(method) && bodyType === 'form-data'
+      ? buildMultipart(formFields)
+      : null
+  const body = multipart
+    ? multipart.body
+    : hasBody(method) && bodyType !== 'form-data' && content.trim() !== ''
+      ? content
+      : null
 
   const requestHeaders: Request['headers'] = headers
     .filter(({ name }) => name.trim() !== '')
+    // The boundary is new on every build, so a typed one would not match.
+    .filter(
+      ({ name }) => !multipart || name.trim().toLowerCase() !== 'content-type'
+    )
     .map(({ name, value }) => [name.trim(), value])
+
+  if (multipart) {
+    requestHeaders.push(['content-type', multipart.contentType])
+  }
 
   // Without it `fetch` sends `text/plain` and JSON APIs reject the body.
   if (body !== null && getContentType(requestHeaders) === undefined) {
@@ -82,12 +114,35 @@ export function fromProxyData({
   group,
 }: ProxyData): ApiRequestFormData {
   const method = HTTP_METHODS.find((value) => value === request.method)
+  const contentType = getContentTypeWithCharsetHeader(request.headers) ?? ''
+  const formFields =
+    request.content && contentType.includes('multipart/form-data')
+      ? parseMultipart(request.content, contentType)
+      : null
+  const headers = request.headers.map(([name, value]) => ({ name, value }))
+
+  if (formFields !== null) {
+    return {
+      method: method ?? 'GET',
+      url: request.url,
+      // Built again from the fields, with a fresh boundary.
+      headers: headers.filter(
+        ({ name }) => name.toLowerCase() !== 'content-type'
+      ),
+      content: '',
+      bodyType: 'form-data',
+      formFields,
+      group: group || DEFAULT_GROUP_NAME,
+    }
+  }
 
   return {
     method: method ?? 'GET',
     url: request.url,
-    headers: request.headers.map(([name, value]) => ({ name, value })),
+    headers,
     content: request.content ?? '',
+    bodyType: 'raw',
+    formFields: [],
     group: group || DEFAULT_GROUP_NAME,
   }
 }
@@ -134,6 +189,10 @@ export function resolvePlaceholders(
       value: resolve(header.value),
     })),
     content: resolve(data.content),
+    // Files are left alone: a placeholder in one is data, not a reference.
+    formFields: data.formFields?.map((field) =>
+      field.type === 'text' ? { ...field, value: resolve(field.value) } : field
+    ),
   }
 }
 

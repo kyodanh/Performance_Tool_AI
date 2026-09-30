@@ -4,6 +4,15 @@ export interface VuGenSubResource {
   referer: string | null
 }
 
+export interface VuGenItem {
+  name: string
+  value: string
+  /** `File=Yes`: `value` is a path on the load generator, not the content. */
+  file: boolean
+  /** `ContentType=` of a file item, null when it had none. */
+  contentType: string | null
+}
+
 export interface Call {
   name: string
   /** String literal arguments, in order, unescaped and concatenated. */
@@ -12,16 +21,28 @@ export interface Call {
   words: string[]
   /** `"Key=value"` arguments, keyed by `Key` — `URL`, `Method`, `Body`, … */
   options: Map<string, string>
-  /** `"Name=x", "Value=y", ENDITEM` triples of `web_submit_data`. */
-  itemData: Array<[string, string]>
+  /** `"Name=x", "Value=y", ENDITEM` items of `web_submit_data`. */
+  itemData: VuGenItem[]
   /** Sub-resources listed after `EXTRARES`, in order. */
   extraResources: VuGenSubResource[]
+  /** The call sits in a line or block comment. */
+  commented: boolean
 }
 
-/** Reads every `name(...)` call in a VuGen action, in source order. */
+/**
+ * Reads every `name(...)` call in a VuGen action, in source order — commented
+ * out ones included, flagged, so a disabled step can still be imported.
+ */
 export function readCalls(source: string): Call[] {
-  const text = stripComments(source)
-  const calls: Call[] = []
+  const { live, commented } = splitComments(source)
+
+  return [...findCalls(live, false), ...findCalls(commented, true)]
+    .sort((a, b) => a.index - b.index)
+    .map(({ call }) => call)
+}
+
+function findCalls(text: string, commented: boolean) {
+  const calls: Array<{ index: number; call: Call }> = []
   const pattern = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
 
   let match: RegExpExecArray | null
@@ -33,7 +54,8 @@ export function readCalls(source: string): Call[] {
       continue
     }
 
-    calls.push(toCall(match[1] ?? '', text.slice(pattern.lastIndex, end)))
+    const call = toCall(match[1] ?? '', text.slice(pattern.lastIndex, end))
+    calls.push({ index: match.index, call: { ...call, commented } })
     pattern.lastIndex = end + 1
   }
 
@@ -48,11 +70,17 @@ function toCall(name: string, inner: string): Call {
     options: new Map(),
     itemData: [],
     extraResources: [],
+    commented: false,
   }
 
   let inExtraResources = false
   let inItemData = false
-  let item: Partial<Record<'Name' | 'Value' | 'Url' | 'Referer', string>> = {}
+  let item: Partial<
+    Record<
+      'Name' | 'Value' | 'File' | 'ContentType' | 'Url' | 'Referer',
+      string
+    >
+  > = {}
 
   for (const argument of splitArguments(inner)) {
     if (argument.type === 'word') {
@@ -76,7 +104,12 @@ function toCall(name: string, inner: string): Call {
             })
           }
         } else if (item.Name !== undefined) {
-          call.itemData.push([item.Name, item.Value ?? ''])
+          call.itemData.push({
+            name: item.Name,
+            value: item.Value ?? '',
+            file: item.File?.toLowerCase() === 'yes',
+            contentType: item.ContentType ?? null,
+          })
         }
 
         item = {}
@@ -96,7 +129,13 @@ function toCall(name: string, inner: string): Call {
     const key = argument.value.slice(0, separator)
     const value = argument.value.slice(separator + 1)
 
-    if (inItemData && (key === 'Name' || key === 'Value')) {
+    if (
+      inItemData &&
+      (key === 'Name' ||
+        key === 'Value' ||
+        key === 'File' ||
+        key === 'ContentType')
+    ) {
       item[key] = value
       continue
     }
@@ -247,35 +286,46 @@ function findClosingParen(text: string, start: number): number {
   return -1
 }
 
-function stripComments(source: string): string {
-  let result = ''
+/**
+ * Two same-length copies of the source: the live code with comments blanked,
+ * and the comment text with the live code blanked. Same length keeps both in
+ * source order; newlines stay in both.
+ */
+function splitComments(source: string) {
+  let live = ''
+  let commented = ''
   let index = 0
+
+  const blank = (text: string) => text.replace(/[^\n]/g, ' ')
 
   while (index < source.length) {
     const rest = source.slice(index, index + 2)
 
     if (source[index] === '"') {
       const end = readString(source, index)[1]
-      result += source.slice(index, end)
+      live += source.slice(index, end)
+      commented += blank(source.slice(index, end))
       index = end
       continue
     }
 
-    if (rest === '//') {
-      const end = source.indexOf('\n', index)
-      index = end === -1 ? source.length : end
+    if (rest === '//' || rest === '/*') {
+      const close = rest === '//' ? '\n' : '*/'
+      const found = source.indexOf(close, index + 2)
+      const end = found === -1 ? source.length : found
+      const inner = source.slice(index + 2, end)
+      const tail = rest === '/*' && found !== -1 ? '  ' : ''
+
+      live += blank(`  ${inner}`) + tail
+      commented += `  ${inner}` + tail
+      index = end + tail.length
       continue
     }
 
-    if (rest === '/*') {
-      const end = source.indexOf('*/', index)
-      index = end === -1 ? source.length : end + 2
-      continue
-    }
-
-    result += source[index]
+    live += source[index]
+    commented += blank(source[index] ?? '')
     index += 1
   }
 
-  return result
+  return { live, commented }
 }

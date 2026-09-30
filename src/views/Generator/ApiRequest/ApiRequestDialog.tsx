@@ -6,6 +6,7 @@ import {
   Dialog,
   Flex,
   ScrollArea,
+  SegmentedControl,
   Tabs,
   Text,
 } from '@radix-ui/themes'
@@ -34,6 +35,7 @@ import {
   toProxyData,
   toSendOptions,
 } from './ApiRequest.utils'
+import { FormDataEditor } from './FormDataEditor'
 import { HeadersEditor } from './HeadersEditor'
 import { jsonBodyError } from './jsonBody'
 import { parseCurl } from './parseCurl'
@@ -116,10 +118,14 @@ export function ApiRequestDialog({
     ({ name }) => name.trim() !== ''
   ).length
   const content = watch('content')
-  const hasContent = content.trim() !== ''
+  const isFormData = watch('bodyType') === 'form-data'
+  const hasContent = isFormData
+    ? (watch('formFields') ?? []).some(({ name }) => name.trim() !== '')
+    : content.trim() !== ''
   // Placeholders resolved first, so `{name}` is not reported as a syntax error
   // while a stray brace next to one still is.
-  const bodyError = hasBody(method) ? jsonBodyError(content) : null
+  const bodyError =
+    hasBody(method) && !isFormData ? jsonBodyError(content) : null
 
   // A response only describes the request that was sent, so editing the form
   // invalidates it. The group is not part of the request, so picking one keeps
@@ -305,34 +311,62 @@ export function ApiRequestDialog({
                 />
               </Tabs.Content>
               <Tabs.Content value="body">
-                <Box
-                  height="200px"
-                  css={{ border: '1px solid var(--gray-5)' }}
-                  aria-label="Body"
-                >
-                  <Controller
-                    name="content"
+                <Controller
+                  name="bodyType"
+                  control={control}
+                  render={({ field }) => (
+                    <SegmentedControl.Root
+                      size="1"
+                      mb="2"
+                      value={field.value ?? 'raw'}
+                      onValueChange={field.onChange}
+                    >
+                      <SegmentedControl.Item value="raw">
+                        Raw
+                      </SegmentedControl.Item>
+                      <SegmentedControl.Item value="form-data">
+                        Form data
+                      </SegmentedControl.Item>
+                    </SegmentedControl.Root>
+                  )}
+                />
+                {isFormData ? (
+                  <FormDataEditor
                     control={control}
-                    render={({ field }) => (
-                      <ReactMonacoEditor
-                        showToolbar
-                        defaultLanguage="json"
-                        value={field.value}
-                        onChange={(value = '') => field.onChange(value)}
-                        onMount={handleBodyEditorMount}
-                        // A `{variable}` lives inside a JSON string, where
-                        // Monaco keeps quick suggestions off by default.
-                        options={{
-                          quickSuggestions: {
-                            other: true,
-                            comments: false,
-                            strings: true,
-                          },
-                        }}
-                      />
-                    )}
+                    register={register}
+                    setValue={setValue}
+                    variableNames={variableNames}
                   />
-                </Box>
+                ) : (
+                  <Box
+                    height="200px"
+                    css={{ border: '1px solid var(--gray-5)' }}
+                    aria-label="Body"
+                  >
+                    <Controller
+                      name="content"
+                      control={control}
+                      render={({ field }) => (
+                        <ReactMonacoEditor
+                          showToolbar
+                          defaultLanguage="json"
+                          value={field.value}
+                          onChange={(value = '') => field.onChange(value)}
+                          onMount={handleBodyEditorMount}
+                          // A `{variable}` lives inside a JSON string, where
+                          // Monaco keeps quick suggestions off by default.
+                          options={{
+                            quickSuggestions: {
+                              other: true,
+                              comments: false,
+                              strings: true,
+                            },
+                          }}
+                        />
+                      )}
+                    />
+                  </Box>
+                )}
                 {bodyError !== null && (
                   <Callout.Root color="red" mt="2" size="1" role="alert">
                     <Callout.Icon>

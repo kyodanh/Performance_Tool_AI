@@ -6,6 +6,7 @@ import { useToast } from '@/store/ui/useToast'
 import { createFixedTiming } from '@/utils/thinkTime'
 
 import { toProxyData } from './ApiRequest.utils'
+import { attachDataFiles, countMissingFiles } from './formData'
 import { parseVuGen } from './parseVuGen'
 
 interface ImportVuGenDialogProps {
@@ -43,10 +44,13 @@ export function ImportVuGenDialog({
     (store) => store.setThinkTimeOverride
   )
   const toggleRendezvous = useGeneratorStore((store) => store.toggleRendezvous)
+  const toggleDisabledRequest = useGeneratorStore(
+    (store) => store.toggleDisabledRequest
+  )
   const setRules = useGeneratorStore((store) => store.setRules)
   const showToast = useToast()
 
-  function handleImport() {
+  async function handleImport() {
     const result = parseVuGen(source)
 
     if (result === null) {
@@ -59,8 +63,14 @@ export function ImportVuGenDialog({
       return
     }
 
-    const { requests, skipped, subResources, droppedThinkTime, correlations } =
-      result
+    const { skipped, subResources, droppedThinkTime, correlations } = result
+    const requests = await Promise.all(
+      result.requests.map(async (request) => ({
+        ...request,
+        formFields: await attachDataFiles(request.formFields ?? []),
+      }))
+    )
+    const missingFiles = countMissingFiles(requests)
 
     if (requests.length === 0) {
       showToast({
@@ -74,10 +84,18 @@ export function ImportVuGenDialog({
     // Replaced in one go rather than appended one by one: pasting an edited
     // script means its previous requests are stale, and appending them again
     // is what silently doubled every transaction.
-    replaceImportedRequests(
-      'vugen',
-      requests.map((request) => ({ ...toProxyData(request), source: 'vugen' }))
-    )
+    const imported = requests.map((request) => ({
+      ...toProxyData(request),
+      source: 'vugen' as const,
+    }))
+    replaceImportedRequests('vugen', imported)
+
+    // Commented-out steps stay in the list, switched off, one click from use.
+    imported.forEach(({ id }, index) => {
+      if (requests[index]?.disabled) {
+        toggleDisabledRequest(id)
+      }
+    })
 
     // A rule already in the generator wins: it may have been edited by hand,
     // and re-importing must not duplicate the variable.
@@ -94,6 +112,8 @@ export function ImportVuGenDialog({
     if (addedRules.length > 0) {
       setRules([...rules, ...addedRules])
     }
+
+    const disabled = requests.filter((request) => request.disabled).length
 
     for (const request of requests) {
       // Overrides are keyed by `requestKey`, not by the generated request id.
@@ -120,7 +140,13 @@ export function ImportVuGenDialog({
         subResources > 0
           ? `${count(subResources, 'EXTRARES sub-resource')} imported into the transaction that listed them, so its duration covers them the way LoadRunner's does. They are sent in order, not in parallel.`
           : '',
+        disabled > 0
+          ? `${count(disabled, 'commented-out request')} imported disabled — enable them in the request list.`
+          : '',
         skipped > 0 ? describeSkipped(skipped) : '',
+        missingFiles > 0
+          ? `${count(missingFiles, 'file field')} imported without the file: the script only names its path, attach it again in Edit request.`
+          : '',
         droppedThinkTime > 0
           ? `${count(droppedThinkTime, 'lr_think_time call')} between transactions dropped: keeping them would add their seconds to the transaction above.`
           : '',

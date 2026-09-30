@@ -2,12 +2,15 @@ import { DEFAULT_GROUP_NAME } from '@/constants'
 import { CorrelationRule, ExtractorSelector } from '@/types/rules'
 
 import { ApiRequestFormData, HTTP_METHODS, hasBody } from './ApiRequest.utils'
+import { FormField } from './formData'
 import { Call, VuGenSubResource, readCalls } from './parseVuGen.tokenizer'
 
 export interface VuGenRequest extends ApiRequestFormData {
   /** `lr_think_time` seconds to wait after this request, if the script had one. */
   thinkTime: number | null
   rendezvous: boolean
+  /** The step was commented out: imported, but left out of the script. */
+  disabled: boolean
 }
 
 export interface VuGenImport {
@@ -36,9 +39,20 @@ export interface VuGenImport {
    * which `placeholderExpressions` resolves to the correlation variable.
    */
   correlations: CorrelationRule[]
+  /**
+   * `File=Yes` items imported as file fields without their content: the
+   * script only names a path on the load generator. Attach it in Edit request.
+   */
+  missingFiles: number
 }
 
 const STEPS = ['web_url', 'web_custom_request', 'web_submit_data']
+
+/**
+ * The only commented-out calls read: a disabled step and the transaction it
+ * sat in. Commented headers, cookies or params must not leak into live steps.
+ */
+const COMMENTED = [...STEPS, 'lr_start_transaction', 'lr_end_transaction']
 
 /** `web_reg_save_param` is the pre-`_ex` spelling; both carry LB/RB. */
 const SAVE_PARAM = [
@@ -78,14 +92,29 @@ export function parseVuGen(source: string): VuGenImport | null {
   // sticks to every later request until `web_cleanup_cookies` — it is not a
   // per-step header. Keyed by name so a re-add overwrites, like the jar does.
   const cookieJar = new Map<string, VuGenCookie>()
+  // `lr_save_string` constants such as `{baseUrl}`. Only these names get
+  // inlined; any other `{name}` is a correlation variable and stays as is.
+  const params = new Map<string, string>()
   let group = DEFAULT_GROUP_NAME
   let rendezvous = false
   // The request a following `lr_think_time` may attach to — only ever one in
   // the transaction we are still inside.
   let thinkTimeTarget: VuGenRequest | null = null
 
-  for (const call of calls) {
+  for (const raw of calls) {
+    const call = expandParams(raw, params)
+
+    if (call.commented && !COMMENTED.includes(call.name)) {
+      continue
+    }
+
     switch (call.name) {
+      case 'lr_save_string':
+        if (call.strings[1] !== undefined) {
+          params.set(call.strings[1], call.strings[0] ?? '')
+        }
+        break
+
       case 'lr_start_transaction':
         group = call.strings[0] ?? group
         thinkTimeTarget = null
@@ -172,9 +201,25 @@ export function parseVuGen(source: string): VuGenImport | null {
           headers,
           cookieJar,
           group,
-          rendezvous,
+          rendezvous: rendezvous && !call.commented,
         }
         const request = toRequest(call, state)
+
+        // A disabled step sees the state around it but leaves it alone: the
+        // one-off headers, rendezvous and pending rules belong to the next
+        // live step, as they do in LoadRunner.
+        if (call.commented) {
+          if (request !== null) {
+            request.disabled = true
+            requests.push(request)
+            requests.push(
+              ...call.extraResources.flatMap(
+                (resource) => toSubResource(resource, request, state) ?? []
+              )
+            )
+          }
+          break
+        }
 
         if (request === null) {
           skipped += 1 + call.extraResources.length
@@ -223,6 +268,39 @@ export function parseVuGen(source: string): VuGenImport | null {
     subResources,
     droppedThinkTime,
     correlations: [...correlations, ...pendingCorrelations],
+    missingFiles: requests
+      .flatMap(({ formFields = [] }) => formFields)
+      .filter(({ type, value }) => type === 'file' && value === '').length,
+  }
+}
+
+/** Inlines `lr_save_string` values into every string the call carries. */
+function expandParams(call: Call, params: Map<string, string>): Call {
+  if (params.size === 0) {
+    return call
+  }
+
+  const expand = (value: string) =>
+    value.replace(
+      /\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
+      (match, name: string) => params.get(name) ?? match
+    )
+
+  return {
+    ...call,
+    strings: call.strings.map(expand),
+    options: new Map(
+      [...call.options].map(([key, value]) => [key, expand(value)])
+    ),
+    itemData: call.itemData.map((item) => ({
+      ...item,
+      name: expand(item.name),
+      value: expand(item.value),
+    })),
+    extraResources: call.extraResources.map((resource) => ({
+      url: expand(resource.url),
+      referer: resource.referer === null ? null : expand(resource.referer),
+    })),
   }
 }
 
@@ -317,7 +395,12 @@ interface RequestState {
 }
 
 function toRequest(call: Call, state: RequestState): VuGenRequest | null {
-  const url = call.options.get('URL')
+  // `web_submit_data` posts to `Action=`; its `URL=`, when present, is only
+  // the page the form sat on.
+  const url =
+    call.name === 'web_submit_data'
+      ? (call.options.get('Action') ?? call.options.get('URL'))
+      : call.options.get('URL')
 
   if (url === undefined || toAbsoluteUrl(url) === null) {
     return null
@@ -332,6 +415,25 @@ function toRequest(call: Call, state: RequestState): VuGenRequest | null {
   }
 
   const headers = toHeaders(url, state)
+
+  const formFields = hasBody(method) ? toFormFields(call) : null
+
+  // `buildMultipart` writes the body and its boundary when the request is
+  // built, so no content or content-type here.
+  if (formFields !== null) {
+    return {
+      method,
+      url,
+      headers,
+      content: '',
+      bodyType: 'form-data',
+      formFields,
+      group: state.group,
+      thinkTime: null,
+      rendezvous: state.rendezvous,
+      disabled: false,
+    }
+  }
 
   const content = hasBody(method) ? body(call) : ''
 
@@ -349,6 +451,7 @@ function toRequest(call: Call, state: RequestState): VuGenRequest | null {
     group: state.group,
     thinkTime: null,
     rendezvous: state.rendezvous,
+    disabled: false,
   }
 }
 
@@ -389,6 +492,7 @@ function toSubResource(
     // `lr_rendezvous` releases the VU into the step below it, not into the
     // resources that step pulls.
     rendezvous: false,
+    disabled: parent.disabled,
   }
 }
 
@@ -411,6 +515,29 @@ function toHeaders(url: string, state: RequestState) {
   ].map(([name, value]) => ({ name, value }))
 }
 
+/** A multipart `web_submit_data` (or one with a file item) as form fields. */
+function toFormFields(call: Call): FormField[] | null {
+  const multipart =
+    call.options.get('EncType')?.toLowerCase().includes('multipart') ||
+    call.itemData.some(({ file }) => file)
+
+  if (call.options.has('Body') || call.itemData.length === 0 || !multipart) {
+    return null
+  }
+
+  return call.itemData.map(({ name, value, file, contentType }) =>
+    file
+      ? {
+          name,
+          type: 'file',
+          value: '',
+          fileName: value.split(/[\\/]/).pop() ?? '',
+          contentType: contentType ?? '',
+        }
+      : { name, type: 'text', value, fileName: '', contentType: '' }
+  )
+}
+
 /** `web_custom_request` carries a raw body, `web_submit_data` name/value pairs. */
 function body(call: Call): string {
   const raw = call.options.get('Body')
@@ -425,7 +552,7 @@ function body(call: Call): string {
 
   return call.itemData
     .map(
-      ([name, value]) =>
+      ({ name, value }) =>
         `${encodeURIComponent(name)}=${encodeURIComponent(value)}`
     )
     .join('&')

@@ -143,6 +143,8 @@ describe('fromProxyData', () => {
         { name: 'authorization', value: 'Bearer 123' },
         { name: 'content-type', value: 'application/json' },
       ],
+      bodyType: 'raw',
+      formFields: [],
     })
     expect(proxyData.id).toBe('request-1')
   })

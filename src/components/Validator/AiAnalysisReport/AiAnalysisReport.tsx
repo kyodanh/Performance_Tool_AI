@@ -58,22 +58,27 @@ interface AiAnalysisReportProps {
 }
 
 /** Markdown of what the dialog shows, for pasting into a ticket or a chat. */
+const JEV_HEADING: Record<JevReport['kind'], string> = {
+  errors: 'Nguyên nhân lỗi',
+  latency: 'Nguyên nhân chậm',
+}
+
 function toMarkdown(title: string, jev?: JevReport, text?: string) {
   const rows = (jev?.rows ?? []).map(
     (row) =>
-      `- **${row.endpoint}**${row.group ? ` · ${row.group}` : ''} — ${row.meaning} (k6 ${row.code}), ${row.count} lỗi → ${row.causes.map((c) => `${c.label} ${Math.round(c.share * 100)}%`).join(' · ') || 'không có kết quả'} (độ tin cậy ${row.confidence?.toFixed(2) ?? '—'})`
+      `- **${row.endpoint}**${row.group ? ` · ${row.group}` : ''} — ${row.meaning}${row.code ? ` (k6 ${row.code}), ${row.count} lỗi` : `, ${row.count} request`} → ${row.causes.map((c) => `${c.label} ${Math.round(c.share * 100)}%`).join(' · ') || 'không có kết quả'} (độ tin cậy ${row.confidence?.toFixed(2) ?? '—'})`
   )
 
   return [
     `# ${title}`,
+    ...(text ? ['## Phân tích LLM', text] : []),
     ...(jev
       ? [
-          '## Nguyên nhân lỗi (TypeSafe Jev)',
+          `## ${JEV_HEADING[jev.kind]} (TypeSafe Jev)`,
           ...rows,
           `> ${ROUTE[jev.route].note}`,
         ]
       : []),
-    ...(text ? ['## Phân tích LLM', text] : []),
   ].join('\n\n')
 }
 
@@ -91,8 +96,8 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * The analysis dialog's content: run figures up top, Jev's verdict per error,
- * then the LLM's answer as numbered steps. The figures come from the request,
+ * The analysis dialog's content: run figures up top, the LLM's answer as
+ * numbered steps, then Jev's verdict per error. The figures come from the request,
  * so they show while the analysis is still running.
  */
 export function AiAnalysisReport({
@@ -226,9 +231,28 @@ export function AiAnalysisReport({
           </Callout.Root>
         )}
 
+        {done && (done.text || done.llmError) && (
+          <Box mb="6">
+            <SectionHeading title="Phân tích LLM" />
+            {done.llmError ? (
+              <Callout.Root size="1" color="red">
+                <Callout.Icon>
+                  <AlertTriangleIcon size={16} />
+                </Callout.Icon>
+                <Callout.Text>LLM lỗi: {done.llmError}</Callout.Text>
+              </Callout.Root>
+            ) : (
+              <LlmSteps text={done.text} />
+            )}
+          </Box>
+        )}
+
         {jev && (
           <Box mb="6">
-            <SectionHeading title="Nguyên nhân lỗi" source="TypeSafe Jev" />
+            <SectionHeading
+              title={JEV_HEADING[jev.kind]}
+              source="TypeSafe Jev"
+            />
             <Grid gap="3">
               {jev.rows.map((row, i) => (
                 <JevCauseCard key={i} row={row} />
@@ -248,22 +272,6 @@ export function AiAnalysisReport({
                 {jev.confidence.toFixed(2)}).
               </Callout.Text>
             </Callout.Root>
-          </Box>
-        )}
-
-        {done && (done.text || done.llmError) && (
-          <Box>
-            <SectionHeading title="Phân tích LLM" />
-            {done.llmError ? (
-              <Callout.Root size="1" color="red">
-                <Callout.Icon>
-                  <AlertTriangleIcon size={16} />
-                </Callout.Icon>
-                <Callout.Text>LLM lỗi: {done.llmError}</Callout.Text>
-              </Callout.Root>
-            ) : (
-              <LlmSteps text={done.text} />
-            )}
           </Box>
         )}
 

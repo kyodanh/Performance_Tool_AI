@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { DEFAULT_GROUP_NAME } from '@/constants'
 
 import { ApiRequestFormData, HTTP_METHODS, hasBody } from './ApiRequest.utils'
+import { FormField } from './formData'
 
 const KeyValueSchema = z.object({
   key: z.string(),
@@ -36,6 +37,13 @@ const RequestSchema = z.object({
       mode: z.string().optional(),
       raw: z.string().optional(),
       urlencoded: KeyValueSchema.array().optional(),
+      formdata: KeyValueSchema.extend({
+        type: z.string().optional(),
+        src: z.union([z.string(), z.string().array()]).nullish(),
+        contentType: z.string().optional(),
+      })
+        .array()
+        .optional(),
     })
     .optional(),
 })
@@ -50,9 +58,14 @@ export interface PostmanImport {
   /**
    * Requests we can't turn into a valid one: an undefined `{{variable}}`, a
    * method k6 Studio doesn't support, or a body mode we can't reproduce
-   * (formdata, file).
+   * (file).
    */
   skipped: number
+  /**
+   * Form-data file fields imported without content: the collection only keeps
+   * the path of the file on the machine that exported it.
+   */
+  missingFiles: number
 }
 
 /**
@@ -117,7 +130,11 @@ export function parsePostman(
     }
   }
 
-  return { requests, skipped }
+  const missingFiles = requests
+    .flatMap(({ formFields = [] }) => formFields)
+    .filter(({ type }) => type === 'file').length
+
+  return { requests, skipped, missingFiles }
 }
 
 function parseJson<T>(schema: z.ZodType<T>, json: string): T | null {
@@ -182,6 +199,18 @@ function toApiRequest(
     return null
   }
 
+  if (hasBody(method) && body?.mode === 'formdata') {
+    return {
+      method,
+      url: resolvedUrl,
+      headers: toHeaders(parsed.data, resolve),
+      content: '',
+      bodyType: 'form-data',
+      formFields: toFormFields(body.formdata ?? [], resolve),
+      group,
+    }
+  }
+
   const content = hasBody(method) ? toContent(body, resolve) : ''
 
   if (content === null) {
@@ -217,6 +246,36 @@ function toHeaders(
   }
 
   return headers
+}
+
+function toFormFields(
+  formdata: NonNullable<NonNullable<PostmanRequest['body']>['formdata']>,
+  resolve: (value: string) => string
+): FormField[] {
+  return enabled(formdata).map(
+    ({ key, value = '', type, src, contentType }) => {
+      if (type !== 'file') {
+        return {
+          name: key,
+          type: 'text',
+          value: resolve(value),
+          fileName: '',
+          contentType: '',
+        }
+      }
+
+      // ponytail: only the name of the first file, attached again in Edit.
+      const path = (Array.isArray(src) ? src[0] : src) ?? ''
+
+      return {
+        name: key,
+        type: 'file',
+        value: '',
+        fileName: path.split(/[\\/]/).pop() ?? '',
+        contentType: contentType ?? '',
+      }
+    }
+  )
 }
 
 // Null means the body can't be reproduced, so the request is skipped.

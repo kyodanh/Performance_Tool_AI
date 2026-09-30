@@ -14,6 +14,58 @@ describe('parseVuGen', () => {
     expect(parseVuGen('curl https://example.com')).toBeNull()
   })
 
+  it('imports commented-out steps and transactions as disabled', () => {
+    const result = parseVuGen(`
+      lr_save_string("https://ex.com", "baseUrl");
+      web_add_header("Cookie", "a=1");
+      // web_add_header("X-Dead", "1");
+      // lr_start_transaction("73_Trans_ExportNCC");
+      //
+      // web_custom_request("ExportNCC",
+      //     "URL={baseUrl}/jo/Admin/EmployeeManage/ExportNCC",
+      //     "Method=POST",
+      //     "Mode=HTTP",
+      //     LAST);
+      //
+      // lr_end_transaction("73_Trans_ExportNCC", LR_AUTO);
+      /* web_url("old", "URL=https://ex.com/old", LAST); */
+      web_url("live", "URL={baseUrl}/live", LAST);
+    `)
+
+    expect(
+      result?.requests.map(({ url, method, group, disabled }) => ({
+        url,
+        method,
+        group,
+        disabled,
+      }))
+    ).toEqual([
+      {
+        url: 'https://ex.com/jo/Admin/EmployeeManage/ExportNCC',
+        method: 'POST',
+        group: '73_Trans_ExportNCC',
+        disabled: true,
+      },
+      {
+        url: 'https://ex.com/old',
+        method: 'GET',
+        group: 'Default group',
+        disabled: true,
+      },
+      {
+        url: 'https://ex.com/live',
+        method: 'GET',
+        group: 'Default group',
+        disabled: false,
+      },
+    ])
+
+    // The one-off header waits for the live step; the commented one never lands.
+    const live = result?.requests[2]?.headers.map(({ name }) => name)
+    expect(live).toContain('Cookie')
+    expect(live).not.toContain('X-Dead')
+  })
+
   it('imports every step plus its EXTRARES sub-resources', () => {
     const result = parseVuGen(source)
 
@@ -113,6 +165,37 @@ describe('parseVuGen', () => {
     expect(fourth?.rendezvous).toBe(true)
   })
 
+  it('imports a web_submit_data file upload as form-data posted to Action', () => {
+    const result = parseVuGen(`
+      web_submit_data("Import",
+        "Action=http://10.0.0.1/jo/Import",
+        "Method=POST",
+        "EncType=multipart/form-data",
+        ITEMDATA,
+        "Name=entityId", "Value=42", ENDITEM,
+        "Name=file", "Value=/upload/a b.xlsx", "File=Yes", "ContentType=application/vnd.ms-excel", ENDITEM,
+        LAST);
+    `)
+
+    expect(result?.skipped).toBe(0)
+    expect(result?.missingFiles).toBe(1)
+    expect(result?.requests[0]).toMatchObject({
+      url: 'http://10.0.0.1/jo/Import',
+      content: '',
+      bodyType: 'form-data',
+      formFields: [
+        { name: 'entityId', type: 'text', value: '42' },
+        {
+          name: 'file',
+          type: 'file',
+          value: '',
+          fileName: 'a b.xlsx',
+          contentType: 'application/vnd.ms-excel',
+        },
+      ],
+    })
+  })
+
   it('attaches lr_think_time to the request it follows in the same transaction', () => {
     const requests = parseVuGen(source)?.requests ?? []
 
@@ -126,6 +209,25 @@ describe('parseVuGen', () => {
     // measured duration of the transaction that just closed.
     expect(result?.requests[1]?.thinkTime).toBeNull()
     expect(result?.droppedThinkTime).toBe(1)
+  })
+
+  it('inlines lr_save_string constants but keeps correlation placeholders', () => {
+    const result = parseVuGen(`
+      lr_save_string("http://10.0.0.1:7474", "baseUrl");
+      web_add_header("Authorization", "Bearer {token}");
+      web_custom_request("Index",
+        "URL={baseUrl}/jo/Admin",
+        "Method=POST",
+        "Body=next={baseUrl}/home&t={token}",
+        LAST);
+    `)
+
+    expect(result?.skipped).toBe(0)
+    expect(result?.requests[0]).toMatchObject({
+      url: 'http://10.0.0.1:7474/jo/Admin',
+      content: 'next=http://10.0.0.1:7474/home&t={token}',
+      headers: [{ name: 'Authorization', value: 'Bearer {token}' }],
+    })
   })
 
   it('ignores calls that only appear inside comments', () => {

@@ -1,5 +1,6 @@
 import { css } from '@emotion/react'
 import { Button, Callout, DataList, Dialog, Flex, Text } from '@radix-ui/themes'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import { useState } from 'react'
 
 import { Table } from '@/components/Table'
@@ -23,6 +24,61 @@ import { RequestsTable } from './RequestsTable'
 
 function tps(count: number, elapsed: number) {
   return (count / Math.max(1, elapsed)).toFixed(2)
+}
+
+const COLUMNS = [
+  { key: 'name', label: 'Name' },
+  { key: 'tps', label: 'TPS' },
+  { key: 'passed', label: 'Passed' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'min', label: 'Min' },
+  { key: 'avg', label: 'Avg' },
+  { key: 'p50', label: 'Median' },
+  { key: 'p90', label: '90%' },
+  { key: 'p95', label: '95%' },
+  { key: 'max', label: 'Max' },
+  { key: 'std', label: 'Std' },
+  { key: 'last', label: 'Last' },
+] as const
+
+type SortKey = (typeof COLUMNS)[number]['key']
+
+function sortValue(group: GroupStats, key: SortKey, elapsed: number) {
+  switch (key) {
+    case 'name':
+      return group.name
+    case 'tps':
+      return group.count / Math.max(1, elapsed)
+    case 'passed':
+      return Math.max(0, group.count - group.failed)
+    case 'p50':
+    case 'p90':
+    case 'p95':
+      // Runs saved before percentiles existed sort as the lowest value.
+      return group.percentiles?.[key] ?? -Infinity
+    default:
+      return group[key]
+  }
+}
+
+export function sortGroups(
+  groups: GroupStats[],
+  sort: { key: SortKey; desc: boolean } | null,
+  elapsed: number
+) {
+  if (!sort) {
+    return groups
+  }
+
+  const direction = sort.desc ? -1 : 1
+  return [...groups].sort((a, b) => {
+    const left = sortValue(a, sort.key, elapsed)
+    const right = sortValue(b, sort.key, elapsed)
+    if (typeof left === 'string' && typeof right === 'string') {
+      return direction * left.localeCompare(right, undefined, { numeric: true })
+    }
+    return direction * (Number(left) - Number(right))
+  })
 }
 
 interface TransactionsTableProps {
@@ -56,34 +112,51 @@ export function TransactionsTable({
   const groupChecks = checks.filter((check) => check.group === selected)
   const groupRequests = requests.filter((request) => request.group === selected)
   const charted = chartedSeries(groups)
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null)
+  const sorted = sortGroups(groups, sort, elapsed)
+
+  // Click cycles a column: high → low, low → high, back to the run's order.
+  function handleSort(key: SortKey) {
+    setSort((current) => {
+      if (current?.key !== key) {
+        return { key, desc: true }
+      }
+      return current.desc ? { key, desc: false } : null
+    })
+  }
 
   return (
     <>
       <Table.Root size="1" variant="surface">
         <Table.Header>
           <Table.Row>
-            <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">TPS</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">
-              Passed
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">
-              Failed
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Min</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Avg</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">
-              Median
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">90%</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">95%</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Max</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Std</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Last</Table.ColumnHeaderCell>
+            {COLUMNS.map((column) => (
+              <Table.ColumnHeaderCell
+                key={column.key}
+                align={column.key === 'name' ? undefined : 'right'}
+                onClick={() => handleSort(column.key)}
+                aria-sort={
+                  sort?.key === column.key
+                    ? sort.desc
+                      ? 'descending'
+                      : 'ascending'
+                    : undefined
+                }
+                css={headerStyles}
+              >
+                {column.label}
+                {sort?.key === column.key &&
+                  (sort.desc ? (
+                    <ArrowDown size={12} css={arrowStyles} />
+                  ) : (
+                    <ArrowUp size={12} css={arrowStyles} />
+                  ))}
+              </Table.ColumnHeaderCell>
+            ))}
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {groups.map((item) => (
+          {sorted.map((item) => (
             <Table.Row
               key={item.name}
               onClick={() => setSelected(item.name)}
@@ -239,6 +312,17 @@ function Detail({
     </Flex>
   )
 }
+
+const headerStyles = css`
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+`
+
+const arrowStyles = css`
+  margin-left: 2px;
+  vertical-align: middle;
+`
 
 const rowStyles = css`
   cursor: pointer;

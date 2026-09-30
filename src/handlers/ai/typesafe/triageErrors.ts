@@ -13,7 +13,7 @@ const ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
 const TIMEOUT_MS = 10_000
 const MAX_ERRORS = 10
 /** Below this the label is shown as uncertain rather than as a finding. */
-const MIN_CONFIDENCE = 0.5
+export const MIN_CONFIDENCE = 0.5
 /** At or above this Jev's verdict stands on its own, without the LLM. */
 const HIGH_CONFIDENCE = 0.8
 
@@ -48,15 +48,41 @@ const LABELS: Record<Cause, string> = {
 /** Causes under this share are noise and left out of the line. */
 const MIN_SHARE = 0.05
 
-interface ChoiceAnswer {
+export interface ChoiceAnswer<C extends string = Cause> {
   type: 'choice'
-  choice: Cause
+  choice: C
   confidence: number
-  probabilities: Partial<Record<Cause, number>>
+  probabilities: Partial<Record<C, number>>
 }
 
 interface SystemOneResponse {
-  answers: Record<string, ChoiceAnswer>
+  answers: Record<string, ChoiceAnswer<string>>
+}
+
+/**
+ * One SystemOne call. Throws on a non-2xx answer; callers catch, since Jev
+ * only enriches the analysis and must never block it.
+ */
+export async function askJev(
+  apiKey: string,
+  state: Record<string, unknown>,
+  questions: Record<string, unknown>
+): Promise<SystemOneResponse['answers']> {
+  const response = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: 'jev-latest', state, questions }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+
+  if (!response.ok) {
+    throw new Error(`TypeSafe responded ${response.status}`)
+  }
+
+  return ((await response.json()) as SystemOneResponse).answers
 }
 
 /**
@@ -166,12 +192,14 @@ function display(
  * shakiest error. 0 when an error went unanswered.
  */
 export interface Triage {
+  /** What was judged: why errors happened, or how bad the latency is. */
+  kind?: 'errors' | 'latency'
   lines: string[]
   rows: TriageRow[]
   confidence: number
 }
 
-const NO_TRIAGE: Triage = { lines: [], rows: [], confidence: 0 }
+export const NO_TRIAGE: Triage = { lines: [], rows: [], confidence: 0 }
 
 /**
  * The answer's causes, most likely first. `choice` always leads — it's Jev's
@@ -179,10 +207,11 @@ const NO_TRIAGE: Triage = { lines: [], rows: [], confidence: 0 }
  * and stays even under the noise threshold, since hiding the chosen answer
  * would be worse than showing a low share for it.
  */
-function causeBreakdown(
-  answer: ChoiceAnswer
-): { cause: Cause; label: string; share: number }[] {
-  const rest = (Object.entries(answer.probabilities) as [Cause, number][])
+export function causeBreakdown<C extends string>(
+  answer: ChoiceAnswer<C>,
+  labels: Record<C, string>
+): { cause: C; label: string; share: number }[] {
+  const rest = (Object.entries(answer.probabilities) as [C, number][])
     .filter(
       ([cause, probability]) =>
         cause !== answer.choice && probability >= MIN_SHARE
@@ -190,12 +219,9 @@ function causeBreakdown(
     .sort(([, a], [, b]) => b - a)
 
   return [
-    [answer.choice, answer.probabilities[answer.choice] ?? 0] as [
-      Cause,
-      number,
-    ],
+    [answer.choice, answer.probabilities[answer.choice] ?? 0] as [C, number],
     ...rest,
-  ].map(([cause, share]) => ({ cause, label: LABELS[cause] ?? cause, share }))
+  ].map(([cause, share]) => ({ cause, label: labels[cause] ?? cause, share }))
 }
 
 function row(
@@ -218,7 +244,7 @@ function row(
       avg: request.avg,
       max: request.max,
     },
-    causes: answer ? causeBreakdown(answer) : [],
+    causes: answer ? causeBreakdown(answer, LABELS) : [],
     confidence: answer?.confidence ?? null,
   }
 }
@@ -268,33 +294,17 @@ export async function triageErrors(
   )
 
   try {
-    const response = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+    const answers = (await askJev(
+      apiKey,
+      {
+        context: 'Errors from a k6 load test run, most frequent first.',
+        run: summary
+          ? `peak ${summary.vusMax} VUs; ${summary.failedRequests}/${summary.requests} requests failed; response time avg ${summary.avgDuration.toFixed(0)}ms, max ${summary.maxDuration.toFixed(0)}ms`
+          : 'not available',
+        errors: top.map((error, i) => `#${i} ${evidence(error, requestStats)}`),
       },
-      body: JSON.stringify({
-        model: 'jev-latest',
-        state: {
-          context: 'Errors from a k6 load test run, most frequent first.',
-          run: summary
-            ? `peak ${summary.vusMax} VUs; ${summary.failedRequests}/${summary.requests} requests failed; response time avg ${summary.avgDuration.toFixed(0)}ms, max ${summary.maxDuration.toFixed(0)}ms`
-            : 'not available',
-          errors: top.map(
-            (error, i) => `#${i} ${evidence(error, requestStats)}`
-          ),
-        },
-        questions,
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
-
-    if (!response.ok) {
-      throw new Error(`TypeSafe responded ${response.status}`)
-    }
-
-    const { answers } = (await response.json()) as SystemOneResponse
+      questions
+    )) as Record<string, ChoiceAnswer>
 
     const confidence = Math.min(
       ...top.map((_, i) => answers[`cause_${i}`]?.confidence ?? 0)
@@ -309,7 +319,7 @@ export async function triageErrors(
         return `- ${shown}  \n  → không có kết quả`
       }
 
-      const shares = causeBreakdown(answer)
+      const shares = causeBreakdown(answer, LABELS)
         .map(
           ({ label, share }, rank) =>
             `${rank === 0 ? '**' : ''}${label} ${Math.round(share * 100)}%${rank === 0 ? '**' : ''}`
@@ -326,7 +336,7 @@ export async function triageErrors(
       row(error, requestStats, answers[`cause_${i}`])
     )
 
-    return { lines, rows, confidence }
+    return { kind: 'errors', lines, rows, confidence }
   } catch (error) {
     log.warn('[TypeSafe] Error triage failed, continuing without it:', error)
     return NO_TRIAGE

@@ -4,6 +4,7 @@ import { useGeneratorStore } from '@/store/generator'
 import { useToast } from '@/store/ui/useToast'
 
 import { toProxyData } from './ApiRequest.utils'
+import { attachDataFiles, countMissingFiles } from './formData'
 import {
   PostmanImport,
   PostmanVariables,
@@ -52,8 +53,16 @@ export function useImportPostman() {
       return
     }
 
-    const requests = imports.flatMap((result) => result.requests)
+    const requests = await Promise.all(
+      imports
+        .flatMap((result) => result.requests)
+        .map(async (request) => ({
+          ...request,
+          formFields: await attachDataFiles(request.formFields ?? []),
+        }))
+    )
     const skipped = imports.reduce((total, result) => total + result.skipped, 0)
+    const missingFiles = countMissingFiles(requests)
 
     for (const request of requests) {
       addManualRequest(toProxyData(request))
@@ -70,7 +79,15 @@ export function useImportPostman() {
 
     showToast({
       title: `Imported ${count(requests.length, 'request')}`,
-      description: skipped > 0 ? skippedDescription(skipped) : undefined,
+      description:
+        [
+          skipped > 0 ? skippedDescription(skipped) : '',
+          missingFiles > 0
+            ? `${count(missingFiles, 'file field')} imported without the file: Postman only keeps its path, attach it again in Edit request.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
       status: 'success',
     })
   }

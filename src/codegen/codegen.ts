@@ -6,12 +6,16 @@ import { GeneratorFileData } from '@/types/generator'
 import { CustomCodeValue, ParameterizationRule, TestRule } from '@/types/rules'
 import { DataFile, Variable } from '@/types/testData'
 import { TestOptions, ThinkTime } from '@/types/testOptions'
-import { safeBtoa } from '@/utils/format'
+import { isBinaryContent, safeBtoa } from '@/utils/format'
 import { groupProxyData } from '@/utils/groups'
 import { getContentTypeWithCharsetHeader } from '@/utils/headers'
 import * as path from '@/utils/path'
 import { requestKey, resolveThinkTime } from '@/utils/thinkTime'
 import { exhaustive } from '@/utils/typescript'
+import {
+  FILE_MARKER,
+  parseMultipart,
+} from '@/views/Generator/ApiRequest/formData'
 
 import {
   cleanupRecording,
@@ -22,6 +26,8 @@ import {
 import { generateImportStatement } from './imports'
 import { generateOptions } from './options'
 import { SERVER_ERROR_LOG_HELPER } from './serverErrorLog'
+
+export { isBinaryContent }
 
 interface GenerateScriptParams {
   recording: ProxyData[]
@@ -53,6 +59,7 @@ export function generateScript({
 
     ${generateVariableDeclarations(generator.testData.variables)}
     ${generateDataFileDeclarations(generator.testData.files, scriptPath)}
+    ${generateUploadDeclarations(recording, scriptPath)}
     ${generateGetUniqueItemFunction(generator.testData.files)}
 
     export default function() {
@@ -145,6 +152,79 @@ export function generateDataFileDeclarations(
     .join(',\n')
 
   return `const FILES = {\n${fileKeyValuePairs}\n};`
+}
+
+/**
+ * Form-data files picked into the Data folder. `open()` only works in the init
+ * context, so each file is read once here and the requests reference it.
+ * Keyed by file name: they all sit in the one Data folder.
+ */
+export function generateUploadDeclarations(
+  recording: ProxyData[],
+  scriptPath: string
+): string {
+  const files = new Set(
+    recording.flatMap(({ request }) =>
+      [...(request.content ?? '').matchAll(FILE_MARKER)].map(
+        ([, filePath]) => filePath ?? ''
+      )
+    )
+  )
+
+  if (files.size === 0) {
+    return ''
+  }
+
+  const scriptDir = path.dirname(scriptPath)
+  const entries = [...files]
+    .map(
+      (filePath) =>
+        `'${escapeSingleQuotedString(path.basename(filePath))}': open('${escapeSingleQuotedString(path.relative(scriptDir, filePath))}', 'b')`
+    )
+    .join(',\n')
+
+  return `const UPLOADS = {\n${entries}\n};`
+}
+
+/**
+ * A multipart body holding Data-folder files, as the object k6 turns into
+ * multipart itself — `http.file` can't live inside a string body.
+ *
+ * ponytail: an object keeps one value per field name. Ceiling: a repeated
+ * field (`files` twice) sends only the last; build the body by hand if needed.
+ */
+function uploadBody(request: ProxyData['request']): string | null {
+  const contentType = getContentTypeWithCharsetHeader(request.headers) ?? ''
+
+  if (
+    !request.content ||
+    !contentType.includes('multipart/form-data') ||
+    request.content.match(FILE_MARKER) === null
+  ) {
+    return null
+  }
+
+  const fields = parseMultipart(request.content, contentType)
+
+  if (fields === null) {
+    return null
+  }
+
+  const entries = fields.map(
+    ({ name, type, value, fileName, contentType, path: filePath }) => {
+      const key = `'${escapeSingleQuotedString(name)}'`
+
+      if (type === 'file' && filePath) {
+        const file = escapeSingleQuotedString(path.basename(filePath))
+
+        return `${key}: http.file(UPLOADS['${file}'], '${escapeSingleQuotedString(fileName)}', '${escapeSingleQuotedString(contentType || 'application/octet-stream')}')`
+      }
+
+      return `${key}: \`${escapeTemplateLiteral(value)}\``
+    }
+  )
+
+  return `{ ${entries.join(', ')} }`
 }
 
 export function generateGetUniqueItemFunction(files: DataFile[]) {
@@ -305,9 +385,12 @@ export function generateSingleRequestSnippet(
   const method = `'${request.method}'`
   const url = `\`${escapeTemplateLiteral(request.url)}\``
   let content = 'null'
+  const upload = uploadBody(request)
 
   try {
-    if (request.content) {
+    if (upload !== null) {
+      content = upload
+    } else if (request.content) {
       if (isBinaryContent(request.content)) {
         const base64Content = safeBtoa(request.content)
         content = `encoding.b64decode('${base64Content}')`
@@ -319,7 +402,12 @@ export function generateSingleRequestSnippet(
         // a stringified json it won't correctly post the data.
         const contentTypeHeader =
           getContentTypeWithCharsetHeader(request.headers) ?? ''
-        if (contentTypeHeader.includes('application/x-www-form-urlencoded')) {
+        // Recorded forms arrive as a JSON object (HAR params); imported ones
+        // (VuGen, API request) keep the raw `a=b&c=d` body, which k6 sends as is.
+        if (
+          contentTypeHeader.includes('application/x-www-form-urlencoded') &&
+          request.content.trimStart().startsWith('{')
+        ) {
           content = `JSON.parse(\`${escapedContent}\`)`
         }
 
@@ -332,9 +420,18 @@ export function generateSingleRequestSnippet(
     console.error('Failed to serialize request content', error)
   }
 
-  const params = generateRequestParams(request, {
-    disableRedirects: noRedirect,
-  })
+  // k6 writes the boundary of an object body, so the recorded one must go.
+  const params = generateRequestParams(
+    upload === null
+      ? request
+      : {
+          ...request,
+          headers: request.headers.filter(
+            ([name]) => name.toLowerCase() !== 'content-type'
+          ),
+        },
+    { disableRedirects: noRedirect }
+  )
 
   const main = `
     url = http.url${url}
@@ -460,17 +557,6 @@ export function generateParameterizationCustomCode(
       )
     )
     .join('\n')
-}
-
-export function isBinaryContent(content: string): boolean {
-  for (let i = 0; i < content.length; i++) {
-    const code = content.charCodeAt(i)
-    // Null byte or control character that isn't whitespace (tab, newline, carriage return)
-    if (code === 0 || (code < 32 && code !== 9 && code !== 10 && code !== 13)) {
-      return true
-    }
-  }
-  return false
 }
 
 const SAFE_INTERPOLATION =

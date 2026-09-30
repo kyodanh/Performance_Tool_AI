@@ -49,9 +49,13 @@ function Figure({
   )
 }
 
-/** One error group: what failed, Jev's split of causes, and how sure it is. */
+/**
+ * One error group: what failed, Jev's split of causes, and how sure it is. A
+ * row without a code is a slow request from a clean run.
+ */
 export function JevCauseCard({ row }: { row: TriageRow }) {
   const serverError = row.code.startsWith('15')
+  const latency = !row.code
 
   return (
     <Box
@@ -75,21 +79,27 @@ export function JevCauseCard({ row }: { row: TriageRow }) {
         <Text size="3" weight="bold" css={mono}>
           {row.endpoint}
         </Text>
-        <Badge color={serverError ? 'red' : 'orange'} css={mono}>
-          {codeBadge(row.code)}
-        </Badge>
+        {!latency && (
+          <Badge color={serverError ? 'red' : 'orange'} css={mono}>
+            {codeBadge(row.code)}
+          </Badge>
+        )}
         <Text size="1" color="gray">
-          {row.meaning.replace(/^HTTP \d+ /, '')} · k6 {row.code}
+          {latency
+            ? row.meaning
+            : `${row.meaning.replace(/^HTTP \d+ /, '')} · k6 ${row.code}`}
           {row.group && ` · ${row.group}`}
         </Text>
         <Box flexGrow="1" />
         <Text size="1" color="gray">
           <Text weight="bold" highContrast css={mono}>
-            {row.request
-              ? `${row.request.failed}/${row.request.count}`
-              : row.count}
+            {latency
+              ? row.count
+              : row.request
+                ? `${row.request.failed}/${row.request.count}`
+                : row.count}
           </Text>{' '}
-          lỗi
+          {latency ? 'request' : 'lỗi'}
         </Text>
       </Flex>
 

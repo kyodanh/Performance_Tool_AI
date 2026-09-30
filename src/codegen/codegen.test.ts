@@ -21,6 +21,7 @@ import { GeneratorFileData } from '@/types/generator'
 import { TestRule } from '@/types/rules'
 import { ThinkTime } from '@/types/testOptions'
 import { prettify } from '@/utils/prettify'
+import { buildMultipart } from '@/views/Generator/ApiRequest/formData'
 
 import {
   escapeTemplateLiteral,
@@ -145,6 +146,50 @@ describe('Code generation', () => {
           },
         }).replace(/\s/g, '')
       ).toBe(expectedResult.replace(/\s/g, ''))
+    })
+
+    it('reads Data-folder uploads once and sends them with http.file', () => {
+      const { body, contentType } = buildMultipart([
+        {
+          name: 'entityId',
+          type: 'text',
+          value: '42',
+          fileName: '',
+          contentType: '',
+        },
+        {
+          name: 'file',
+          type: 'file',
+          value: '',
+          fileName: 'a.xlsx',
+          contentType: 'application/vnd.ms-excel',
+          path: '/project/Data/a.xlsx',
+        },
+      ])!
+
+      const script = generateScript({
+        recording: [
+          createProxyData({
+            request: createRequest({
+              method: 'POST',
+              url: 'http://localhost/import',
+              headers: [['content-type', contentType]],
+              content: body,
+            }),
+          }),
+        ],
+        scriptPath: '/project/Scripts/my-script.js',
+        generator: createGeneratorData(),
+      }).replace(/\s/g, '')
+
+      expect(script).toContain(
+        "constUPLOADS={'a.xlsx':open('../Data/a.xlsx','b')};"
+      )
+      expect(script).toContain(
+        "{'entityId':`42`,'file':http.file(UPLOADS['a.xlsx'],'a.xlsx','application/vnd.ms-excel')}"
+      )
+      // k6 writes its own boundary for an object body.
+      expect(script).not.toContain('multipart/form-data;boundary')
     })
 
     it('marks wizard-configured generators in the script header', () => {
@@ -391,6 +436,35 @@ describe('Code generation', () => {
 
       expect(result[0]?.snippet.replace(/\s/g, '')).toBe(
         expectedResult.replace(/\s/g, '')
+      )
+    })
+
+    it('parses recorded form bodies but sends raw imported ones as is', () => {
+      const snippet = (content: string) =>
+        generateRequestSnippetsFromSchemas(
+          [
+            {
+              data: createProxyData({
+                request: createRequest({
+                  method: 'POST',
+                  url: '/form',
+                  headers: [
+                    ['content-type', 'application/x-www-form-urlencoded'],
+                  ],
+                  content,
+                }),
+              }),
+              before: [],
+              after: [],
+              checks: [],
+            },
+          ],
+          thinkTime
+        )[0]?.snippet
+
+      expect(snippet('{"a":"1"}')).toContain('JSON.parse(`{"a":"1"}`)')
+      expect(snippet('__token=x&a=1')).toContain(
+        "http.request('POST', url, `__token=x&a=1`, params)"
       )
     })
 

@@ -36,6 +36,7 @@ describe('parsePostman', () => {
 
     expect(parsed).toEqual({
       skipped: 0,
+      missingFiles: 0,
       requests: [
         {
           method: 'POST',
@@ -165,7 +166,7 @@ describe('parsePostman', () => {
           request: {
             method: 'POST',
             url: 'https://example.com/upload',
-            body: { mode: 'formdata' },
+            body: { mode: 'file' },
           },
         },
         { request: { url: 'https://example.com/ok' } },
@@ -174,6 +175,40 @@ describe('parsePostman', () => {
 
     expect(parsed).toMatchObject({ skipped: 3 })
     expect(parsed?.requests).toHaveLength(1)
+  })
+
+  it('imports form-data fields, keeping only the name of a file', () => {
+    const parsed = parsePostman(
+      collection([
+        {
+          request: {
+            method: 'POST',
+            url: 'https://example.com/upload',
+            body: {
+              mode: 'formdata',
+              formdata: [
+                { key: 'title', value: 'Hello', type: 'text' },
+                { key: 'old', value: 'x', type: 'text', disabled: true },
+                {
+                  key: 'avatar',
+                  type: 'file',
+                  src: '/Users/me/Pictures/avatar.png',
+                },
+              ],
+            },
+          },
+        },
+      ])
+    )
+
+    expect(parsed).toMatchObject({ skipped: 0, missingFiles: 1 })
+    expect(parsed?.requests[0]).toMatchObject({
+      bodyType: 'form-data',
+      formFields: [
+        { name: 'title', type: 'text', value: 'Hello' },
+        { name: 'avatar', type: 'file', value: '', fileName: 'avatar.png' },
+      ],
+    })
   })
 
   it('ignores a stale body on a GET', () => {

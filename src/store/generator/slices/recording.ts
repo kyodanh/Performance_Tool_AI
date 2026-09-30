@@ -151,15 +151,21 @@ export const createRecordingSlice: ImmerStateCreator<RecordingSliceStore> = (
       // take the hand-written ones with it. A row the incoming script imports
       // again is the stale copy by definition, so match those by key.
       const imported = new Set(requests.map(requestKey))
+      const kept = state.manualRequests.filter(
+        (request) =>
+          request.source !== source &&
+          !(request.source === undefined && imported.has(requestKey(request)))
+      )
+      const removed = new Set(
+        state.manualRequests
+          .filter((request) => !kept.includes(request))
+          .map(({ id }) => id)
+      )
 
-      state.manualRequests = [
-        ...state.manualRequests.filter(
-          (request) =>
-            request.source !== source &&
-            !(request.source === undefined && imported.has(requestKey(request)))
-        ),
-        ...requests,
-      ]
+      state.manualRequests = [...kept, ...requests]
+      state.disabledRequests = state.disabledRequests.filter(
+        (key) => !removed.has(key)
+      )
     }),
   updateManualRequest: (id: string, request: ProxyData) =>
     set((state) => {

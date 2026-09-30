@@ -126,7 +126,7 @@ export function buildFailureAnalysisPrompt(
     ...(triage.length > 0
       ? [
           '',
-          '## Error triage (classifier verdicts — weigh against the data, not as fact)',
+          '## Classifier verdicts (TypeSafe Jev — error causes, or bottleneck causes of the slowest requests on a clean run; weigh against the data, not as fact)',
           triage.join('\n'),
         ]
       : []),

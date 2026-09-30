@@ -63,3 +63,24 @@ export function isBase64(str: string) {
     return false
   }
 }
+
+export function isBinaryContent(content: string): boolean {
+  for (let i = 0; i < content.length; i++) {
+    const code = content.charCodeAt(i)
+    // Null byte or control character that isn't whitespace (tab, newline, carriage return)
+    if (code === 0 || (code < 32 && code !== 9 && code !== 10 && code !== 13)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** One char per byte, as a binary body is kept. */
+export function isByteString(content: string): boolean {
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) > 0xff) {
+      return false
+    }
+  }
+  return true
+}

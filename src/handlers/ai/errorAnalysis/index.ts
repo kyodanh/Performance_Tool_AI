@@ -6,6 +6,7 @@ import log from 'electron-log/main'
 import { randomUUID } from 'node:crypto'
 
 import { GrafanaAssistantLanguageModel } from '../grafanaAssistantProvider'
+import { rateLatency } from '../typesafe/rateLatency'
 import { routeTriage, Triage, triageErrors } from '../typesafe/triageErrors'
 
 import { buildFailureAnalysisPrompt } from './buildPrompt'
@@ -209,7 +210,7 @@ export function initialize() {
       // Jev goes first; the LLM always follows with Jev's odds in its prompt.
       // Jev's confidence only decides how much its verdict is trusted. No
       // lines (no key, no errors, call failed) leaves it all to the LLM.
-      const triage = await triageErrors(request, await getTypesafeApiKey())
+      const triage = await jevTriage(request, await getTypesafeApiKey())
       const jev = jevReport(triage)
 
       // The SDK reports what actually went wrong (a 401 from the gateway, a
@@ -274,11 +275,7 @@ async function triageOnly(
     }
   }
 
-  if (request.errors.length === 0) {
-    return { text: 'Run này không có lỗi nào để TypeSafe Jev phân loại.' }
-  }
-
-  const jev = jevReport(await triageErrors(request, apiKey))
+  const jev = jevReport(await jevTriage(request, apiKey))
 
   if (!jev) {
     return {
@@ -289,8 +286,19 @@ async function triageOnly(
   return { text: '', jev }
 }
 
-function jevReport({ rows, confidence }: Triage): JevReport | undefined {
+/** Errors get their causes triaged; a clean run gets its latency rated. */
+function jevTriage(request: AnalyzeFailureRequest, apiKey: string | null) {
+  return request.errors.length > 0
+    ? triageErrors(request, apiKey)
+    : rateLatency(request, apiKey)
+}
+
+function jevReport({
+  kind = 'errors',
+  rows,
+  confidence,
+}: Triage): JevReport | undefined {
   return rows.length > 0
-    ? { rows, confidence, route: routeTriage(confidence) }
+    ? { kind, rows, confidence, route: routeTriage(confidence) }
     : undefined
 }
