@@ -1,7 +1,7 @@
 {
   "name": "k6-studio",
   "productName": "LoadPilot",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "LoadPilot — performance testing tool based on Grafana k6 Studio",
   "repository": "github:grafana/k6-studio",
   "main": ".vite/build/main.js",
@@ -48,8 +48,8 @@
     "@playwright/test": "1.60.0",
     "@sentry/vite-plugin": "5.3.0",
     "@tanstack/eslint-plugin-query": "5.100.9",
-    "@testing-library/react": "16.3.2",
-    "@testing-library/user-event": "14.6.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
     "@types/cors": "2.8.19",
     "@types/diff": "7.0.2",
     "@types/electron-squirrel-startup": "1.0.2",
@@ -78,7 +78,7 @@
     "oxlint-tsgolint": "0.23.0",
     "ts-node": "10.9.2",
     "tsconfig-paths": "4.2.0",
-    "typescript": "npm:@typescript/typescript6@6.0.1",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vite": "8.0.16",
     "vitest": "4.1.11"
   },
