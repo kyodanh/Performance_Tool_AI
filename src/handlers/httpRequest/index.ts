@@ -28,7 +28,11 @@ export function initialize() {
       try {
         const response = await fetch(url, {
           method,
-          headers,
+          // The recorded length no longer matches a re-serialized body, and
+          // fetch computes it itself.
+          headers: headers.filter(
+            ([name]) => name.toLowerCase() !== 'content-length'
+          ),
           body:
             method === 'GET' || method === 'HEAD'
               ? undefined
