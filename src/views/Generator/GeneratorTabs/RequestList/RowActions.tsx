@@ -5,6 +5,7 @@ import {
   PencilIcon,
   PowerIcon,
   PowerOffIcon,
+  RepeatIcon,
   RotateCcwIcon,
   TimerIcon,
   Trash2Icon,
@@ -71,6 +72,8 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
   const key = requestKey(data)
   const isRendezvous = useGeneratorStore((store) => store.rendezvous[key])
   const toggleRendezvous = useGeneratorStore((store) => store.toggleRendezvous)
+  const loopCount = useGeneratorStore((store) => store.loops[key] ?? 1)
+  const setLoop = useGeneratorStore((store) => store.setLoop)
 
   // Edits to a recorded request are stored against the request as recorded,
   // rather than against the row, which carries both the rules and any earlier
@@ -247,6 +250,25 @@ export function RowActions({ data, manualRequest }: RowActionsProps) {
                   <UsersIcon />
                   Rendezvous
                 </DropdownMenu.CheckboxItem>
+
+                <DropdownMenu.Sub>
+                  <DropdownMenu.SubTrigger>
+                    <RepeatIcon />
+                    Loop{loopCount > 1 ? ` (×${loopCount})` : ''}
+                  </DropdownMenu.SubTrigger>
+                  <DropdownMenu.SubContent>
+                    {/* ponytail: presets, not a free-form count. */}
+                    {[1, 2, 3, 5, 10, 20].map((count) => (
+                      <DropdownMenu.CheckboxItem
+                        key={count}
+                        checked={loopCount === count}
+                        onCheckedChange={() => setLoop(key, count)}
+                      >
+                        {count === 1 ? 'Off' : `${count} times`}
+                      </DropdownMenu.CheckboxItem>
+                    ))}
+                  </DropdownMenu.SubContent>
+                </DropdownMenu.Sub>
 
                 {editedRequest && (
                   <>

@@ -11,6 +11,11 @@ export interface VuGenRequest extends ApiRequestFormData {
   rendezvous: boolean
   /** The step was commented out: imported, but left out of the script. */
   disabled: boolean
+  /**
+   * A `web_link` click: the URL is unknown until the page at `requests[from]`
+   * is fetched and the link found (see `resolveVuGenLinks`). `url` is '' till then.
+   */
+  link?: { text: string; ordinal: number; from: number }
 }
 
 export interface VuGenImport {
@@ -44,9 +49,17 @@ export interface VuGenImport {
    * script only names a path on the load generator. Attach it in Edit request.
    */
   missingFiles: number
+  /** `web_link` clicks whose URL was found in the fetched page. */
+  resolvedLinks?: number
 }
 
 const STEPS = ['web_url', 'web_custom_request', 'web_submit_data']
+
+/**
+ * Steps that click by text/ordinal other than `web_link` (resolved separately).
+ * The script holds no URL, so they are counted as skipped instead of vanishing.
+ */
+const UI_STEPS = ['web_image', 'web_submit_form', 'web_text_link']
 
 /**
  * The only commented-out calls read: a disabled step and the transaction it
@@ -100,6 +113,8 @@ export function parseVuGen(source: string): VuGenImport | null {
   // The request a following `lr_think_time` may attach to — only ever one in
   // the transaction we are still inside.
   let thinkTimeTarget: VuGenRequest | null = null
+  // Index of the last page step, the page a `web_link` click happens on.
+  let lastPage = -1
 
   for (const raw of calls) {
     const call = expandParams(raw, params)
@@ -192,6 +207,55 @@ export function parseVuGen(source: string): VuGenImport | null {
           break
         }
 
+        if (call.name === 'web_link' && !call.commented) {
+          const text = call.options.get('Text')
+          const page = requests[lastPage]
+
+          if (text === undefined || page === undefined) {
+            skipped += 1
+            thinkTimeTarget = null
+            break
+          }
+
+          const link: VuGenRequest = {
+            method: 'GET',
+            url: '',
+            headers: [
+              ...toHeaders(page.url, {
+                autoHeaders,
+                headers,
+                cookieJar,
+                group,
+                rendezvous: false,
+              }),
+              { name: 'Referer', value: page.url },
+            ],
+            content: '',
+            group,
+            thinkTime: null,
+            rendezvous,
+            disabled: false,
+            link: {
+              text,
+              ordinal: Number(call.options.get('Ordinal') ?? 1) || 1,
+              from: lastPage,
+            },
+          }
+
+          requests.push(link)
+          lastPage = requests.length - 1
+          thinkTimeTarget = link
+          headers = []
+          rendezvous = false
+          break
+        }
+
+        if (UI_STEPS.includes(call.name) && !call.commented) {
+          skipped += 1
+          thinkTimeTarget = null
+          break
+        }
+
         if (!STEPS.includes(call.name)) {
           break
         }
@@ -225,6 +289,7 @@ export function parseVuGen(source: string): VuGenImport | null {
           skipped += 1 + call.extraResources.length
         } else {
           requests.push(request)
+          lastPage = requests.length - 1
           thinkTimeTarget = request
 
           for (const rule of pendingCorrelations) {

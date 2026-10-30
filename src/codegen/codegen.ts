@@ -69,7 +69,7 @@ export function generateScript({
       execution.vu.tags['iter'] = execution.scenario.iterationInTest
       execution.vu.tags['vu'] = execution.vu.idInTest
       ${generateDataRowTag(generator.testData.files)}
-      ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous, generator.testData.variables)}
+      ${generateVUCode(recording, generator.rules, generator.options.thinkTime, generator.options.rendezvous, generator.testData.variables, generator.options.loops)}
     }
   `
 }
@@ -269,7 +269,8 @@ export function generateVUCode(
   rules: TestRule[],
   thinkTime: ThinkTime,
   rendezvous: TestOptions['rendezvous'] = {},
-  variables: Variable[] = []
+  variables: Variable[] = [],
+  loops: TestOptions['loops'] = {}
 ): string {
   const cleanedRecording = cleanupRecording(recording)
   const enabledRules = rules.filter((rule) => rule.enabled)
@@ -287,7 +288,8 @@ export function generateVUCode(
   const requestSnippets = generateRequestSnippetsFromSchemas(
     snippets,
     thinkTime,
-    rendezvous
+    rendezvous,
+    loops
   )
 
   const parameterizationRules = enabledRules.filter(
@@ -340,13 +342,16 @@ type GenerateRequestSnippetReturnValue = Array<{
 export function generateRequestSnippetsFromSchemas(
   requestSnippetSchemas: RequestSnippetSchema[],
   thinkTime: ThinkTime,
-  rendezvous: TestOptions['rendezvous'] = {}
+  rendezvous: TestOptions['rendezvous'] = {},
+  loops: TestOptions['loops'] = {}
 ): GenerateRequestSnippetReturnValue {
   return requestSnippetSchemas.reduce<GenerateRequestSnippetReturnValue>(
     (acc, requestSnippetSchema) => {
       const requestSnippet = generateSingleRequestSnippet(requestSnippetSchema)
       const timing = resolveThinkTime(thinkTime, requestSnippetSchema.data)
-      const meets = rendezvous[requestKey(requestSnippetSchema.data)] === true
+      const key = requestKey(requestSnippetSchema.data)
+      const meets = rendezvous[key] === true
+      const count = loops[key] ?? 1
 
       return [
         ...acc,
@@ -354,7 +359,7 @@ export function generateRequestSnippetsFromSchemas(
           group: requestSnippetSchema.data.group,
           snippet: `
             ${meets ? 'rendezvous()' : ''}
-            ${requestSnippet}
+            ${count > 1 ? `for (let loop = 0; loop < ${count}; loop++) {\n${requestSnippet}\n}` : requestSnippet}
             ${timing ? generateSleep(timing) : ''}
           `,
         },

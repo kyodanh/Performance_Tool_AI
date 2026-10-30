@@ -10,6 +10,8 @@ interface State {
   // ponytail: rendezvous rides along in this slice — same per-request override
   // shape, same key. Split it out if it grows its own settings.
   rendezvous: Record<string, true>
+  // Same story for loops: repeat count per `requestKey`.
+  loops: Record<string, number>
 }
 
 interface Actions {
@@ -18,6 +20,8 @@ interface Actions {
   // `null` drops the override so the request falls back to the global timing.
   setThinkTimeOverride: (key: string, timing: Timing | null) => void
   toggleRendezvous: (key: string) => void
+  // `null` (or anything below 2) drops the loop.
+  setLoop: (key: string, count: number | null) => void
 }
 
 export type ThinkTimeStore = State & Actions
@@ -29,6 +33,7 @@ export const createThinkTimeSlice: ImmerStateCreator<ThinkTimeStore> = (
   timing: createFixedTiming(),
   thinkTimeOverrides: {},
   rendezvous: {},
+  loops: {},
 
   setSleepType: (value: SleepType) =>
     set((state) => {
@@ -58,5 +63,15 @@ export const createThinkTimeSlice: ImmerStateCreator<ThinkTimeStore> = (
       }
 
       state.rendezvous[key] = true
+    }),
+
+  setLoop: (key: string, count: number | null) =>
+    set((state) => {
+      if (count === null || count < 2) {
+        delete state.loops[key]
+        return
+      }
+
+      state.loops[key] = count
     }),
 })

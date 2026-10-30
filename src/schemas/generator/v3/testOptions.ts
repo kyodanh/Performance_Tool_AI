@@ -82,6 +82,8 @@ export const TestOptionsSchema = z.object({
   // Requests where every VU waits for the others before firing, keyed by
   // `requestKey` — same per-request override shape as think time.
   rendezvous: z.record(z.string(), z.literal(true)).default({}),
+  // Requests repeated N times in a row per iteration, keyed by `requestKey`.
+  loops: z.record(z.string(), z.number().int().min(2)).default({}),
   thresholds: z.array(ThresholdSchema).default([]),
   // Applied to every request in the generated script and to the JMeter / VuGen
   // exports. Seconds, not a k6 duration string: VuGen runtime settings and

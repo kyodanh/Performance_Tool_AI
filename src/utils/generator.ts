@@ -32,6 +32,7 @@ export function createNewGeneratorFile(
         },
       },
       rendezvous: {},
+      loops: {},
       thresholds: [],
       httpTimeout,
       cloud: {

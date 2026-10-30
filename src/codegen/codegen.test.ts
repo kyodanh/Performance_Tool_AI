@@ -21,6 +21,7 @@ import { GeneratorFileData } from '@/types/generator'
 import { TestRule } from '@/types/rules'
 import { ThinkTime } from '@/types/testOptions'
 import { prettify } from '@/utils/prettify'
+import { requestKey } from '@/utils/thinkTime'
 import { buildMultipart } from '@/views/Generator/ApiRequest/formData'
 
 import {
@@ -126,6 +127,7 @@ describe('Code generation', () => {
                 },
               },
               rendezvous: {},
+              loops: {},
               thresholds: [],
               httpTimeout: DEFAULT_HTTP_TIMEOUT,
               cloud: {
@@ -231,6 +233,7 @@ describe('Code generation', () => {
           },
         },
         rendezvous: {},
+        loops: {},
         thresholds: [],
         httpTimeout: DEFAULT_HTTP_TIMEOUT,
         cloud: {
@@ -442,6 +445,27 @@ describe('Code generation', () => {
       expect(result[0]?.snippet.replace(/\s/g, '')).toBe(
         expectedResult.replace(/\s/g, '')
       )
+    })
+
+    it('repeats a looped request inside a for block', () => {
+      const data = createProxyData({
+        id: '1',
+        request: createRequest({ method: 'GET', url: '/api/v1/users' }),
+      })
+      const schema = { data, before: [], after: [], checks: [] }
+      const key = requestKey(data)
+
+      const looped = generateRequestSnippetsFromSchemas(
+        [schema],
+        thinkTime,
+        {},
+        { [key]: 3 }
+      )[0]?.snippet
+      const plain = generateRequestSnippetsFromSchemas([schema], thinkTime)[0]
+        ?.snippet
+
+      expect(looped).toContain('for (let loop = 0; loop < 3; loop++) {')
+      expect(plain).not.toContain('for (let loop')
     })
 
     it('parses recorded form bodies but sends raw imported ones as is', () => {

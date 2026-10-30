@@ -227,6 +227,15 @@ function readString(text: string, start: number): [string, number] {
     const char = text[index]
 
     if (char === '\\') {
+      // `\xCC` is one byte; VuGen writes non-ASCII text this way.
+      const hex = /^x([0-9a-fA-F]{2})/.exec(text.slice(index + 1, index + 4))
+
+      if (hex?.[1] !== undefined) {
+        value += String.fromCharCode(parseInt(hex[1], 16))
+        index += 4
+        continue
+      }
+
       value += unescape(text[index + 1] ?? '')
       index += 2
       continue

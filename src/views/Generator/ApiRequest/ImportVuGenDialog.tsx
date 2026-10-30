@@ -8,6 +8,7 @@ import { createFixedTiming } from '@/utils/thinkTime'
 import { toProxyData } from './ApiRequest.utils'
 import { attachDataFiles, countMissingFiles } from './formData'
 import { parseVuGen } from './parseVuGen'
+import { resolveVuGenLinks } from './resolveVuGenLinks'
 
 interface ImportVuGenDialogProps {
   open: boolean
@@ -51,9 +52,9 @@ export function ImportVuGenDialog({
   const showToast = useToast()
 
   async function handleImport() {
-    const result = parseVuGen(source)
+    const parsed = parseVuGen(source)
 
-    if (result === null) {
+    if (parsed === null) {
       showToast({
         title: 'Could not read the script',
         description:
@@ -63,6 +64,10 @@ export function ImportVuGenDialog({
       return
     }
 
+    // `web_link` carries no URL: find it in the page the click happened on.
+    const result = parsed.requests.some(({ link }) => link)
+      ? await resolveVuGenLinks(parsed)
+      : parsed
     const { skipped, subResources, droppedThinkTime, correlations } = result
     const requests = await Promise.all(
       result.requests.map(async (request) => ({
@@ -137,6 +142,9 @@ export function ImportVuGenDialog({
         addedRules.length > 0
           ? `${count(addedRules.length, 'correlation rule')} recreated from web_reg_save_param. LoadRunner scripts carry no responses, so each rule extracts only once its request has one — send it, or load the recording.`
           : 'LoadRunner scripts carry no responses, so add correlation rules by hand.',
+        (result.resolvedLinks ?? 0) > 0
+          ? `${count(result.resolvedLinks ?? 0, 'web_link')} resolved by fetching the page it was clicked on.`
+          : '',
         subResources > 0
           ? `${count(subResources, 'EXTRARES sub-resource')} imported into the transaction that listed them, so its duration covers them the way LoadRunner's does. They are sent in order, not in parallel.`
           : '',
@@ -208,7 +216,7 @@ export function ImportVuGenDialog({
 }
 
 function describeSkipped(skipped: number) {
-  return `${count(skipped, 'step')} skipped: a relative URL with no referer to resolve it, or a method LoadPilot does not support.`
+  return `${count(skipped, 'step')} skipped: a web_link not found on its page (or the page could not be fetched), web_image/web_submit_form (no URL in the script), a relative URL with no referer, or a method LoadPilot does not support.`
 }
 
 function count(value: number, noun: string) {

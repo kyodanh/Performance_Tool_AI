@@ -45,6 +45,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         thresholds,
         cloud,
         rendezvous,
+        loops,
         httpTimeout,
       },
       testData: { variables, files },
@@ -69,6 +70,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         state.timing = thinkTime.timing
         state.thinkTimeOverrides = thinkTime.overrides ?? {}
         state.rendezvous = rendezvous ?? {}
+        state.loops = loops ?? {}
         state.loadZones = cloud.loadZones
         state.thresholds = thresholds
         state.httpTimeout = httpTimeout

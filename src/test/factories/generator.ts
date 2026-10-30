@@ -27,6 +27,7 @@ export function createGeneratorData(
         },
       },
       rendezvous: {},
+      loops: {},
       thresholds: [],
       httpTimeout: DEFAULT_HTTP_TIMEOUT,
       cloud: {
@@ -138,6 +139,9 @@ export function createGeneratorState(
 
     rendezvous: {},
     toggleRendezvous: vi.fn(),
+
+    loops: {},
+    setLoop: vi.fn(),
 
     stages: [],
     setStages: vi.fn(),
